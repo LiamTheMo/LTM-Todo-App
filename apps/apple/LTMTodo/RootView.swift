@@ -28,9 +28,17 @@ struct RootView: View {
         Group {
             if sizeClass == .regular {
                 NavigationSplitView {
-                    List(AppSection.allCases, selection: $selection) { section in
-                        Label(section.rawValue, systemImage: section.icon)
-                            .tag(section)
+                    List(AppSection.allCases) { section in
+                        Button {
+                            selection = section
+                        } label: {
+                            Label(section.rawValue, systemImage: section.icon)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(selection == section ? Color.accentColor : Color.primary)
+                        .accessibilityAddTraits(selection == section ? .isSelected : [])
                     }
                     .navigationTitle("LTM Todo")
                 } detail: {
