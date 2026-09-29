@@ -180,7 +180,7 @@ export function saveTask(data: Data, task: Task, start = "", end = "", reminderM
   };
 }
 export function dashboardDays(data: Data, start: string, length: number) {
-  const active = data.tasks.filter(task => !task.deletedAt && !task.completedAt);
+  const active = filterTasks(data, { completed: false });
   const byId = new Map(active.map(task => [task.id, task]));
   const due = new Map<string, Task[]>();
   for (const task of active) {
@@ -230,6 +230,36 @@ export function reorderTask(data: Data, id: string, direction: -1 | 1): Data {
     ...item, sortKey: positions.get(item.id)!, updatedAt: stamp, revision: item.revision + 1
   } : item) };
 }
+function reorderEntities<T extends Entity & { sortKey: number }>(items: T[], id: string, direction: -1 | 1): T[] {
+  const ordered = items.filter(item => !item.deletedAt).sort((a, b) =>
+    a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const from = ordered.findIndex(item => item.id === id);
+  const to = from + direction;
+  if (from < 0 || to < 0 || to >= ordered.length) return items;
+  ordered.splice(to, 0, ordered.splice(from, 1)[0]);
+  const stamp = new Date().toISOString();
+  const positions = new Map(ordered.map((item, index) => [item.id, index * 1024]));
+  return items.map(item => positions.has(item.id) && item.sortKey !== positions.get(item.id) ? {
+    ...item, sortKey: positions.get(item.id)!, updatedAt: stamp, revision: item.revision + 1
+  } : item);
+}
+export function reorderProject(data: Data, id: string, direction: -1 | 1): Data {
+  if (!data.projects.some(project => project.id === id && !project.deletedAt && !project.archivedAt)) return data;
+  const active = data.projects.filter(project => !project.deletedAt && !project.archivedAt);
+  const reordered = reorderEntities(active, id, direction);
+  if (reordered === active) return data;
+  const changed = new Map(reordered.map(project => [project.id, project]));
+  return { ...data, projects: data.projects.map(project => changed.get(project.id) ?? project) };
+}
+export function reorderSection(data: Data, id: string, direction: -1 | 1): Data {
+  const section = data.sections.find(item => item.id === id && !item.deletedAt);
+  if (!section) return data;
+  const group = data.sections.filter(item => item.projectId === section.projectId && !item.deletedAt);
+  const reordered = reorderEntities(group, id, direction);
+  if (reordered === group) return data;
+  const changed = new Map(reordered.map(item => [item.id, item]));
+  return { ...data, sections: data.sections.map(item => changed.get(item.id) ?? item) };
+}
 export function deleteSection(data: Data, id: string): Data {
   const stamp = new Date().toISOString();
   return { ...data,
@@ -240,7 +270,9 @@ export function deleteSection(data: Data, id: string): Data {
 export type TaskFilter = { query?: string; projectId?: string; tagId?: string; priority?: Priority; completed?: boolean };
 export function filterTasks(data: Data, filter: TaskFilter): Task[] {
   const query = filter.query?.trim().toLocaleLowerCase();
+  const archived = new Set(data.projects.filter(project => project.archivedAt && !project.deletedAt).map(project => project.id));
   return data.tasks.filter(task => !task.deletedAt &&
+    (!task.projectId || !archived.has(task.projectId)) &&
     (filter.completed === undefined || Boolean(task.completedAt) === filter.completed) &&
     (!filter.projectId || task.projectId === filter.projectId) &&
     (!filter.tagId || task.tagIds.includes(filter.tagId)) &&

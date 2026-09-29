@@ -97,6 +97,7 @@ struct TaskListView: View {
     @State private var editing: TodoTask?
     @State private var priorityFilter = -1
     @State private var sectionName = ""
+    @State private var sectionToDelete: UUID?
 
     private var visible: [TodoTask] {
         store.activeTasks.filter { task in
@@ -130,12 +131,18 @@ struct TaskListView: View {
                     Section("Project tasks") {
                         ForEach(visible.filter { $0.sectionID == nil }) { task in TaskRow(task: task) { editing = task } }
                     }
-                    ForEach(store.data.sections.filter { $0.projectID == projectID && $0.deletedAt == nil }) { section in
+                    ForEach(store.data.sections.filter { $0.projectID == projectID && $0.deletedAt == nil }
+                        .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }) { section in
                         Section(section.name) {
                             ForEach(visible.filter { $0.sectionID == section.id }) { task in
                                 TaskRow(task: task) { editing = task }
                             }
-                            Button("Delete section", role: .destructive) { store.deleteSection(section.id) }
+                            HStack {
+                                Button { store.moveSection(section.id, by: -1) } label: { Label("Move up", systemImage: "arrow.up") }
+                                Button { store.moveSection(section.id, by: 1) } label: { Label("Move down", systemImage: "arrow.down") }
+                                Button("Delete section", role: .destructive) { sectionToDelete = section.id }
+                            }
+                            .buttonStyle(.borderless)
                         }
                     }
                     Section("New section") {
@@ -158,6 +165,14 @@ struct TaskListView: View {
                     .accessibilityLabel("Add task")
             }
             .sheet(item: $editing) { task in TaskEditorView(task: task) }
+            .confirmationDialog("Delete section? Its tasks will move to the project root.", isPresented: Binding(
+                get: { sectionToDelete != nil }, set: { if !$0 { sectionToDelete = nil } }
+            )) {
+                Button("Delete section", role: .destructive) {
+                    if let sectionToDelete { store.deleteSection(sectionToDelete) }
+                    sectionToDelete = nil
+                }
+            }
         }
     }
 
@@ -253,6 +268,7 @@ private struct TagRow: View {
 struct ProjectsView: View {
     @EnvironmentObject private var store: TodoStore
     @State private var name = ""
+    @State private var projectToArchive: UUID?
 
     var body: some View {
         NavigationStack {
@@ -262,15 +278,30 @@ struct ProjectsView: View {
                     Button("Create") { store.addProject(name); name = "" }.disabled(name.isEmpty)
                 }
                 ForEach(store.projects) { project in
-                    NavigationLink(project.name) {
-                        TaskListView(title: project.name, projectID: project.id, inboxOnly: false)
+                    HStack {
+                        NavigationLink(project.name) {
+                            TaskListView(title: project.name, projectID: project.id, inboxOnly: false)
+                        }
+                        Button { store.moveProject(project.id, by: -1) } label: { Image(systemName: "arrow.up") }
+                            .accessibilityLabel("Move project \(project.name) up")
+                        Button { store.moveProject(project.id, by: 1) } label: { Image(systemName: "arrow.down") }
+                            .accessibilityLabel("Move project \(project.name) down")
                     }
+                    .buttonStyle(.borderless)
                     .swipeActions {
-                        Button("Archive") { store.archive(project.id) }.tint(.orange)
+                        Button("Archive") { projectToArchive = project.id }.tint(.orange)
                     }
                 }
             }
             .navigationTitle("Projects")
+            .confirmationDialog("Archive project? Its tasks will leave active views until restored in Settings.", isPresented: Binding(
+                get: { projectToArchive != nil }, set: { if !$0 { projectToArchive = nil } }
+            )) {
+                Button("Archive project") {
+                    if let projectToArchive { store.archive(projectToArchive) }
+                    projectToArchive = nil
+                }
+            }
         }
     }
 }
