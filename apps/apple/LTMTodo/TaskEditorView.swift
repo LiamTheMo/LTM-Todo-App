@@ -8,9 +8,6 @@ struct TaskEditorView: View {
     @State private var dueDate: Date
     @State private var hasTime: Bool
     @State private var dueTime: Date
-    @State private var hasSchedule: Bool
-    @State private var start: Date
-    @State private var end: Date
     @State private var reminder = -1
     @State private var hasRepeatUntil: Bool
     @State private var repeatUntil: Date
@@ -28,9 +25,6 @@ struct TaskEditorView: View {
         _dueTime = State(initialValue: pieces.count == 2
             ? Calendar.current.date(bySettingHour: pieces[0], minute: pieces[1], second: 0, of: Date()) ?? Date()
             : Date())
-        _hasSchedule = State(initialValue: task.scheduledStart != nil)
-        _start = State(initialValue: task.scheduledStart ?? Date())
-        _end = State(initialValue: task.scheduledEnd ?? Date().addingTimeInterval(3600))
         _reminder = State(initialValue: task.reminderMinutes ?? -1)
         _hasRepeatUntil = State(initialValue: task.repeatUntil != nil)
         _repeatUntil = State(initialValue: task.repeatUntil.flatMap { DayMath.date($0) } ?? Date())
@@ -100,14 +94,6 @@ struct TaskEditorView: View {
                         }
                     }
                 }
-                Section("Planned work") {
-                    Text("Work time does not change the deadline.").font(.caption).foregroundStyle(.secondary)
-                    Toggle("Schedule work", isOn: $hasSchedule)
-                    if hasSchedule {
-                        DatePicker("Starts", selection: $start)
-                        DatePicker("Ends", selection: $end, in: start...)
-                    }
-                }
                 Section("Repeat and remind") {
                     Picker("Repeat", selection: $task.frequency) {
                         ForEach(RepeatFrequency.allCases) { frequency in
@@ -163,7 +149,6 @@ struct TaskEditorView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
                         .disabled(task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                                  (hasSchedule && end <= start) ||
                                   (task.frequency != .never && !hasDue))
                         .accessibilityIdentifier("save-task")
                 }
@@ -176,8 +161,6 @@ struct TaskEditorView: View {
         task.dueTime = hasDue && hasTime ? String(format: "%02d:%02d",
             Calendar.current.component(.hour, from: dueTime),
             Calendar.current.component(.minute, from: dueTime)) : nil
-        task.scheduledStart = hasSchedule ? start : nil
-        task.scheduledEnd = hasSchedule ? end : nil
         task.reminderMinutes = hasDue && hasTime && reminder >= 0 ? reminder : nil
         if task.frequency == .never {
             task.repeatAnchor = nil

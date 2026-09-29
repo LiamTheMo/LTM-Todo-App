@@ -147,18 +147,11 @@ export function undoCompletion(data: Data, completionId: string): Data {
     } : task)
   };
 }
-export function saveTask(data: Data, task: Task, start = "", end = "", reminderMinutes = ""): Data {
+export function saveTask(data: Data, task: Task, reminderMinutes = ""): Data {
   const stamp = new Date().toISOString();
   const oldTask = data.tasks.find(item => item.id === task.id);
-  const currentBlock = data.blocks.find(block => block.taskId === task.id && !block.deletedAt);
   const currentReminder = data.reminders.find(reminder => reminder.taskId === task.id && !reminder.deletedAt);
-  const hasBlock = Boolean(start && end && new Date(end) > new Date(start));
   const hasReminder = reminderMinutes !== "" && Boolean(task.dueDate && task.dueTime);
-  const nextBlock: ScheduledBlock | undefined = hasBlock ? {
-    ...(currentBlock ?? newEntity()), taskId: task.id, startInstant: new Date(start).toISOString(),
-    endInstant: new Date(end).toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    updatedAt: stamp, revision: currentBlock ? currentBlock.revision + 1 : 1
-  } : undefined;
   const nextReminder: Reminder | undefined = hasReminder ? {
     ...(currentReminder ?? newEntity()), taskId: task.id, minutesBefore: Number(reminderMinutes),
     enabled: true, updatedAt: stamp, revision: currentReminder ? currentReminder.revision + 1 : 1
@@ -169,10 +162,7 @@ export function saveTask(data: Data, task: Task, start = "", end = "", reminderM
       item.parentTaskId === task.id && (oldTask.projectId !== task.projectId || oldTask.sectionId !== task.sectionId) ? {
         ...item, projectId: task.projectId, sectionId: task.sectionId, updatedAt: stamp, revision: item.revision + 1
       } : item) : [...data.tasks, task],
-    blocks: [
-      ...data.blocks.map(block => block.id === currentBlock?.id ? nextBlock ?? { ...block, deletedAt: stamp, updatedAt: stamp, revision: block.revision + 1 } : block),
-      ...(nextBlock && !currentBlock ? [nextBlock] : [])
-    ],
+    blocks: data.blocks,
     reminders: [
       ...data.reminders.map(reminder => reminder.id === currentReminder?.id ? nextReminder ?? { ...reminder, deletedAt: stamp, updatedAt: stamp, revision: reminder.revision + 1 } : reminder),
       ...(nextReminder && !currentReminder ? [nextReminder] : [])
@@ -203,8 +193,12 @@ export function dashboardDays(data: Data, start: string, length: number) {
     date,
     due: (due.get(date) ?? []).sort(taskOrder),
     scheduled: (scheduled.get(date) ?? []).sort((a, b) => a.block.startInstant.localeCompare(b.block.startInstant)),
-    overdue: date === localDate(new Date()) ? active.filter(task => task.dueDate && task.dueDate < date).sort(taskOrder) : []
   }));
+}
+export function overdueTasks(data: Data, today = localDate(new Date())): Task[] {
+  return filterTasks(data, { completed: false })
+    .filter(task => task.dueDate !== undefined && task.dueDate < today)
+    .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || taskOrder(a, b));
 }
 export const taskOrder = (a: Task, b: Task): number =>
   a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
