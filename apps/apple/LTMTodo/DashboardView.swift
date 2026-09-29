@@ -1,74 +1,90 @@
 import SwiftUI
 
-struct DashboardDay: Identifiable {
-    let id = UUID()
-    let label: String
-    let date: String
-    let scheduled: [String]
-    let due: [String]
-}
-
 struct DashboardView: View {
-    private let previewDays = [
-        DashboardDay(label: "TODAY", date: "SEP 29", scheduled: ["9:00 AM  Plan the day", "4:00 PM  Focus block"], due: ["Set up LTM Todo foundation"]),
-        DashboardDay(label: "TOMORROW", date: "SEP 30", scheduled: [], due: ["Review upcoming work"]),
-        DashboardDay(label: "THURSDAY", date: "OCT 1", scheduled: ["2:00 PM  Project time"], due: [])
-    ]
+    @EnvironmentObject private var store: TodoStore
+    @State private var pastDays = 7
+    @State private var futureDays = 28
+    @State private var editing: TodoTask?
+
+    private var dates: [String] {
+        let today = DayMath.day(Date())
+        return (-pastDays...futureDays).compactMap { DayMath.add($0, to: today) }
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    ForEach(previewDays) { day in
-                        Section {
-                            DayContent(day: day)
-                        } header: {
-                            HStack {
-                                Text(day.label).font(.caption.bold())
-                                Spacer()
-                                Text(day.date).font(.caption.monospacedDigit())
+            ScrollViewReader { reader in
+                ScrollView {
+                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        Button("Earlier days") { pastDays += 28 }
+                            .padding()
+                        ForEach(dates, id: \.self) { day in
+                            Section {
+                                dayContent(day)
+                            } header: {
+                                HStack {
+                                    Text(day == DayMath.day(Date()) ? "TODAY" : day)
+                                        .font(.caption.bold())
+                                        .accessibilityAddTraits(.isHeader)
+                                    Spacer()
+                                }
+                                .padding(.horizontal)
+                                .padding(.vertical, 10)
+                                .background(.regularMaterial)
                             }
-                            .padding(.horizontal)
-                            .padding(.vertical, 10)
-                            .background(.background)
-                            .accessibilityElement(children: .combine)
+                            .id(day)
                         }
+                        Button("Later days") { futureDays += 28 }
+                            .padding()
+                    }
+                }
+                .onAppear { reader.scrollTo(DayMath.day(Date()), anchor: .top) }
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Today") { withAnimation { reader.scrollTo(DayMath.day(Date()), anchor: .top) } }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { editing = TodoTask(title: "") } label: { Image(systemName: "plus") }
+                            .accessibilityLabel("Add task")
                     }
                 }
             }
             .navigationTitle("Dashboard")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: {}) { Image(systemName: "plus") }
-                        .accessibilityLabel("Add task")
-                }
-            }
+            .sheet(item: $editing) { task in TaskEditorView(task: task) }
         }
     }
-}
 
-private struct DayContent: View {
-    let day: DashboardDay
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if day.scheduled.isEmpty && day.due.isEmpty {
-                Text("Nothing planned").foregroundStyle(.secondary)
-            }
-            if !day.scheduled.isEmpty {
+    @ViewBuilder
+    private func dayContent(_ day: String) -> some View {
+        let scheduled = store.activeTasks.filter { $0.scheduledStart.map { DayMath.day($0) == day } ?? false }
+            .sorted { ($0.scheduledStart ?? .distantFuture) < ($1.scheduledStart ?? .distantFuture) }
+        let due = store.activeTasks.filter { $0.dueDay == day }
+        let overdue = day == DayMath.day(Date()) ? store.activeTasks.filter { ($0.dueDay ?? day) < day } : []
+        VStack(alignment: .leading, spacing: 8) {
+            if !scheduled.isEmpty {
                 Text("SCHEDULED").font(.caption2.bold()).foregroundStyle(.secondary)
-                ForEach(day.scheduled, id: \.self) { Text($0).frame(maxWidth: .infinity, alignment: .leading) }
-            }
-            if !day.due.isEmpty {
-                Text("DUE").font(.caption2.bold()).foregroundStyle(.secondary)
-                ForEach(day.due, id: \.self) { item in
-                    Label(item, systemImage: "circle").frame(maxWidth: .infinity, alignment: .leading)
+                ForEach(scheduled) { task in
+                    TaskRow(task: task) { editing = task }
                 }
             }
+            if !overdue.isEmpty {
+                Text("OVERDUE").font(.caption2.bold()).foregroundStyle(.red)
+                ForEach(overdue) { task in TaskRow(task: task) { editing = task } }
+            }
+            if !due.isEmpty {
+                Text("DUE").font(.caption2.bold()).foregroundStyle(.secondary)
+                ForEach(due) { task in TaskRow(task: task) { editing = task } }
+            }
+            if scheduled.isEmpty && due.isEmpty && overdue.isEmpty {
+                Text("Nothing planned").font(.caption).foregroundStyle(.secondary)
+            }
+            Button("Add task for this day") {
+                editing = TodoTask(title: "", dueDay: day)
+            }
+            .font(.caption)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background)
         .overlay(alignment: .bottom) { Divider() }
     }
 }
