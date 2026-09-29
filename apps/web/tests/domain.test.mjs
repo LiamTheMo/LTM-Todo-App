@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, nextOccurrence, reorderProject, reorderSection, reorderTask, undoCompletion } from "../lib/domain.ts";
+import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, nextOccurrence, overdueTasks, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
@@ -32,6 +32,28 @@ test("Dashboard keeps same-day scheduling distinct and excludes completed work",
   const [day] = dashboardDays(data, "2026-10-05", 1);
   assert.deepEqual(day.scheduled.map(item => item.task.id), ["both"]);
   assert.deepEqual(day.due.map(item => item.id), ["both"]);
+});
+test("overdue includes only unfinished dated deadlines and ignores scheduled events", () => {
+  const data = emptyData();
+  data.projects.push({ id: "archived", name: "Archived", color: "#fff", sortKey: 0, createdAt: "", updatedAt: "", revision: 1,
+    archivedAt: "2026-09-01T00:00:00Z" });
+  data.tasks.push(task("oldest", "2026-09-20"), task("newer", "2026-09-28"), task("today", "2026-09-29"),
+    task("future", "2026-10-01"), task("done", "2026-09-10", { completedAt: "2026-09-10T12:00:00Z" }),
+    task("archived", "2026-09-10", { projectId: "archived" }), task("event", undefined));
+  data.blocks.push({ id: "event-block", taskId: "event", startInstant: "2026-09-20T15:00:00Z",
+    endInstant: "2026-09-20T16:00:00Z", timeZone: "America/Edmonton", createdAt: "", updatedAt: "", revision: 1 });
+  assert.deepEqual(overdueTasks(data, "2026-09-29").map(item => item.id), ["oldest", "newer"]);
+});
+test("task edits without work-time fields preserve existing scheduled data", () => {
+  const data = emptyData();
+  const existing = task("planned", "2026-10-01");
+  const block = { id: "block", taskId: existing.id, startInstant: "2026-09-29T15:00:00Z",
+    endInstant: "2026-09-29T16:00:00Z", timeZone: "America/Edmonton", createdAt: "", updatedAt: "", revision: 1 };
+  data.tasks.push(existing);
+  data.blocks.push(block);
+  const edited = saveTask(data, { ...existing, title: "Edited title", revision: existing.revision + 1 });
+  assert.deepEqual(edited.blocks, [block]);
+  assert.equal(edited.tasks[0].title, "Edited title");
 });
 test("Dashboard date windows stay bounded and large local lists remain responsive", () => {
   const data = emptyData();

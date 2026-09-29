@@ -19,7 +19,7 @@ Initial product focus is a single owner using iPhone, iPad and web. The architec
 **Dashboard:** chronological day stream combining scheduled items and due items.
 
 ## Dashboard
-Dashboard is the default home surface. It scrolls vertically through dates. Every populated day shows a sticky date header, scheduled content ordered by time, and a visually separate Due section. Today/Tomorrow labels are contextual. Empty days should collapse rather than dominate scrolling. When away from today, expose a fast Return to Today action. Previous dates may be reachable upward; unfinished past work is marked overdue and completed work is visually de-emphasized.
+Dashboard is the default home surface. It opens with an Overdue section when unfinished task deadlines are before today, then scrolls forward from Today through future dates. Each populated day shows a sticky date header, scheduled content ordered by time, and a visually separate Due section. Today/Tomorrow labels are contextual. Empty days should collapse rather than dominate scrolling. When away from today, expose a fast Return to Today action. Overdue status comes from an unfinished task deadline, never from an event or scheduled work block. Previous dates live in History rather than the Dashboard.
 
 ## v1 requirements
 Unlimited local tasks/projects/sections/tags/subtasks/reminders/recurrence rules; Inbox; Dashboard; task CRUD; priorities; notes; due date/time; scheduled blocks foundation; recurrence; notifications; search; filters; completion history; offline persistence; accessibility; responsive iPhone/iPad layouts.
