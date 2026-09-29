@@ -1,11 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ltm-todo-app",
-  "main": ".vinext/worker/index.js",
+  "main": "vinext/server/fetch-handler",
   "compatibility_date": "2026-09-29",
   "compatibility_flags": ["nodejs_compat"],
+  "preview_urls": true,
   "assets": {
-    "directory": ".vinext/assets",
+    "directory": "dist/client",
+    "not_found_handling": "none",
     "binding": "ASSETS"
   },
   "workers_dev": true
