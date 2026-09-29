@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ltm-todo-app",
+  "main": ".vinext/worker/index.js",
+  "compatibility_date": "2026-09-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".vinext/assets",
+    "binding": "ASSETS"
+  },
+  "workers_dev": true
+}
