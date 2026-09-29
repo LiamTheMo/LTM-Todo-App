@@ -5,7 +5,7 @@
 Turn the calendar into an active planning surface where tasks can be assigned work time without changing deadlines.
 
 ## Scope
-Drag/drop tasks into day/week calendar to create ScheduledBlocks; resize/move blocks; unschedule; schedule from Dashboard/task detail; optional multiple blocks per task; conflict/overlap presentation; planning tray/backlog; undo; keyboard-accessible scheduling alternatives.
+Drag/drop tasks into day/week calendar to create ScheduledBlocks; resize/move blocks; unschedule; schedule from a clear calendar/day-planning surface; optional multiple blocks per task; conflict/overlap presentation; planning tray/backlog; undo; keyboard-accessible scheduling alternatives. Avoid unexplained generic “work starts/ends” fields in the basic task editor.
 
 ## Core invariant
 `dueAt` and `ScheduledBlock(start,end)` are independent. Every mutation path must preserve this invariant.

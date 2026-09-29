@@ -3,8 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject private var store: TodoStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var windowStart = -7
-    @State private var initialScrollDone = false
+    @State private var windowStart = 0
     @State private var editing: TodoTask?
     private let windowLength = 56
     private let windowStep = 28
@@ -13,18 +12,34 @@ struct DashboardView: View {
         let today = DayMath.day(Date())
         return (windowStart..<(windowStart + windowLength)).compactMap { DayMath.add($0, to: today) }
     }
+    private var overdueTasks: [TodoTask] {
+        let today = DayMath.day(Date())
+        return store.activeTasks.filter { $0.dueDay.map { $0 < today } ?? false }
+            .sorted { left, right in
+                if left.dueDay != right.dueDay { return (left.dueDay ?? "") < (right.dueDay ?? "") }
+                return left.sortKey == right.sortKey ? left.id.uuidString < right.id.uuidString : left.sortKey < right.sortKey
+            }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollViewReader { reader in
                 ScrollView {
                     LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        Button("Earlier days") {
-                            let anchor = dates.first
-                            windowStart -= windowStep
-                            if let anchor { DispatchQueue.main.async { reader.scrollTo(anchor, anchor: .top) } }
+                        if !overdueTasks.isEmpty {
+                            Section {
+                                ForEach(overdueTasks) { task in TaskRow(task: task) { editing = task } }
+                            } header: {
+                                HStack {
+                                    Text("OVERDUE").font(.caption.bold()).foregroundStyle(.red)
+                                        .accessibilityAddTraits(.isHeader)
+                                    Spacer()
+                                }
+                                .padding(.horizontal)
+                                .padding(.vertical, 10)
+                                .background(.regularMaterial)
+                            }
                         }
-                            .padding()
                         ForEach(dates, id: \.self) { day in
                             Section {
                                 dayContent(day)
@@ -51,15 +66,10 @@ struct DashboardView: View {
                             .padding()
                     }
                 }
-                .onAppear {
-                    guard !initialScrollDone else { return }
-                    initialScrollDone = true
-                    reader.scrollTo(DayMath.day(Date()), anchor: .top)
-                }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("Today") {
-                            windowStart = -7
+                            windowStart = 0
                             DispatchQueue.main.async {
                                 if reduceMotion { reader.scrollTo(DayMath.day(Date()), anchor: .top) }
                                 else { withAnimation { reader.scrollTo(DayMath.day(Date()), anchor: .top) } }
@@ -82,7 +92,6 @@ struct DashboardView: View {
         let scheduled = store.activeTasks.filter { $0.scheduledStart.map { DayMath.day($0) == day } ?? false }
             .sorted { ($0.scheduledStart ?? .distantFuture) < ($1.scheduledStart ?? .distantFuture) }
         let due = store.activeTasks.filter { $0.dueDay == day }
-        let overdue = day == DayMath.day(Date()) ? store.activeTasks.filter { ($0.dueDay ?? day) < day } : []
         VStack(alignment: .leading, spacing: 8) {
             if !scheduled.isEmpty {
                 Text("SCHEDULED").font(.caption2.bold()).foregroundStyle(.secondary).accessibilityAddTraits(.isHeader)
@@ -90,15 +99,11 @@ struct DashboardView: View {
                     TaskRow(task: task) { editing = task }
                 }
             }
-            if !overdue.isEmpty {
-                Text("OVERDUE").font(.caption2.bold()).foregroundStyle(.red).accessibilityAddTraits(.isHeader)
-                ForEach(overdue) { task in TaskRow(task: task) { editing = task } }
-            }
             if !due.isEmpty {
                 Text("DUE").font(.caption2.bold()).foregroundStyle(.secondary).accessibilityAddTraits(.isHeader)
                 ForEach(due) { task in TaskRow(task: task) { editing = task } }
             }
-            if scheduled.isEmpty && due.isEmpty && overdue.isEmpty {
+            if scheduled.isEmpty && due.isEmpty {
                 HStack {
                     Text("Nothing planned").font(.caption).foregroundStyle(.secondary)
                     Spacer()
