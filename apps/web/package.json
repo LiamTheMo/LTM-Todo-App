@@ -29,7 +29,8 @@
     "vinext": "1.0.0",
     "vite": "latest",
     "wrangler": "latest",
-    "@vitejs/plugin-rsc": "^0.5.34"
+    "@vitejs/plugin-rsc": "^0.5.34",
+    "@cloudflare/vite-plugin": "latest"
   },
   "type": "module"
 }
