@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, localDate, newEntity, parseLocalDate, reorderTask, saveTask, undoCompletion, type Data, type Priority, type Task } from "../lib/domain";
 import { readData, writeData } from "../lib/storage";
 
@@ -8,6 +8,8 @@ type View = "Dashboard" | "Inbox" | "Tasks" | "Projects" | "History" | "Settings
 const views: View[] = ["Dashboard", "Inbox", "Tasks", "Projects", "History", "Settings"];
 const icon: Record<View, string> = { Dashboard: "◫", Inbox: "▣", Tasks: "☑", Projects: "▦", History: "↺", Settings: "⚙" };
 const priorities: Priority[] = ["none", "low", "medium", "high"];
+const dashboardWindow = 56;
+const dashboardStep = 28;
 const dateLabel = (day: string) => parseLocalDate(day).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 const timeLabel = (instant: string) => new Date(instant).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -31,9 +33,17 @@ export default function Home() {
   const [tagFilter, setTagFilter] = useState("");
   const [dayStart, setDayStart] = useState(() => addDays(localDate(new Date()), -7));
   const todayRef = useRef<HTMLElement>(null);
+  const pendingAnchor = useRef<{ day: string; top: number } | null>(null);
   useEffect(() => { readData().then(value => { current.current = value; setData(value); setReady(true); })
     .catch(() => { setError("Local storage could not be opened. Changes are disabled."); setReady(true); }); }, []);
   useEffect(() => { if (ready) setTimeout(() => todayRef.current?.scrollIntoView({ block: "start" }), 0); }, [ready]);
+  useLayoutEffect(() => {
+    const anchor = pendingAnchor.current;
+    if (!anchor) return;
+    pendingAnchor.current = null;
+    const element = document.querySelector<HTMLElement>(`[data-day="${anchor.day}"]`);
+    if (element) window.scrollBy(0, element.getBoundingClientRect().top - anchor.top);
+  }, [dayStart]);
   const mutate = useCallback((change: (value: Data) => Data) => {
     if (error) return;
     const next = change(current.current); current.current = next; setData(next);
@@ -56,22 +66,35 @@ export default function Home() {
   </div>;
   const today = localDate(new Date());
   const visible = filterTasks(data, { query, projectId: projectId || undefined, tagId: tagFilter || undefined, priority: priorityFilter === "all" ? undefined : priorityFilter, completed: false });
-  const goToday = () => { setDayStart(addDays(localDate(new Date()), -7)); setTimeout(() => todayRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 0); };
+  const shiftDays = (direction: -1 | 1) => {
+    const day = direction < 0 ? dayStart : addDays(dayStart, dashboardWindow - 1);
+    const element = document.querySelector<HTMLElement>(`[data-day="${day}"]`);
+    if (element) pendingAnchor.current = { day, top: element.getBoundingClientRect().top };
+    setDayStart(addDays(dayStart, direction * dashboardStep));
+  };
+  const goToday = () => {
+    pendingAnchor.current = null;
+    setDayStart(addDays(localDate(new Date()), -7));
+    setTimeout(() => todayRef.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }), 0);
+  };
 
   return <main className="shell">
     <aside className="sidebar"><h1><span className="brandMark">✓</span> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} onClick={() => { setView(item); setProjectId(""); }}><span aria-hidden>{icon[item]}</span> {item}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
     <section className="dashboard">{error && <div className="error" role="alert">{error}</div>}
       {!ready ? <p>Opening your local tasks…</p> : <>
         <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Inbox" ? "Capture now. Organize when you're ready." : ""}</p></div><button className="add" onClick={() => setEditing("new")}>+ Add task</button></header>
-        {view === "Dashboard" && <><div className="streamControls"><button onClick={() => setDayStart(addDays(dayStart, -28))}>↑ Earlier days</button><button onClick={goToday}>Return to Today</button></div>
-          <div className="stream">{dashboardDays(data, dayStart, 28).map(day => <article className="day" key={day.date} ref={day.date === today ? todayRef : undefined}>
-            <div className="dayHeader"><strong>{day.date === today ? "TODAY" : day.date === addDays(today, 1) ? "TOMORROW" : dateLabel(day.date)}</strong><span>{day.date}</span></div>
-            {!!day.scheduled.length && <div className="group"><h3>SCHEDULED</h3>{day.scheduled.map(({ block, task }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block`))}</div>}
-            {!!day.overdue.length && <div className="group overdue"><h3>OVERDUE</h3>{day.overdue.map(task => taskRow(task, `Due ${dateLabel(task.dueDate!)}`))}</div>}
-            {!!day.due.length && <div className="group"><h3>DUE</h3>{day.due.map(task => taskRow(task, task.dueTime ? `Due at ${task.dueTime}` : "Due today"))}</div>}
-            {!day.scheduled.length && !day.due.length && !day.overdue.length && <p className="emptyDay">Nothing planned</p>}
-            <button className="dayAdd" onClick={() => setEditing(`new:${day.date}`)}>+ Add task for this day</button>
-          </article>)}<button className="loadMore" onClick={() => setDayStart(addDays(dayStart, 21))}>Show later days ↓</button></div>
+        {view === "Dashboard" && <><div className="streamControls"><button onClick={() => shiftDays(-1)}>↑ Earlier days</button><button onClick={goToday}>Return to Today</button></div>
+          <div className="stream">{dashboardDays(data, dayStart, dashboardWindow).map(day => {
+            const empty = !day.scheduled.length && !day.due.length && !day.overdue.length;
+            const label = day.date === today ? "TODAY" : day.date === addDays(today, 1) ? "TOMORROW" : dateLabel(day.date);
+            return <article className={`day ${empty ? "emptyDaySection" : ""}`} data-day={day.date} key={day.date} ref={day.date === today ? todayRef : undefined}>
+            <div className="dayHeader"><h3 aria-label={`${label} ${day.date}`}>{label}</h3><time dateTime={day.date}>{day.date}</time></div>
+            {!!day.scheduled.length && <div className="group"><h4>SCHEDULED</h4>{day.scheduled.map(({ block, task }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === day.date ? " · Also due today" : ""}`))}</div>}
+            {!!day.overdue.length && <div className="group overdue"><h4>OVERDUE</h4>{day.overdue.map(task => taskRow(task, `Due ${dateLabel(task.dueDate!)}`))}</div>}
+            {!!day.due.length && <div className="group"><h4>DUE</h4>{day.due.map(task => taskRow(task, task.dueTime ? `Due at ${task.dueTime}` : "Due today"))}</div>}
+            {empty ? <div className="emptyDay"><span>Nothing planned</span><button onClick={() => setEditing(`new:${day.date}`)}>+ Add</button></div> :
+              <button className="dayAdd" onClick={() => setEditing(`new:${day.date}`)}>+ Add task for this day</button>}
+          </article>})}<button className="loadMore" onClick={() => shiftDays(1)}>Later days ↓</button></div>
         </>}
         {(view === "Inbox" || view === "Tasks") && <>
           <form className="quickAdd" onSubmit={e => { e.preventDefault(); addTask(quickTitle); }}><span aria-hidden>＋</span><input aria-label="Quick add task" placeholder="Add a task…" value={quickTitle} onChange={e => setQuickTitle(e.target.value)} /><button disabled={!quickTitle.trim()}>Add</button></form>

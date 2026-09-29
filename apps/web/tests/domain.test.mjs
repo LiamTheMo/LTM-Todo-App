@@ -24,6 +24,26 @@ test("scheduled work and due date stay in separate Dashboard groups", () => {
   assert.equal(days[2].due[0].id, "one");
   assert.equal(data.tasks[0].dueDate, "2026-10-05");
 });
+test("Dashboard keeps same-day scheduling distinct and excludes completed work", () => {
+  const data = emptyData();
+  data.tasks.push(task("both", "2026-10-05"), task("finished", "2026-10-05", { completedAt: "2026-10-04T12:00:00Z" }));
+  data.blocks.push({ id: "block", taskId: "both", startInstant: "2026-10-05T15:00:00Z",
+    endInstant: "2026-10-05T16:00:00Z", timeZone: "America/Edmonton", createdAt: "", updatedAt: "", revision: 1 });
+  const [day] = dashboardDays(data, "2026-10-05", 1);
+  assert.deepEqual(day.scheduled.map(item => item.task.id), ["both"]);
+  assert.deepEqual(day.due.map(item => item.id), ["both"]);
+});
+test("Dashboard date windows stay bounded and large local lists remain responsive", () => {
+  const data = emptyData();
+  for (let index = 0; index < 5000; index++) {
+    data.tasks.push(task(String(index), addDays("2026-10-01", index % 56), { sortKey: index }));
+  }
+  const start = performance.now();
+  const days = dashboardDays(data, "2026-10-01", 56);
+  assert.equal(days.length, 56);
+  assert.equal(days.reduce((count, day) => count + day.due.length, 0), 5000);
+  assert.ok(performance.now() - start < 2500, "56-day query should finish within 2.5 seconds for 5,000 tasks");
+});
 test("recurrence anchors monthly dates and records each completed occurrence", () => {
   const recurrence = { frequency: "monthly", interval: 1, anchorDate: "2026-01-31", occurrences: 0 };
   assert.equal(nextOccurrence(recurrence, "2026-01-31"), "2026-02-28");
