@@ -100,6 +100,8 @@ export function nextOccurrence(rule: Recurrence, after: string): string | undefi
 export function completeTask(data: Data, id: string, now = new Date()): Data {
   const task = data.tasks.find(item => item.id === id && !item.deletedAt);
   if (!task || task.completedAt) return data;
+  // A parent remains open while any direct child is unfinished.
+  if (data.tasks.some(item => item.parentTaskId === id && !item.completedAt && !item.deletedAt)) return data;
   const completedAt = now.toISOString();
   const occurrenceDate = task.dueDate;
   const recurrence = task.recurrence && { ...task.recurrence, occurrences: task.recurrence.occurrences + 1 };
@@ -133,6 +135,7 @@ export function undoCompletion(data: Data, completionId: string): Data {
 }
 export function saveTask(data: Data, task: Task, start = "", end = "", reminderMinutes = ""): Data {
   const stamp = new Date().toISOString();
+  const oldTask = data.tasks.find(item => item.id === task.id);
   const currentBlock = data.blocks.find(block => block.taskId === task.id && !block.deletedAt);
   const currentReminder = data.reminders.find(reminder => reminder.taskId === task.id && !reminder.deletedAt);
   const hasBlock = Boolean(start && end && new Date(end) > new Date(start));
@@ -148,7 +151,10 @@ export function saveTask(data: Data, task: Task, start = "", end = "", reminderM
   } : undefined;
   return {
     ...data,
-    tasks: data.tasks.some(item => item.id === task.id) ? data.tasks.map(item => item.id === task.id ? task : item) : [...data.tasks, task],
+    tasks: oldTask ? data.tasks.map(item => item.id === task.id ? task :
+      item.parentTaskId === task.id && (oldTask.projectId !== task.projectId || oldTask.sectionId !== task.sectionId) ? {
+        ...item, projectId: task.projectId, sectionId: task.sectionId, updatedAt: stamp, revision: item.revision + 1
+      } : item) : [...data.tasks, task],
     blocks: [
       ...data.blocks.map(block => block.id === currentBlock?.id ? nextBlock ?? { ...block, deletedAt: stamp, updatedAt: stamp, revision: block.revision + 1 } : block),
       ...(nextBlock && !currentBlock ? [nextBlock] : [])
@@ -174,6 +180,35 @@ export function dashboardDays(data: Data, start: string, length: number) {
 }
 export const taskOrder = (a: Task, b: Task): number =>
   a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+export function reorderTask(data: Data, id: string, direction: -1 | 1): Data {
+  const task = data.tasks.find(item => item.id === id);
+  if (!task) return data;
+  const group = data.tasks.filter(item => !item.deletedAt && item.projectId === task.projectId &&
+    item.sectionId === task.sectionId && item.parentTaskId === task.parentTaskId).sort(taskOrder);
+  const from = group.findIndex(item => item.id === id);
+  const to = from + direction;
+  if (to < 0 || to >= group.length) return data;
+  group.splice(from, 1);
+  group.splice(to, 0, task);
+  const before = group[to - 1]?.sortKey;
+  const after = group[to + 1]?.sortKey;
+  const key = before === undefined ? (after ?? 0) - 1024 : after === undefined ? before + 1024 : (before + after) / 2;
+  const stamp = new Date().toISOString();
+  if (Number.isFinite(key) && key !== before && key !== after) {
+    return { ...data, tasks: data.tasks.map(item => item.id === id ? { ...item, sortKey: key, updatedAt: stamp, revision: item.revision + 1 } : item) };
+  }
+  const positions = new Map(group.map((item, index) => [item.id, index * 1024]));
+  return { ...data, tasks: data.tasks.map(item => positions.has(item.id) ? {
+    ...item, sortKey: positions.get(item.id)!, updatedAt: stamp, revision: item.revision + 1
+  } : item) };
+}
+export function deleteSection(data: Data, id: string): Data {
+  const stamp = new Date().toISOString();
+  return { ...data,
+    sections: data.sections.map(section => section.id === id ? { ...section, deletedAt: stamp, updatedAt: stamp, revision: section.revision + 1 } : section),
+    tasks: data.tasks.map(task => task.sectionId === id ? { ...task, sectionId: undefined, updatedAt: stamp, revision: task.revision + 1 } : task)
+  };
+}
 export type TaskFilter = { query?: string; projectId?: string; tagId?: string; priority?: Priority; completed?: boolean };
 export function filterTasks(data: Data, filter: TaskFilter): Task[] {
   const query = filter.query?.trim().toLocaleLowerCase();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addDays, completeTask, dashboardDays, emptyData, filterTasks, localDate, newEntity, parseLocalDate, saveTask, undoCompletion, type Data, type Priority, type Task } from "../lib/domain";
+import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, localDate, newEntity, parseLocalDate, reorderTask, saveTask, undoCompletion, type Data, type Priority, type Task } from "../lib/domain";
 import { readData, writeData } from "../lib/storage";
 
 type View = "Dashboard" | "Inbox" | "Tasks" | "Projects" | "History" | "Settings";
@@ -49,9 +49,9 @@ export default function Home() {
     : completeTask(value, task.id));
   const projects = data.projects.filter(p => !p.deletedAt && !p.archivedAt).sort((a, b) => a.sortKey - b.sortKey);
   const tags = data.tags.filter(t => !t.deletedAt);
-  const taskRow = (task: Task, caption?: string) => <div className={`taskRow ${task.completedAt ? "completed" : ""}`} key={task.id}>
-    <button className="complete" onClick={() => toggle(task)} aria-label={task.completedAt ? `Reopen ${task.title}` : `Complete ${task.title}`}>{task.completedAt ? "✓" : "○"}</button>
-    <button className="taskText" onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${task.priority} priority`].filter(Boolean).join(" · ")}</small></button>
+  const taskRow = (task: Task, caption?: string) => <div className={`taskRow ${task.completedAt ? "completed" : ""} ${task.parentTaskId ? "subtask" : ""}`} key={task.id}>
+    <button className="complete" disabled={data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt)} onClick={() => toggle(task)} aria-label={task.completedAt ? `Reopen ${task.title}` : `Complete ${task.title}`}>{task.completedAt ? "✓" : "○"}</button>
+    <button className="taskText" onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt) ? "Finish subtasks first" : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${task.priority} priority`].filter(Boolean).join(" · ")}</small></button>
     <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
   </div>;
   const today = localDate(new Date());
@@ -80,19 +80,23 @@ export default function Home() {
         </>}
         {view === "Projects" && <><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("project") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, projects: [...value.projects, { ...newEntity(), name: input.value.trim(), color: "#c86b24", sortKey: Date.now() }] })); input.value = ""; }}><input name="project" aria-label="New project name" placeholder="New project name…" /><button>Create project</button></form>
           {!projectId ? <div className="projectGrid">{projects.map(p => <button className="projectCard" key={p.id} onClick={() => setProjectId(p.id)}><span className="projectDot" style={{ background: p.color }} /><strong>{p.name}</strong><small>{data.tasks.filter(t => t.projectId === p.id && !t.deletedAt && !t.completedAt).length} open tasks →</small></button>)}</div> : <>
-            <button className="linkButton" onClick={() => setProjectId("")}>← All projects</button><div className="listPanel">{filterTasks(data, { projectId, completed: false }).map(t => taskRow(t))}</div>
+            <button className="linkButton" onClick={() => setProjectId("")}>← All projects</button>
+            {[undefined, ...data.sections.filter(s => s.projectId === projectId && !s.deletedAt).sort((a, b) => a.sortKey - b.sortKey)].map(section => <div className="projectGroup" key={section?.id ?? "root"}>
+              <div className="projectGroupHead"><h3>{section?.name ?? "Project tasks"}</h3>{section && <button onClick={() => { if (confirm("Delete this section? Its tasks will move to the project root.")) mutate(value => deleteSection(value, section.id)); }}>Delete section</button>}</div>
+              <div className="listPanel">{filterTasks(data, { projectId, completed: false }).filter(t => t.sectionId === section?.id).map(t => <div className="orderedTask" key={t.id}>{taskRow(t)}<div><button aria-label={`Move ${t.title} up`} onClick={() => mutate(value => reorderTask(value, t.id, -1))}>↑</button><button aria-label={`Move ${t.title} down`} onClick={() => mutate(value => reorderTask(value, t.id, 1))}>↓</button></div></div>)}</div>
+            </div>)}
             <form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("section") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, sections: [...value.sections, { ...newEntity(), projectId, name: input.value.trim(), sortKey: Date.now() }] })); input.value = ""; }}><input name="section" aria-label="New section" placeholder="New section…" /><button>Add section</button></form>
-            {data.sections.filter(s => s.projectId === projectId && !s.deletedAt).map(s => <div className="tagLine" key={s.id}>{s.name}</div>)}
             <button className="linkButton" onClick={() => { mutate(value => ({ ...value, projects: value.projects.map(p => p.id === projectId ? { ...p, archivedAt: new Date().toISOString(), revision: p.revision + 1 } : p) })); setProjectId(""); }}>Archive project</button>
           </>}
         </>}
         {view === "History" && <div className="listPanel">{[...data.completions].reverse().map(c => { const task = data.tasks.find(t => t.id === c.taskId); return task && <div className="historyRow" key={c.id}><strong>{task.title}</strong><small>{c.occurrenceDate && `Occurrence ${dateLabel(c.occurrenceDate)} · `}Completed {new Date(c.completedAt).toLocaleString()}</small>{data.completions.filter(item => item.taskId === c.taskId).at(-1)?.id === c.id && <button onClick={() => mutate(value => undoCompletion(value, c.id))}>Undo completion</button>}</div>; })}{!data.completions.length && <div className="empty">Completed work will appear here.</div>}</div>}
         {view === "Settings" && <div className="settingsPanel"><h3>Local and private</h3><p>Your data is stored in this browser on this device. Cross-device sync arrives in a later phase.</p><button onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = `ltm-todo-${today}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Download backup JSON</button>
-          <h3>Tags</h3><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("tag") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, tags: [...value.tags, { ...newEntity(), name: input.value.trim(), color: "#c86b24" }] })); input.value = ""; }}><input name="tag" aria-label="New tag name" placeholder="New tag name…" /><button>Add tag</button></form>{tags.map(t => <div className="tagLine" key={t.id}><span>#{t.name}</span><button onClick={() => { const name = prompt("Rename tag", t.name)?.trim(); if (name) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, name, revision: item.revision + 1, updatedAt: new Date().toISOString() } : item) })); }}>Rename</button></div>)}
+          <h3>Tags</h3><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("tag") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, tags: [...value.tags, { ...newEntity(), name: input.value.trim(), color: "#c86b24" }] })); input.value = ""; }}><input name="tag" aria-label="New tag name" placeholder="New tag name…" /><button>Add tag</button></form>{tags.map(t => <div className="tagLine" key={t.id}><span>#{t.name}</span><div><button onClick={() => { const name = prompt("Rename tag", t.name)?.trim(); if (name) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, name, revision: item.revision + 1, updatedAt: new Date().toISOString() } : item) })); }}>Rename</button><button onClick={() => { if (confirm(`Delete tag ${t.name}?`)) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, deletedAt: new Date().toISOString(), revision: item.revision + 1 } : item), tasks: value.tasks.map(item => item.tagIds.includes(t.id) ? { ...item, tagIds: item.tagIds.filter(id => id !== t.id), revision: item.revision + 1 } : item) })); }}>Delete</button></div></div>)}
+          <h3>Archived projects</h3>{data.projects.filter(p => p.archivedAt && !p.deletedAt).map(p => <div className="tagLine" key={p.id}><span>{p.name}</span><button onClick={() => mutate(value => ({ ...value, projects: value.projects.map(item => item.id === p.id ? { ...item, archivedAt: undefined, revision: item.revision + 1 } : item) }))}>Restore</button></div>)}
         </div>}
       </>}
     </section>
-    {editing && <TaskEditor key={editing} task={data.tasks.find(t => t.id === editing)} initialDate={editing.startsWith("new:") ? editing.slice(4) : undefined} data={data} onClose={() => setEditing(null)} onSave={(task, start, end, reminderMinutes) => {
+    {editing && <TaskEditor key={editing} task={data.tasks.find(t => t.id === editing)} initialDate={editing.startsWith("new:") ? editing.slice(4) : undefined} initialProject={view === "Projects" ? projectId : undefined} data={data} onClose={() => setEditing(null)} onSave={(task, start, end, reminderMinutes) => {
       mutate(value => saveTask(value, task, start, end, reminderMinutes)); setEditing(null);
     }} onDelete={id => { mutate(value => { const stamp = new Date().toISOString(); return { ...value,
       tasks: value.tasks.map(t => t.id === id ? { ...t, deletedAt: stamp, revision: t.revision + 1 } : t),
@@ -102,8 +106,8 @@ export default function Home() {
   </main>;
 }
 
-function TaskEditor({ task, initialDate, data, onClose, onSave, onDelete }: {
-  task?: Task; initialDate?: string; data: Data; onClose: () => void;
+function TaskEditor({ task, initialDate, initialProject, data, onClose, onSave, onDelete }: {
+  task?: Task; initialDate?: string; initialProject?: string; data: Data; onClose: () => void;
   onSave: (task: Task, start: string, end: string, reminder: string) => void; onDelete: (id: string) => void;
 }) {
   const block = data.blocks.find(b => b.taskId === task?.id && !b.deletedAt);
@@ -113,7 +117,9 @@ function TaskEditor({ task, initialDate, data, onClose, onSave, onDelete }: {
   const [dueDate, setDueDate] = useState(task?.dueDate ?? initialDate ?? "");
   const [dueTime, setDueTime] = useState(task?.dueTime ?? "");
   const [priority, setPriority] = useState<Priority>(task?.priority ?? "none");
-  const [projectId, setProjectId] = useState(task?.projectId ?? "");
+  const [projectId, setProjectId] = useState(task?.projectId ?? initialProject ?? "");
+  const [sectionId, setSectionId] = useState(task?.sectionId ?? "");
+  const [parentTaskId, setParentTaskId] = useState(task?.parentTaskId ?? "");
   const [tagIds, setTagIds] = useState(task?.tagIds ?? []);
   const [start, setStart] = useState(block ? localInput(block.startInstant) : "");
   const [end, setEnd] = useState(block ? localInput(block.endInstant) : "");
@@ -123,16 +129,19 @@ function TaskEditor({ task, initialDate, data, onClose, onSave, onDelete }: {
   return <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><form className="editor" onSubmit={e => {
     e.preventDefault(); if (!title.trim() || (frequency && !dueDate) || (start && (!end || new Date(end) <= new Date(start)))) return;
     const stamp = new Date().toISOString();
-    onSave({ ...(task ?? newEntity()), title: title.trim(), notes, priority, projectId: projectId || undefined, tagIds, sortKey: task?.sortKey ?? Date.now(), dueDate: dueDate || undefined,
+    onSave({ ...(task ?? newEntity()), title: title.trim(), notes, priority, projectId: projectId || undefined, sectionId: projectId && sectionId ? sectionId : undefined,
+      parentTaskId: parentTaskId || undefined, tagIds, sortKey: task?.sortKey ?? Date.now(), dueDate: dueDate || undefined,
       dueTime: dueDate && dueTime ? dueTime : undefined, dueTimeZone: dueDate && dueTime ? zone() : undefined, updatedAt: stamp, revision: task ? task.revision + 1 : 1,
-      recurrence: frequency && dueDate ? { frequency: frequency as "daily" | "weekly" | "monthly" | "yearly", interval: Math.max(1, interval), anchorDate: task?.recurrence?.anchorDate ?? dueDate, occurrences: task?.recurrence?.occurrences ?? 0 } : undefined
+      recurrence: frequency && dueDate ? { frequency: frequency as "daily" | "weekly" | "monthly" | "yearly", interval: Math.max(1, interval), anchorDate: task?.dueDate === dueDate ? task?.recurrence?.anchorDate ?? dueDate : dueDate, occurrences: task?.recurrence?.occurrences ?? 0 } : undefined
     }, start, end, reminderMinutes);
   }}>
     <div className="editorHead"><h2>{task ? "Edit task" : "New task"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
     <label>Title<input autoFocus required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
     <div className="fieldPair"><label>Due date<input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></label><label>Due time<input type="time" disabled={!dueDate} value={dueTime} onChange={e => setDueTime(e.target.value)} /></label></div>
-    <div className="fieldPair"><label>Priority<select value={priority} onChange={e => setPriority(e.target.value as Priority)}>{priorities.map(p => <option key={p} value={p}>{p}</option>)}</select></label><label>Project<select value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">Inbox</option>{data.projects.filter(p => !p.deletedAt && !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
+    <div className="fieldPair"><label>Priority<select value={priority} onChange={e => setPriority(e.target.value as Priority)}>{priorities.map(p => <option key={p} value={p}>{p}</option>)}</select></label><label>Project<select value={projectId} onChange={e => { setProjectId(e.target.value); setSectionId(""); setParentTaskId(""); }}><option value="">Inbox</option>{data.projects.filter(p => !p.deletedAt && !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
+    {projectId && <label>Section<select value={sectionId} onChange={e => setSectionId(e.target.value)}><option value="">Project root</option>{data.sections.filter(s => s.projectId === projectId && !s.deletedAt).map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</select></label>}
+    <label>Subtask of<select value={parentTaskId} onChange={e => setParentTaskId(e.target.value)}><option value="">No parent</option>{data.tasks.filter(t => !t.deletedAt && !t.parentTaskId && t.id !== task?.id && (t.projectId ?? "") === projectId).map(t => <option value={t.id} key={t.id}>{t.title}</option>)}</select></label>
     {!!data.tags.length && <fieldset><legend>Tags</legend>{data.tags.filter(t => !t.deletedAt).map(t => <label className="checkLabel" key={t.id}><input type="checkbox" checked={tagIds.includes(t.id)} onChange={e => setTagIds(e.target.checked ? [...tagIds, t.id] : tagIds.filter(id => id !== t.id))} /> {t.name}</label>)}</fieldset>}
     <div className="fieldPair"><label>Repeat<select value={frequency} onChange={e => setFrequency(e.target.value)}><option value="">Never</option>{["daily", "weekly", "monthly", "yearly"].map(f => <option key={f} value={f}>{f}</option>)}</select></label><label>Every<input type="number" min="1" max="365" disabled={!frequency} value={interval} onChange={e => setInterval(Number(e.target.value))} /></label></div>
     <p className="hint">Scheduled work time is separate from the deadline.</p>

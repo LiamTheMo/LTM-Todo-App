@@ -1,7 +1,9 @@
 # Roadmap
 
 ## Version strategy
-`v0.01` is the repository/product foundation checkpoint. Product implementation progresses toward v1.00, v2.00 and v3.00. Every phase is implemented on a temporary branch from the active permanent version branch.
+`v0.xx` branches are permanent development checkpoints toward v1.00. `v0.01` contains the initial runnable foundation. `v0.02` is the next organization and reliability checkpoint. Further `v0.xx` checkpoints will advance the remaining v1 phases; create `v1.00` from the final validated checkpoint only after all v1 release criteria and required manual checks pass. Every implementation takes place on a temporary branch from its originating permanent version branch.
+
+See [V1_STATUS.md](V1_STATUS.md) for the current evidence and release blockers. Passing CI on a checkpoint does not mark v1.00 complete.
 
 ## v1.00 — Tasks & Dashboard
 1. Phase 1 — Engineering foundation and design system.
