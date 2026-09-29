@@ -2,13 +2,16 @@ import SwiftUI
 
 struct DashboardView: View {
     @EnvironmentObject private var store: TodoStore
-    @State private var pastDays = 7
-    @State private var futureDays = 28
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var windowStart = -7
+    @State private var initialScrollDone = false
     @State private var editing: TodoTask?
+    private let windowLength = 56
+    private let windowStep = 28
 
     private var dates: [String] {
         let today = DayMath.day(Date())
-        return (-pastDays...futureDays).compactMap { DayMath.add($0, to: today) }
+        return (windowStart..<(windowStart + windowLength)).compactMap { DayMath.add($0, to: today) }
     }
 
     var body: some View {
@@ -16,16 +19,22 @@ struct DashboardView: View {
             ScrollViewReader { reader in
                 ScrollView {
                     LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        Button("Earlier days") { pastDays += 28 }
+                        Button("Earlier days") {
+                            let anchor = dates.first
+                            windowStart -= windowStep
+                            if let anchor { DispatchQueue.main.async { reader.scrollTo(anchor, anchor: .top) } }
+                        }
                             .padding()
                         ForEach(dates, id: \.self) { day in
                             Section {
                                 dayContent(day)
                             } header: {
                                 HStack {
-                                    Text(day == DayMath.day(Date()) ? "TODAY" : day)
+                                    Text(day == DayMath.day(Date()) ? "TODAY" :
+                                        day == DayMath.add(1, to: DayMath.day(Date())) ? "TOMORROW" : day)
                                         .font(.caption.bold())
                                         .accessibilityAddTraits(.isHeader)
+                                        .accessibilityLabel(day)
                                     Spacer()
                                 }
                                 .padding(.horizontal)
@@ -34,14 +43,28 @@ struct DashboardView: View {
                             }
                             .id(day)
                         }
-                        Button("Later days") { futureDays += 28 }
+                        Button("Later days") {
+                            let anchor = dates.last
+                            windowStart += windowStep
+                            if let anchor { DispatchQueue.main.async { reader.scrollTo(anchor, anchor: .bottom) } }
+                        }
                             .padding()
                     }
                 }
-                .onAppear { reader.scrollTo(DayMath.day(Date()), anchor: .top) }
+                .onAppear {
+                    guard !initialScrollDone else { return }
+                    initialScrollDone = true
+                    reader.scrollTo(DayMath.day(Date()), anchor: .top)
+                }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("Today") { withAnimation { reader.scrollTo(DayMath.day(Date()), anchor: .top) } }
+                        Button("Today") {
+                            windowStart = -7
+                            DispatchQueue.main.async {
+                                if reduceMotion { reader.scrollTo(DayMath.day(Date()), anchor: .top) }
+                                else { withAnimation { reader.scrollTo(DayMath.day(Date()), anchor: .top) } }
+                            }
+                        }
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Button { editing = TodoTask(title: "") } label: { Image(systemName: "plus") }
@@ -62,26 +85,31 @@ struct DashboardView: View {
         let overdue = day == DayMath.day(Date()) ? store.activeTasks.filter { ($0.dueDay ?? day) < day } : []
         VStack(alignment: .leading, spacing: 8) {
             if !scheduled.isEmpty {
-                Text("SCHEDULED").font(.caption2.bold()).foregroundStyle(.secondary)
+                Text("SCHEDULED").font(.caption2.bold()).foregroundStyle(.secondary).accessibilityAddTraits(.isHeader)
                 ForEach(scheduled) { task in
                     TaskRow(task: task) { editing = task }
                 }
             }
             if !overdue.isEmpty {
-                Text("OVERDUE").font(.caption2.bold()).foregroundStyle(.red)
+                Text("OVERDUE").font(.caption2.bold()).foregroundStyle(.red).accessibilityAddTraits(.isHeader)
                 ForEach(overdue) { task in TaskRow(task: task) { editing = task } }
             }
             if !due.isEmpty {
-                Text("DUE").font(.caption2.bold()).foregroundStyle(.secondary)
+                Text("DUE").font(.caption2.bold()).foregroundStyle(.secondary).accessibilityAddTraits(.isHeader)
                 ForEach(due) { task in TaskRow(task: task) { editing = task } }
             }
             if scheduled.isEmpty && due.isEmpty && overdue.isEmpty {
-                Text("Nothing planned").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text("Nothing planned").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Add") { editing = TodoTask(title: "", dueDay: day) }.font(.caption)
+                }
+            } else {
+                Button("Add task for this day") {
+                    editing = TodoTask(title: "", dueDay: day)
+                }
+                .font(.caption)
             }
-            Button("Add task for this day") {
-                editing = TodoTask(title: "", dueDay: day)
-            }
-            .font(.caption)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

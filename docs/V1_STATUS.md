@@ -6,6 +6,7 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 
 - `v0.01`: runnable SwiftUI iPhone/iPad and Next.js web shells.
 - `v0.02`: Cloudflare deployment is triggered only by a merged same-repository `vX.XX` pull request into `main`; the `v0.02` promotion exercised the gate and deployed successfully.
+- `v0.04` Dashboard checkpoint: web and Apple render a bounded 56-day window and shift by 28-day overlaps, with compact empty-day rows and semantic day/group headings. Web date bucketing indexes tasks and blocks once per query; a 5,000-task/56-day test is in CI.
 - Local web task state uses versioned IndexedDB transactions. Native task state uses an atomic JSON file. Both clients create, edit, complete and soft-delete tasks locally.
 - Dashboard separates scheduled work from due dates. Web day bucketing uses a work block's stored time zone; date-only deadlines remain date strings.
 - Web domain tests cover date boundaries, anchored monthly recurrence, completion history, parent/subtask behavior, section deletion and stable reordering.
@@ -24,7 +25,7 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 
 - Phase 1: design tokens and Apple simulator smoke tests need formal coverage.
 - Phase 2: migration, concurrent update and large-list tests need stronger coverage; native recovery/export is absent.
-- Phase 3: window extension and empty-day compression need polish, and performance needs measurement with large datasets.
+- Phase 3: bounded date-window navigation and compact empty days are implemented; scroll preservation and sticky headers still need long-scroll device/browser validation. Automatic near-boundary extension and richer locale/calendar fixtures remain.
 - Phase 4: project/section ordering, archive recovery and subtasks need full cross-client parity and destructive-action tests.
 - Phase 5: `v0.03` work adds weekday and end-condition controls, date recurrence checks and serialized native notification reconciliation. Device delivery and a full notification horizon strategy remain unverified. Web reminders are persisted but web notification delivery is not implemented.
 - Phase 6: global filters and accessibility/performance audits, integrity checks, full regression coverage and documented device results remain.
