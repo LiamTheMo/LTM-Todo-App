@@ -1,0 +1,47 @@
+name: App CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'v*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  swift-core:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test Swift core
+        run: swift test
+
+  apple:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        working-directory: apps/apple
+        run: xcodegen generate
+      - name: Build iOS app
+        working-directory: apps/apple
+        run: xcodebuild -project LTMTodo.xcodeproj -scheme LTMTodo -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build

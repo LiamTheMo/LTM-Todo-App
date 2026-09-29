@@ -1,0 +1,9 @@
+.DS_Store
+.build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+apps/web/node_modules/
+apps/web/.next/
+.env
+.env.*
+!.env.example

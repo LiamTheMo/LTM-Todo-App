@@ -1,0 +1,5 @@
+[
+  {"name":"standard-day","iso":"2026-09-29T12:00:00-06:00","expectedLocalDate":"2026-09-29"},
+  {"name":"spring-dst-boundary","iso":"2026-03-08T01:59:00-07:00","zone":"America/Edmonton"},
+  {"name":"fall-dst-boundary","iso":"2026-11-01T01:30:00-06:00","zone":"America/Edmonton"}
+]
