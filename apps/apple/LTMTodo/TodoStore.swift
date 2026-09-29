@@ -7,6 +7,7 @@ final class TodoStore: ObservableObject {
     @Published private(set) var data = TodoData()
     @Published private(set) var errorMessage: String?
     private let url: URL
+    private var savedData = TodoData()
     private var notificationWork: Task<Void, Never>?
     private var notificationGeneration = 0
 
@@ -19,6 +20,7 @@ final class TodoStore: ObservableObject {
                 let decoded = try JSONDecoder().decode(TodoData.self, from: Data(contentsOf: url))
                 guard decoded.schemaVersion == 1 else { throw CocoaError(.fileReadCorruptFile) }
                 data = decoded
+                savedData = decoded
             }
         } catch {
             errorMessage = "Saved tasks could not be opened: \(error.localizedDescription)"
@@ -31,6 +33,7 @@ final class TodoStore: ObservableObject {
             .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }
     }
     var projects: [TodoProject] { data.projects.filter { $0.deletedAt == nil && $0.archivedAt == nil } }
+    var backupURL: URL? { FileManager.default.fileExists(atPath: url.path) ? url : nil }
 
     func save(_ task: TodoTask) {
         guard errorMessage == nil else { return }
@@ -188,8 +191,10 @@ final class TodoStore: ObservableObject {
         guard errorMessage == nil else { return }
         do {
             try JSONEncoder().encode(data).write(to: url, options: .atomic)
+            savedData = data
             refreshNotifications()
         } catch {
+            data = savedData
             errorMessage = "Changes could not be saved: \(error.localizedDescription)"
         }
     }

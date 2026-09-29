@@ -39,6 +39,7 @@ export type Reminder = Entity & { taskId: string; minutesBefore: number; enabled
 export type Completion = { id: string; taskId: string; occurrenceDate?: string; completedAt: string; clearedBlockIds?: string[] };
 export type Data = {
   schemaVersion: 1;
+  generation: number; // Monotonic document revision for cross-tab write detection.
   tasks: Task[];
   projects: Project[];
   sections: ProjectSection[];
@@ -48,7 +49,7 @@ export type Data = {
   completions: Completion[];
 };
 export const emptyData = (): Data => ({
-  schemaVersion: 1, tasks: [], projects: [], sections: [], tags: [], blocks: [], reminders: [], completions: []
+  schemaVersion: 1, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [], reminders: [], completions: []
 });
 export const newEntity = (now = new Date()): Entity => ({
   id: crypto.randomUUID(), createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1

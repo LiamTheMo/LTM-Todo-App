@@ -22,6 +22,7 @@ export default function Home() {
   const [data, setData] = useState<Data>(emptyData);
   const current = useRef<Data>(emptyData());
   const writes = useRef(Promise.resolve());
+  const writeFailed = useRef(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState<View>("Dashboard");
@@ -45,9 +46,19 @@ export default function Home() {
     if (element) window.scrollBy(0, element.getBoundingClientRect().top - anchor.top);
   }, [dayStart]);
   const mutate = useCallback((change: (value: Data) => Data) => {
-    if (error) return;
-    const next = change(current.current); current.current = next; setData(next);
-    writes.current = writes.current.then(() => writeData(next)).catch(() => { setError("Changes could not be saved. Keep this tab open and check browser storage."); });
+    if (error || writeFailed.current) return;
+    const previous = current.current;
+    const changed = change(previous);
+    if (changed === previous) return;
+    const next = { ...changed, generation: previous.generation + 1 };
+    current.current = next; setData(next);
+    writes.current = writes.current.then(() => {
+      if (!writeFailed.current) return writeData(next, previous.generation);
+    }).catch((cause) => {
+      writeFailed.current = true;
+      setError(cause instanceof Error && cause.message.includes("another tab") ? cause.message :
+        "Changes could not be saved. Download an unsaved backup from Settings before reloading this tab.");
+    });
   }, [error]);
   const addTask = (title: string, project?: string, dueDate?: string) => {
     if (!title.trim()) return;
