@@ -1,0 +1,187 @@
+export type Priority = "none" | "low" | "medium" | "high";
+export type Frequency = "daily" | "weekly" | "monthly" | "yearly";
+export type Recurrence = {
+  frequency: Frequency;
+  interval: number;
+  weekdays?: number[];
+  until?: string;
+  count?: number;
+  anchorDate: string;
+  occurrences: number;
+};
+export type Entity = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+  deletedAt?: string;
+};
+export type Task = Entity & {
+  title: string;
+  notes: string;
+  priority: Priority;
+  projectId?: string;
+  sectionId?: string;
+  parentTaskId?: string;
+  tagIds: string[];
+  sortKey: number;
+  dueDate?: string; // YYYY-MM-DD: never convert a date-only deadline to UTC midnight.
+  dueTime?: string; // HH:mm in dueTimeZone.
+  dueTimeZone?: string;
+  completedAt?: string;
+  recurrence?: Recurrence;
+};
+export type Project = Entity & { name: string; color: string; sortKey: number; archivedAt?: string };
+export type ProjectSection = Entity & { projectId: string; name: string; sortKey: number };
+export type Tag = Entity & { name: string; color: string };
+export type ScheduledBlock = Entity & { taskId: string; startInstant: string; endInstant: string; timeZone: string };
+export type Reminder = Entity & { taskId: string; minutesBefore: number; enabled: boolean };
+export type Completion = { id: string; taskId: string; occurrenceDate?: string; completedAt: string; clearedBlockIds?: string[] };
+export type Data = {
+  schemaVersion: 1;
+  tasks: Task[];
+  projects: Project[];
+  sections: ProjectSection[];
+  tags: Tag[];
+  blocks: ScheduledBlock[];
+  reminders: Reminder[];
+  completions: Completion[];
+};
+export const emptyData = (): Data => ({
+  schemaVersion: 1, tasks: [], projects: [], sections: [], tags: [], blocks: [], reminders: [], completions: []
+});
+export const newEntity = (now = new Date()): Entity => ({
+  id: crypto.randomUUID(), createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1
+});
+export const localDate = (date: Date): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+export const parseLocalDate = (value: string): Date => {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+};
+export const addDays = (value: string, days: number): string => {
+  const date = parseLocalDate(value);
+  date.setDate(date.getDate() + days);
+  return localDate(date);
+};
+export const instantDay = (instant: string, timeZone: string): string => {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
+    .formatToParts(new Date(instant));
+  const field = (type: string) => parts.find(part => part.type === type)?.value ?? "";
+  return `${field("year")}-${field("month")}-${field("day")}`;
+};
+const anchoredMonth = (anchor: string, months: number): string => {
+  const [year, month, day] = anchor.split("-").map(Number);
+  const first = new Date(year, month - 1 + months, 1, 12);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0, 12).getDate();
+  first.setDate(Math.min(day, lastDay));
+  return localDate(first);
+};
+export function nextOccurrence(rule: Recurrence, after: string): string | undefined {
+  if (rule.count && rule.occurrences >= rule.count) return;
+  const interval = Math.max(1, Math.floor(rule.interval));
+  for (let index = 1; index <= 2400; index++) {
+    let candidate: string;
+    if (rule.frequency === "monthly") candidate = anchoredMonth(rule.anchorDate, index * interval);
+    else if (rule.frequency === "yearly") candidate = anchoredMonth(rule.anchorDate, index * interval * 12);
+    else if (rule.frequency === "daily") candidate = addDays(rule.anchorDate, index * interval);
+    else {
+      const weekdays = rule.weekdays?.length ? rule.weekdays : [parseLocalDate(rule.anchorDate).getDay()];
+      const day = addDays(rule.anchorDate, index);
+      const weekIndex = Math.floor((index + parseLocalDate(rule.anchorDate).getDay()) / 7);
+      if (weekIndex % interval || !weekdays.includes(parseLocalDate(day).getDay())) continue;
+      candidate = day;
+    }
+    if (candidate <= after) continue;
+    if (rule.until && candidate > rule.until) return;
+    return candidate;
+  }
+}
+export function completeTask(data: Data, id: string, now = new Date()): Data {
+  const task = data.tasks.find(item => item.id === id && !item.deletedAt);
+  if (!task || task.completedAt) return data;
+  const completedAt = now.toISOString();
+  const occurrenceDate = task.dueDate;
+  const recurrence = task.recurrence && { ...task.recurrence, occurrences: task.recurrence.occurrences + 1 };
+  const next = recurrence && nextOccurrence(recurrence, occurrenceDate ?? localDate(now));
+  const clearedBlockIds = next ? data.blocks.filter(block => block.taskId === id && !block.deletedAt).map(block => block.id) : [];
+  const completions = [...data.completions, { id: crypto.randomUUID(), taskId: id, occurrenceDate, completedAt, clearedBlockIds }];
+  return {
+    ...data, completions,
+    blocks: data.blocks.map(block => clearedBlockIds.includes(block.id) ? { ...block, deletedAt: completedAt, revision: block.revision + 1 } : block),
+    tasks: data.tasks.map(item => item.id === id ? {
+      ...item, recurrence, dueDate: next ?? item.dueDate,
+      completedAt: next ? undefined : completedAt, updatedAt: completedAt, revision: item.revision + 1
+    } : item)
+  };
+}
+export function undoCompletion(data: Data, completionId: string): Data {
+  const completion = data.completions.find(item => item.id === completionId);
+  if (!completion || data.completions.filter(item => item.taskId === completion.taskId).at(-1)?.id !== completionId) return data;
+  return {
+    ...data,
+    completions: data.completions.filter(item => item.id !== completionId),
+    blocks: data.blocks.map(block => completion.clearedBlockIds?.includes(block.id) ? {
+      ...block, deletedAt: undefined, updatedAt: new Date().toISOString(), revision: block.revision + 1
+    } : block),
+    tasks: data.tasks.map(task => task.id === completion.taskId ? {
+      ...task, dueDate: completion.occurrenceDate ?? task.dueDate, completedAt: undefined,
+      recurrence: task.recurrence ? { ...task.recurrence, occurrences: Math.max(0, task.recurrence.occurrences - 1) } : undefined,
+      updatedAt: new Date().toISOString(), revision: task.revision + 1
+    } : task)
+  };
+}
+export function saveTask(data: Data, task: Task, start = "", end = "", reminderMinutes = ""): Data {
+  const stamp = new Date().toISOString();
+  const currentBlock = data.blocks.find(block => block.taskId === task.id && !block.deletedAt);
+  const currentReminder = data.reminders.find(reminder => reminder.taskId === task.id && !reminder.deletedAt);
+  const hasBlock = Boolean(start && end && new Date(end) > new Date(start));
+  const hasReminder = reminderMinutes !== "" && Boolean(task.dueDate && task.dueTime);
+  const nextBlock: ScheduledBlock | undefined = hasBlock ? {
+    ...(currentBlock ?? newEntity()), taskId: task.id, startInstant: new Date(start).toISOString(),
+    endInstant: new Date(end).toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    updatedAt: stamp, revision: currentBlock ? currentBlock.revision + 1 : 1
+  } : undefined;
+  const nextReminder: Reminder | undefined = hasReminder ? {
+    ...(currentReminder ?? newEntity()), taskId: task.id, minutesBefore: Number(reminderMinutes),
+    enabled: true, updatedAt: stamp, revision: currentReminder ? currentReminder.revision + 1 : 1
+  } : undefined;
+  return {
+    ...data,
+    tasks: data.tasks.some(item => item.id === task.id) ? data.tasks.map(item => item.id === task.id ? task : item) : [...data.tasks, task],
+    blocks: [
+      ...data.blocks.map(block => block.id === currentBlock?.id ? nextBlock ?? { ...block, deletedAt: stamp, updatedAt: stamp, revision: block.revision + 1 } : block),
+      ...(nextBlock && !currentBlock ? [nextBlock] : [])
+    ],
+    reminders: [
+      ...data.reminders.map(reminder => reminder.id === currentReminder?.id ? nextReminder ?? { ...reminder, deletedAt: stamp, updatedAt: stamp, revision: reminder.revision + 1 } : reminder),
+      ...(nextReminder && !currentReminder ? [nextReminder] : [])
+    ]
+  };
+}
+export function dashboardDays(data: Data, start: string, length: number) {
+  const active = data.tasks.filter(task => !task.deletedAt && !task.completedAt);
+  const dates = Array.from({ length }, (_, index) => addDays(start, index));
+  return dates.map(date => ({
+    date,
+    due: active.filter(task => task.dueDate === date).sort(taskOrder),
+    scheduled: data.blocks.filter(block => !block.deletedAt && instantDay(block.startInstant, block.timeZone) === date)
+      .map(block => ({ block, task: active.find(task => task.id === block.taskId) }))
+      .filter((item): item is { block: ScheduledBlock; task: Task } => !!item.task)
+      .sort((a, b) => a.block.startInstant.localeCompare(b.block.startInstant)),
+    overdue: date === localDate(new Date()) ? active.filter(task => task.dueDate && task.dueDate < date).sort(taskOrder) : []
+  }));
+}
+export const taskOrder = (a: Task, b: Task): number =>
+  a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+export type TaskFilter = { query?: string; projectId?: string; tagId?: string; priority?: Priority; completed?: boolean };
+export function filterTasks(data: Data, filter: TaskFilter): Task[] {
+  const query = filter.query?.trim().toLocaleLowerCase();
+  return data.tasks.filter(task => !task.deletedAt &&
+    (filter.completed === undefined || Boolean(task.completedAt) === filter.completed) &&
+    (!filter.projectId || task.projectId === filter.projectId) &&
+    (!filter.tagId || task.tagIds.includes(filter.tagId)) &&
+    (!filter.priority || task.priority === filter.priority) &&
+    (!query || `${task.title} ${task.notes}`.toLocaleLowerCase().includes(query))
+  ).sort(taskOrder);
+}
