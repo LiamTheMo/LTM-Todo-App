@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, completeTask, dashboardDays, emptyData, filterTasks, nextOccurrence, undoCompletion } from "../lib/domain.ts";
+import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, nextOccurrence, reorderTask, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
@@ -45,4 +45,22 @@ test("completed and deleted records leave active search", () => {
   data.tasks.push(task("gamma", undefined, { deletedAt: "2026-10-01T10:00:00Z" }));
   assert.deepEqual(filterTasks(data, { query: "chapter", tagId: "school", completed: false }).map(item => item.id), ["alpha"]);
   assert.deepEqual(filterTasks(data, { completed: true }).map(item => item.id), ["beta"]);
+});
+test("parent completion waits for unfinished subtasks", () => {
+  const data = emptyData();
+  data.tasks.push(task("parent", "2026-10-01"), task("child", undefined, { parentTaskId: "parent" }));
+  assert.equal(completeTask(data, "parent").completions.length, 0);
+  const childDone = completeTask(data, "child");
+  assert.equal(completeTask(childDone, "parent").completions.length, 2);
+});
+test("reorder retains identity and section deletion moves tasks to project root", () => {
+  const data = emptyData();
+  data.tasks.push(task("a", undefined, { projectId: "p", sectionId: "s", sortKey: 1024 }), task("b", undefined, { projectId: "p", sectionId: "s", sortKey: 2048 }));
+  data.sections.push({ id: "s", projectId: "p", name: "First", sortKey: 0, createdAt: "", updatedAt: "", revision: 1 });
+  const moved = reorderTask(data, "b", -1);
+  assert.deepEqual(filterTasks(moved, { projectId: "p" }).map(item => item.id), ["b", "a"]);
+  const deleted = deleteSection(moved, "s");
+  assert.equal(deleted.sections[0].deletedAt !== undefined, true);
+  assert.equal(deleted.tasks[0].sectionId, undefined);
+  assert.equal(deleted.tasks[0].id, "a");
 });

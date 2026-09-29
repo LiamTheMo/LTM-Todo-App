@@ -36,10 +36,19 @@ final class TodoStore: ObservableObject {
         guard !updated.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         updated.title = updated.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if let index = data.tasks.firstIndex(where: { $0.id == task.id }) {
+            let moved = data.tasks[index].projectID != updated.projectID || data.tasks[index].sectionID != updated.sectionID
             updated.createdAt = data.tasks[index].createdAt
             updated.revision = data.tasks[index].revision + 1
             updated.updatedAt = Date()
             data.tasks[index] = updated
+            if moved {
+                for childIndex in data.tasks.indices where data.tasks[childIndex].parentTaskID == updated.id {
+                    data.tasks[childIndex].projectID = updated.projectID
+                    data.tasks[childIndex].sectionID = updated.sectionID
+                    data.tasks[childIndex].revision += 1
+                    data.tasks[childIndex].updatedAt = Date()
+                }
+            }
         } else {
             data.tasks.append(updated)
         }
@@ -54,6 +63,7 @@ final class TodoStore: ObservableObject {
 
     func complete(_ id: UUID) {
         guard errorMessage == nil else { return }
+        guard !data.tasks.contains(where: { $0.parentTaskID == id && $0.completedAt == nil && $0.deletedAt == nil }) else { return }
         guard let index = data.tasks.firstIndex(where: { $0.id == id && $0.deletedAt == nil }) else { return }
         let now = Date()
         if data.tasks[index].completedAt != nil {
@@ -63,7 +73,8 @@ final class TodoStore: ObservableObject {
             }
         } else {
             let occurrence = data.tasks[index].dueDay
-            data.completions.append(TodoCompletion(taskID: id, occurrenceDay: occurrence, completedAt: now))
+            data.completions.append(TodoCompletion(taskID: id, occurrenceDay: occurrence, completedAt: now,
+                scheduledStart: data.tasks[index].scheduledStart, scheduledEnd: data.tasks[index].scheduledEnd))
             if let next = DayMath.next(data.tasks[index], after: occurrence ?? DayMath.day(now)) {
                 data.tasks[index].dueDay = next
                 data.tasks[index].occurrenceCount += 1
@@ -75,6 +86,22 @@ final class TodoStore: ObservableObject {
         }
         data.tasks[index].updatedAt = now
         data.tasks[index].revision += 1
+        persist()
+    }
+
+    func undoCompletion(_ completionID: UUID) {
+        guard let completionIndex = data.completions.firstIndex(where: { $0.id == completionID }) else { return }
+        let completion = data.completions[completionIndex]
+        guard data.completions.last(where: { $0.taskID == completion.taskID })?.id == completionID,
+              let taskIndex = data.tasks.firstIndex(where: { $0.id == completion.taskID }) else { return }
+        data.tasks[taskIndex].dueDay = completion.occurrenceDay
+        data.tasks[taskIndex].scheduledStart = completion.scheduledStart
+        data.tasks[taskIndex].scheduledEnd = completion.scheduledEnd
+        data.tasks[taskIndex].completedAt = nil
+        data.tasks[taskIndex].occurrenceCount = max(0, data.tasks[taskIndex].occurrenceCount - 1)
+        data.tasks[taskIndex].revision += 1
+        data.tasks[taskIndex].updatedAt = Date()
+        data.completions.remove(at: completionIndex)
         persist()
     }
 
@@ -99,6 +126,59 @@ final class TodoStore: ObservableObject {
         guard let index = data.projects.firstIndex(where: { $0.id == id }) else { return }
         data.projects[index].archivedAt = Date()
         data.projects[index].revision += 1
+        persist()
+    }
+
+    func restoreProject(_ id: UUID) {
+        guard let index = data.projects.firstIndex(where: { $0.id == id }) else { return }
+        data.projects[index].archivedAt = nil
+        data.projects[index].revision += 1
+        persist()
+    }
+
+    func addSection(_ name: String, to projectID: UUID) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        data.sections.append(TodoSection(projectID: projectID, name: clean))
+        persist()
+    }
+
+    func deleteSection(_ id: UUID) {
+        guard let index = data.sections.firstIndex(where: { $0.id == id }) else { return }
+        data.sections[index].deletedAt = Date()
+        data.sections[index].revision += 1
+        for taskIndex in data.tasks.indices where data.tasks[taskIndex].sectionID == id {
+            data.tasks[taskIndex].sectionID = nil
+            data.tasks[taskIndex].revision += 1
+        }
+        persist()
+    }
+
+    func addTag(_ name: String) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        data.tags.append(TodoTag(name: clean))
+        persist()
+    }
+
+    func renameTag(_ id: UUID, to name: String) {
+        guard let index = data.tags.firstIndex(where: { $0.id == id }) else { return }
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        data.tags[index].name = clean
+        data.tags[index].updatedAt = Date()
+        data.tags[index].revision += 1
+        persist()
+    }
+
+    func deleteTag(_ id: UUID) {
+        guard let index = data.tags.firstIndex(where: { $0.id == id }) else { return }
+        data.tags[index].deletedAt = Date()
+        data.tags[index].revision += 1
+        for taskIndex in data.tasks.indices where data.tasks[taskIndex].tagIDs.contains(id) {
+            data.tasks[taskIndex].tagIDs.removeAll { $0 == id }
+            data.tasks[taskIndex].revision += 1
+        }
         persist()
     }
 

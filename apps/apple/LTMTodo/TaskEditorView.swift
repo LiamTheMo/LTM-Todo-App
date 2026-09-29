@@ -48,6 +48,37 @@ struct TaskEditorView: View {
                             Text(project.name).tag(Optional(project.id))
                         }
                     }
+                    if let projectID = task.projectID {
+                        Picker("Section", selection: $task.sectionID) {
+                            Text("Project root").tag(Optional<UUID>.none)
+                            ForEach(store.data.sections.filter { $0.projectID == projectID && $0.deletedAt == nil }) { section in
+                                Text(section.name).tag(Optional(section.id))
+                            }
+                        }
+                    }
+                    Picker("Subtask of", selection: $task.parentTaskID) {
+                        Text("No parent").tag(Optional<UUID>.none)
+                        ForEach(store.activeTasks.filter { $0.id != task.id && $0.parentTaskID == nil && $0.projectID == task.projectID }) { parent in
+                            Text(parent.title).tag(Optional(parent.id))
+                        }
+                    }
+                    .onChange(of: task.projectID) { _, _ in
+                        task.sectionID = nil
+                        task.parentTaskID = nil
+                    }
+                }
+                if !store.data.tags.filter({ $0.deletedAt == nil }).isEmpty {
+                    Section("Tags") {
+                        ForEach(store.data.tags.filter { $0.deletedAt == nil }) { tag in
+                            Toggle(tag.name, isOn: Binding(
+                                get: { task.tagIDs.contains(tag.id) },
+                                set: { enabled in
+                                    if enabled { task.tagIDs.append(tag.id) }
+                                    else { task.tagIDs.removeAll { $0 == tag.id } }
+                                }
+                            ))
+                        }
+                    }
                 }
                 Section("Deadline") {
                     Toggle("Due date", isOn: $hasDue)

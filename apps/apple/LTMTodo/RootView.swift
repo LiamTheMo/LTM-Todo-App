@@ -68,24 +68,21 @@ struct RootView: View {
             NavigationStack {
                 List(store.data.completions.reversed()) { completion in
                     if let task = store.data.tasks.first(where: { $0.id == completion.taskID }) {
-                        VStack(alignment: .leading) {
-                            Text(task.title)
-                            Text(completion.completedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(task.title)
+                                Text(completion.completedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if store.data.completions.last(where: { $0.taskID == completion.taskID })?.id == completion.id {
+                                Button("Undo") { store.undoCompletion(completion.id) }
+                            }
                         }
                     }
                 }
                 .navigationTitle("History")
             }
-        case .settings:
-            NavigationStack {
-                List {
-                    Section("Your data") {
-                        Text("Tasks are stored on this device. Cross-device sync arrives in a later phase.")
-                        Text("Notifications need permission and a due date with a time.")
-                    }
-                }
-                .navigationTitle("Settings")
-            }
+        case .settings: SettingsView()
         }
     }
 }
@@ -99,6 +96,7 @@ struct TaskListView: View {
     @State private var query = ""
     @State private var editing: TodoTask?
     @State private var priorityFilter = -1
+    @State private var sectionName = ""
 
     private var visible: [TodoTask] {
         store.activeTasks.filter { task in
@@ -128,9 +126,28 @@ struct TaskListView: View {
                         Text("High").tag(3)
                     }
                 }
-                Section {
-                    ForEach(visible) { task in
-                        TaskRow(task: task) { editing = task }
+                if let projectID {
+                    Section("Project tasks") {
+                        ForEach(visible.filter { $0.sectionID == nil }) { task in TaskRow(task: task) { editing = task } }
+                    }
+                    ForEach(store.data.sections.filter { $0.projectID == projectID && $0.deletedAt == nil }) { section in
+                        Section(section.name) {
+                            ForEach(visible.filter { $0.sectionID == section.id }) { task in
+                                TaskRow(task: task) { editing = task }
+                            }
+                            Button("Delete section", role: .destructive) { store.deleteSection(section.id) }
+                        }
+                    }
+                    Section("New section") {
+                        HStack {
+                            TextField("Section name", text: $sectionName)
+                            Button("Add") { store.addSection(sectionName, to: projectID); sectionName = "" }
+                                .disabled(sectionName.isEmpty)
+                        }
+                    }
+                } else {
+                    Section {
+                        ForEach(visible) { task in TaskRow(task: task) { editing = task } }
                     }
                 }
             }
@@ -158,17 +175,73 @@ struct TaskRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Button { store.complete(task.id) } label: { Image(systemName: "circle").font(.title3) }
-                .accessibilityLabel("Complete \(task.title)")
+                .disabled(store.activeTasks.contains(where: { $0.parentTaskID == task.id }))
+                .accessibilityLabel(store.activeTasks.contains(where: { $0.parentTaskID == task.id }) ? "Finish subtasks before completing \(task.title)" : "Complete \(task.title)")
             Button(action: edit) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(task.title).foregroundStyle(.primary)
                     if let day = task.dueDay { Text("Due \(day)").font(.caption).foregroundStyle(.secondary) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, task.parentTaskID == nil ? 0 : 16)
             }
             .buttonStyle(.plain)
         }
         .padding(.vertical, 4)
+    }
+}
+
+struct SettingsView: View {
+    @EnvironmentObject private var store: TodoStore
+    @State private var tagName = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Your data") {
+                    Text("Tasks are stored on this device. Cross-device sync arrives in a later phase.")
+                    Text("Notifications need permission and a due date with a time.")
+                }
+                Section("Tags") {
+                    HStack {
+                        TextField("New tag", text: $tagName)
+                        Button("Add") { store.addTag(tagName); tagName = "" }.disabled(tagName.isEmpty)
+                    }
+                    ForEach(store.data.tags.filter { $0.deletedAt == nil }) { tag in
+                        TagRow(tag: tag)
+                    }
+                }
+                Section("Archived projects") {
+                    ForEach(store.data.projects.filter { $0.archivedAt != nil && $0.deletedAt == nil }) { project in
+                        HStack {
+                            Text(project.name)
+                            Spacer()
+                            Button("Restore") { store.restoreProject(project.id) }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+        }
+    }
+}
+
+private struct TagRow: View {
+    @EnvironmentObject private var store: TodoStore
+    let tag: TodoTag
+    @State private var name: String
+
+    init(tag: TodoTag) {
+        self.tag = tag
+        _name = State(initialValue: tag.name)
+    }
+
+    var body: some View {
+        HStack {
+            TextField("Tag", text: $name).onSubmit { store.renameTag(tag.id, to: name) }
+            Button("Save") { store.renameTag(tag.id, to: name) }
+        }
+        .swipeActions { Button("Delete", role: .destructive) { store.deleteTag(tag.id) } }
     }
 }
 
