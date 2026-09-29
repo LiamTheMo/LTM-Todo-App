@@ -16,7 +16,7 @@ struct TaskEditorView: View {
     init(task: TodoTask) {
         _task = State(initialValue: task)
         _hasDue = State(initialValue: task.dueDay != nil)
-        _dueDate = State(initialValue: task.dueDay.flatMap(DayMath.date) ?? Date())
+        _dueDate = State(initialValue: task.dueDay.flatMap { DayMath.date($0) } ?? Date())
         _hasTime = State(initialValue: task.dueTime != nil)
         let pieces = task.dueTime?.split(separator: ":").compactMap { Int($0) } ?? []
         _dueTime = State(initialValue: pieces.count == 2
