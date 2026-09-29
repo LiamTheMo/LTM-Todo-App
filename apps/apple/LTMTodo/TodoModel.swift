@@ -17,6 +17,9 @@ struct TodoTask: Codable, Identifiable {
     var interval = 1
     var repeatAnchor: String?
     var occurrenceCount = 0
+    var repeatWeekdays: [Int]?
+    var repeatUntil: String?
+    var repeatCount: Int?
     var reminderMinutes: Int?
     var completedAt: Date?
     var createdAt = Date()
@@ -112,18 +115,52 @@ enum DayMath {
 
     static func next(_ task: TodoTask, after current: String, calendar: Calendar = .current) -> String? {
         guard let anchor = task.repeatAnchor, task.frequency != .never else { return nil }
+        if let count = task.repeatCount, task.occurrenceCount >= count { return nil }
         let interval = max(task.interval, 1)
-        for index in 1...2400 {
-            let candidate: String?
-            switch task.frequency {
-            case .never: return nil
-            case .daily: candidate = add(index * interval, to: anchor, calendar: calendar)
-            case .weekly: candidate = add(index * interval, to: anchor, component: .weekOfYear, calendar: calendar)
-            case .monthly: candidate = add(index * interval, to: anchor, component: .month, calendar: calendar)
-            case .yearly: candidate = add(index * interval, to: anchor, component: .year, calendar: calendar)
+        guard let anchorDate = date(anchor, calendar: calendar), let currentDate = date(current, calendar: calendar) else { return nil }
+        let candidate: String?
+        switch task.frequency {
+        case .never: return nil
+        case .daily:
+            let days = calendar.dateComponents([.day], from: anchorDate, to: currentDate).day ?? 0
+            candidate = add(max(1, days / interval + 1) * interval, to: anchor, calendar: calendar)
+        case .weekly:
+            let anchorWeekday = (calendar.component(.weekday, from: anchorDate) + 6) % 7
+            let weekdays = task.repeatWeekdays?.isEmpty == false ? task.repeatWeekdays! : [anchorWeekday]
+            let start = max(anchor, current)
+            for offset in 1...(interval * 7 + 7) {
+                guard let day = add(offset, to: start, calendar: calendar), let dayDate = date(day, calendar: calendar) else { continue }
+                let days = calendar.dateComponents([.day], from: anchorDate, to: dayDate).day ?? 0
+                let week = (days + anchorWeekday) / 7
+                if week % interval == 0 && weekdays.contains((calendar.component(.weekday, from: dayDate) + 6) % 7) {
+                    return (task.repeatUntil.map { day <= $0 } ?? true) ? day : nil
+                }
             }
-            if let candidate, candidate > current { return candidate }
+            return nil
+        case .monthly, .yearly:
+            let start = calendar.dateComponents([.year, .month], from: anchorDate)
+            let end = calendar.dateComponents([.year, .month], from: currentDate)
+            let monthStep = interval * (task.frequency == .yearly ? 12 : 1)
+            var index = max(1, (((end.year ?? 0) - (start.year ?? 0)) * 12 + (end.month ?? 0) - (start.month ?? 0)) / monthStep)
+            var next = anchoredMonth(anchor, months: index * monthStep, calendar: calendar)
+            if let nextDay = next, nextDay <= current {
+                index += 1
+                next = anchoredMonth(anchor, months: index * monthStep, calendar: calendar)
+            }
+            candidate = next
         }
-        return nil
+        guard let candidate else { return nil }
+        return (task.repeatUntil.map { candidate <= $0 } ?? true) ? candidate : nil
+    }
+
+    private static func anchoredMonth(_ anchor: String, months: Int, calendar: Calendar) -> String? {
+        guard let anchorDate = date(anchor, calendar: calendar),
+              let first = calendar.date(from: DateComponents(year: calendar.component(.year, from: anchorDate),
+                  month: calendar.component(.month, from: anchorDate), day: 1, hour: 12)),
+              let target = calendar.date(byAdding: .month, value: months, to: first),
+              let range = calendar.range(of: .day, in: .month, for: target),
+              let result = calendar.date(byAdding: .day, value: min(calendar.component(.day, from: anchorDate), range.count) - 1, to: target)
+        else { return nil }
+        return day(result, calendar: calendar)
     }
 }

@@ -78,24 +78,37 @@ const anchoredMonth = (anchor: string, months: number): string => {
   return localDate(first);
 };
 export function nextOccurrence(rule: Recurrence, after: string): string | undefined {
-  if (rule.count && rule.occurrences >= rule.count) return;
+  if (rule.count !== undefined && rule.occurrences >= rule.count) return;
   const interval = Math.max(1, Math.floor(rule.interval));
-  for (let index = 1; index <= 2400; index++) {
-    let candidate: string;
-    if (rule.frequency === "monthly") candidate = anchoredMonth(rule.anchorDate, index * interval);
-    else if (rule.frequency === "yearly") candidate = anchoredMonth(rule.anchorDate, index * interval * 12);
-    else if (rule.frequency === "daily") candidate = addDays(rule.anchorDate, index * interval);
-    else {
-      const weekdays = rule.weekdays?.length ? rule.weekdays : [parseLocalDate(rule.anchorDate).getDay()];
-      const day = addDays(rule.anchorDate, index);
-      const weekIndex = Math.floor((index + parseLocalDate(rule.anchorDate).getDay()) / 7);
-      if (weekIndex % interval || !weekdays.includes(parseLocalDate(day).getDay())) continue;
-      candidate = day;
+  const ordinal = (day: string) => {
+    const [year, month, date] = day.split("-").map(Number);
+    return Math.floor(Date.UTC(year, month - 1, date) / 86400000);
+  };
+  let candidate: string;
+  if (rule.frequency === "daily") {
+    const index = Math.max(1, Math.floor((ordinal(after) - ordinal(rule.anchorDate)) / interval) + 1);
+    candidate = addDays(rule.anchorDate, index * interval);
+  } else if (rule.frequency === "weekly") {
+    const anchorWeekday = parseLocalDate(rule.anchorDate).getDay();
+    const weekdays = rule.weekdays?.length ? rule.weekdays : [anchorWeekday];
+    const start = after > rule.anchorDate ? addDays(after, 1) : addDays(rule.anchorDate, 1);
+    for (let offset = 0; offset <= interval * 7 + 7; offset++) {
+      const day = addDays(start, offset);
+      const weekIndex = Math.floor((ordinal(day) - ordinal(rule.anchorDate) + anchorWeekday) / 7);
+      if (weekIndex % interval === 0 && weekdays.includes(parseLocalDate(day).getDay())) {
+        return rule.until && day > rule.until ? undefined : day;
+      }
     }
-    if (candidate <= after) continue;
-    if (rule.until && candidate > rule.until) return;
-    return candidate;
+    return;
+  } else {
+    const [anchorYear, anchorMonth] = rule.anchorDate.split("-").map(Number);
+    const [afterYear, afterMonth] = after.split("-").map(Number);
+    const monthsPerStep = rule.frequency === "monthly" ? interval : interval * 12;
+    let index = Math.max(1, Math.floor(((afterYear - anchorYear) * 12 + afterMonth - anchorMonth) / monthsPerStep));
+    candidate = anchoredMonth(rule.anchorDate, index * monthsPerStep);
+    if (candidate <= after) candidate = anchoredMonth(rule.anchorDate, ++index * monthsPerStep);
   }
+  return rule.until && candidate > rule.until ? undefined : candidate;
 }
 export function completeTask(data: Data, id: string, now = new Date()): Data {
   const task = data.tasks.find(item => item.id === id && !item.deletedAt);

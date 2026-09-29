@@ -4,7 +4,8 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 
 ## Completed / Passed
 
-- `v0.01`: runnable SwiftUI iPhone/iPad and Next.js web shells, with main-only Cloudflare deployment.
+- `v0.01`: runnable SwiftUI iPhone/iPad and Next.js web shells.
+- `v0.02`: Cloudflare deployment is triggered only by a merged same-repository `vX.XX` pull request into `main`; the `v0.02` promotion exercised the gate and deployed successfully.
 - Local web task state uses versioned IndexedDB transactions. Native task state uses an atomic JSON file. Both clients create, edit, complete and soft-delete tasks locally.
 - Dashboard separates scheduled work from due dates. Web day bucketing uses a work block's stored time zone; date-only deadlines remain date strings.
 - Web domain tests cover date boundaries, anchored monthly recurrence, completion history, parent/subtask behavior, section deletion and stable reordering.
@@ -25,7 +26,7 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 - Phase 2: migration, concurrent update and large-list tests need stronger coverage; native recovery/export is absent.
 - Phase 3: window extension and empty-day compression need polish, and performance needs measurement with large datasets.
 - Phase 4: project/section ordering, archive recovery and subtasks need full cross-client parity and destructive-action tests.
-- Phase 5: recurrence lacks selected weekdays, explicit end conditions, and DST ambiguity policy. Native notification reconciliation needs device tests and rolling-horizon safeguards. Web reminders are persisted but web notification delivery is not implemented.
+- Phase 5: `v0.03` work adds weekday and end-condition controls, date recurrence checks and serialized native notification reconciliation. Device delivery and a full notification horizon strategy remain unverified. Web reminders are persisted but web notification delivery is not implemented.
 - Phase 6: global filters and accessibility/performance audits, integrity checks, full regression coverage and documented device results remain.
 
 ## v1.00 release gate
