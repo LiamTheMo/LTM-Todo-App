@@ -128,5 +128,30 @@ test("project and section moves persist ordering, respect boundaries and isolate
   assert.deepEqual(reorderProject(reordered, "b", -1), reordered);
   assert.deepEqual(reorderSection(reordered, "two", -1), reordered);
   assert.deepEqual(reorderProject(reordered, "archived", -1), reordered);
-  assert.ok(reordered.projects.find(p => p.id === "a").revision > 1);
+  assert.equal(reordered.projects.find(p => p.id === "b").revision, 2);
+  assert.equal(reordered.projects.find(p => p.id === "a").revision, 1);
+  assert.equal(reordered.sections.find(s => s.id === "two").revision, 2);
+  assert.equal(reordered.sections.find(s => s.id === "one").revision, 1);
+});
+test("global structured filters combine status, project, tag, priority and date without stale indexes", () => {
+  const data = emptyData();
+  data.tasks.push(task("overdue", "2026-09-28", { notes: "Review draft", priority: "high", tagIds: ["work"], projectId: "p" }),
+    task("today", "2026-09-29", { projectId: "p" }), task("future", "2026-10-01", { projectId: "p" }),
+    task("done", "2026-09-28", { projectId: "p", completedAt: "2026-09-28T18:00:00Z" }),
+    task("inbox", undefined));
+  const today = "2026-09-29";
+  assert.deepEqual(filterTasks(data, { query: "draft", projectId: "p", tagId: "work", priority: "high",
+    completed: false, dateScope: "overdue", today }).map(item => item.id), ["overdue"]);
+  assert.deepEqual(filterTasks(data, { completed: true, dateScope: "overdue", today }).map(item => item.id), ["done"]);
+  assert.deepEqual(filterTasks(data, { projectId: null, dateScope: "undated", today }).map(item => item.id), ["inbox"]);
+  assert.deepEqual(filterTasks(data, { dateScope: "today", today }).map(item => item.id), ["today"]);
+  assert.deepEqual(filterTasks(data, { dateScope: "upcoming", today }).map(item => item.id), ["future"]);
+});
+test("dense section sort keys rebalance only their project group", () => {
+  const data = emptyData();
+  const entity = (id, projectId) => ({ id, projectId, name: id, sortKey: 0, createdAt: "", updatedAt: "", revision: 1 });
+  data.sections.push(entity("a", "p"), entity("b", "p"), entity("c", "p"), entity("other", "q"));
+  const moved = reorderSection(data, "c", -1);
+  assert.deepEqual(moved.sections.filter(s => s.projectId === "p").sort((a, b) => a.sortKey - b.sortKey).map(s => s.id), ["a", "c", "b"]);
+  assert.deepEqual(moved.sections.find(s => s.id === "other"), data.sections.find(s => s.id === "other"));
 });

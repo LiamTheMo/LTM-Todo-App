@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, localDate, newEntity, parseLocalDate, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type Priority, type Task } from "../lib/domain";
+import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, localDate, newEntity, parseLocalDate, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
 import { readData, writeData } from "../lib/storage";
 
 type View = "Dashboard" | "Inbox" | "Tasks" | "Projects" | "History" | "Settings";
@@ -32,6 +32,9 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<Priority | "all">("all");
   const [tagFilter, setTagFilter] = useState("");
+  const [taskProjectFilter, setTaskProjectFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("open");
+  const [dateFilter, setDateFilter] = useState<DateScope | "all">("all");
   const [dayStart, setDayStart] = useState(() => addDays(localDate(new Date()), -7));
   const todayRef = useRef<HTMLElement>(null);
   const pendingAnchor = useRef<{ day: string; top: number } | null>(null);
@@ -65,9 +68,13 @@ export default function Home() {
     mutate(value => ({ ...value, tasks: [...value.tasks, { ...newEntity(), title: title.trim(), notes: "", priority: "none", projectId: project || undefined, tagIds: [], sortKey: Date.now(), dueDate }] }));
     setQuickTitle("");
   };
-  const toggle = (task: Task) => mutate(value => task.completedAt
-    ? { ...value, tasks: value.tasks.map(item => item.id === task.id ? { ...item, completedAt: undefined, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }
-    : completeTask(value, task.id));
+  const toggle = (task: Task) => mutate(value => {
+    if (!task.completedAt) return completeTask(value, task.id);
+    const completion = value.completions.filter(item => item.taskId === task.id).at(-1);
+    return completion ? undoCompletion(value, completion.id) : { ...value, tasks: value.tasks.map(item => item.id === task.id ? {
+      ...item, completedAt: undefined, updatedAt: new Date().toISOString(), revision: item.revision + 1
+    } : item) };
+  });
   const projects = data.projects.filter(p => !p.deletedAt && !p.archivedAt).sort((a, b) => a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const tags = data.tags.filter(t => !t.deletedAt);
   const taskRow = (task: Task, caption?: string) => <div className={`taskRow ${task.completedAt ? "completed" : ""} ${task.parentTaskId ? "subtask" : ""}`} key={task.id}>
@@ -76,7 +83,13 @@ export default function Home() {
     <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
   </div>;
   const today = localDate(new Date());
-  const visible = filterTasks(data, { query, projectId: projectId || undefined, tagId: tagFilter || undefined, priority: priorityFilter === "all" ? undefined : priorityFilter, completed: false });
+  const visible = filterTasks(data, { query, projectId: taskProjectFilter === "all" ? undefined : taskProjectFilter === "inbox" ? null : taskProjectFilter,
+    tagId: tagFilter || undefined, priority: priorityFilter === "all" ? undefined : priorityFilter,
+    completed: statusFilter === "all" ? undefined : statusFilter === "completed", dateScope: dateFilter === "all" ? undefined : dateFilter, today });
+  const activeFilters = [query && `search “${query}”`, statusFilter !== "all" && statusFilter, taskProjectFilter !== "all" &&
+    (taskProjectFilter === "inbox" ? "Inbox" : projects.find(p => p.id === taskProjectFilter)?.name),
+    priorityFilter !== "all" && `${priorityFilter} priority`, tagFilter && `#${tags.find(t => t.id === tagFilter)?.name ?? "tag"}`,
+    dateFilter !== "all" && dateFilter].filter(Boolean).join(" · ");
   const shiftDays = (direction: -1 | 1) => {
     const day = direction < 0 ? dayStart : addDays(dayStart, dashboardWindow - 1);
     const element = document.querySelector<HTMLElement>(`[data-day="${day}"]`);
@@ -109,7 +122,7 @@ export default function Home() {
         </>}
         {(view === "Inbox" || view === "Tasks") && <>
           <form className="quickAdd" onSubmit={e => { e.preventDefault(); addTask(quickTitle); }}><span aria-hidden>＋</span><input aria-label="Quick add task" placeholder="Add a task…" value={quickTitle} onChange={e => setQuickTitle(e.target.value)} /><button disabled={!quickTitle.trim()}>Add</button></form>
-          {view === "Tasks" && <div className="filters"><input aria-label="Search tasks" placeholder="Search titles and notes…" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Filter priority" value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as Priority | "all")}><option value="all">All priorities</option>{priorities.map(p => <option key={p} value={p}>{p}</option>)}</select><select aria-label="Filter tag" value={tagFilter} onChange={e => setTagFilter(e.target.value)}><option value="">All tags</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>}
+          {view === "Tasks" && <><div className="filters"><input aria-label="Search tasks" placeholder="Search titles and notes…" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Filter status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="open">Open</option><option value="completed">Completed</option><option value="all">All statuses</option></select><select aria-label="Filter project" value={taskProjectFilter} onChange={e => setTaskProjectFilter(e.target.value)}><option value="all">All projects</option><option value="inbox">Inbox</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select><select aria-label="Filter priority" value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as Priority | "all")}><option value="all">All priorities</option>{priorities.map(p => <option key={p} value={p}>{p}</option>)}</select><select aria-label="Filter tag" value={tagFilter} onChange={e => setTagFilter(e.target.value)}><option value="">All tags</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select><select aria-label="Filter due date" value={dateFilter} onChange={e => setDateFilter(e.target.value as DateScope | "all")}><option value="all">Any due date</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="upcoming">Upcoming</option><option value="undated">No due date</option></select></div><p className="filterSummary" aria-live="polite">{visible.length} results · {activeFilters || "No filters"}</p></>}
           <div className="listPanel">{(view === "Inbox" ? filterTasks(data, { completed: false }).filter(t => !t.projectId) : visible).map(t => taskRow(t))}{!(view === "Inbox" ? data.tasks.some(t => !t.deletedAt && !t.completedAt && !t.projectId) : visible.length) && <div className="empty">All clear here. Add a task whenever you&apos;re ready.</div>}</div>
         </>}
         {view === "Projects" && <><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("project") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, projects: [...value.projects, { ...newEntity(), name: input.value.trim(), color: "#c86b24", sortKey: Date.now() }] })); input.value = ""; }}><input name="project" aria-label="New project name" placeholder="New project name…" /><button>Create project</button></form>
