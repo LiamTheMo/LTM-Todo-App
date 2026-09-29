@@ -63,7 +63,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           if [[ "$(git rev-parse origin/main)" != "$MERGE_SHA" ]]; then
             echo "A newer main merge superseded this deployment."
             exit 0
