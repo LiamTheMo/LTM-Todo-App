@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, nextOccurrence, reorderTask, undoCompletion } from "../lib/domain.ts";
+import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, nextOccurrence, reorderProject, reorderSection, reorderTask, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
@@ -102,4 +102,31 @@ test("reorder retains identity and section deletion moves tasks to project root"
   assert.equal(deleted.sections[0].deletedAt !== undefined, true);
   assert.equal(deleted.tasks[0].sectionId, undefined);
   assert.equal(deleted.tasks[0].id, "a");
+});
+test("archived project tasks leave active search and Dashboard, then return on restore", () => {
+  const data = emptyData();
+  data.projects.push({ id: "p", name: "Paused", color: "#fff", sortKey: 0, createdAt: "", updatedAt: "", revision: 1,
+    archivedAt: "2026-09-01T00:00:00Z" });
+  data.tasks.push(task("archived", "2026-10-05", { projectId: "p" }), task("inbox", "2026-10-05"));
+  assert.deepEqual(filterTasks(data, { completed: false }).map(item => item.id), ["inbox"]);
+  assert.deepEqual(dashboardDays(data, "2026-10-05", 1)[0].due.map(item => item.id), ["inbox"]);
+  data.projects[0].archivedAt = undefined;
+  assert.deepEqual(filterTasks(data, { completed: false }).map(item => item.id), ["archived", "inbox"]);
+  assert.deepEqual(dashboardDays(data, "2026-10-05", 1)[0].due.map(item => item.id), ["archived", "inbox"]);
+});
+test("project and section moves persist ordering, respect boundaries and isolate groups", () => {
+  const data = emptyData();
+  const entity = (id, extras = {}) => ({ id, name: id, sortKey: 0, createdAt: "", updatedAt: "", revision: 1, ...extras });
+  data.projects.push(entity("a", { color: "#fff" }), entity("b", { color: "#fff" }),
+    entity("archived", { color: "#fff", archivedAt: "2026-09-01T00:00:00Z" }));
+  data.sections.push(entity("one", { projectId: "a" }), entity("two", { projectId: "a" }),
+    entity("other", { projectId: "b" }));
+  const reordered = reorderSection(reorderProject(data, "b", -1), "two", -1);
+  assert.deepEqual(reordered.projects.filter(p => !p.archivedAt).sort((a, b) => a.sortKey - b.sortKey).map(p => p.id), ["b", "a"]);
+  assert.deepEqual(reordered.sections.filter(s => s.projectId === "a").sort((a, b) => a.sortKey - b.sortKey).map(s => s.id), ["two", "one"]);
+  assert.deepEqual(reordered.sections.filter(s => s.projectId === "b"), data.sections.filter(s => s.projectId === "b"));
+  assert.deepEqual(reorderProject(reordered, "b", -1), reordered);
+  assert.deepEqual(reorderSection(reordered, "two", -1), reordered);
+  assert.deepEqual(reorderProject(reordered, "archived", -1), reordered);
+  assert.ok(reordered.projects.find(p => p.id === "a").revision > 1);
 });

@@ -29,10 +29,15 @@ final class TodoStore: ObservableObject {
     }
 
     var activeTasks: [TodoTask] {
-        data.tasks.filter { $0.deletedAt == nil && $0.completedAt == nil }
+        let archived = Set(data.projects.filter { $0.archivedAt != nil && $0.deletedAt == nil }.map(\.id))
+        return data.tasks.filter { $0.deletedAt == nil && $0.completedAt == nil &&
+            ($0.projectID.map { !archived.contains($0) } ?? true) }
             .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }
     }
-    var projects: [TodoProject] { data.projects.filter { $0.deletedAt == nil && $0.archivedAt == nil } }
+    var projects: [TodoProject] {
+        data.projects.filter { $0.deletedAt == nil && $0.archivedAt == nil }
+            .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }
+    }
     var backupURL: URL? { FileManager.default.fileExists(atPath: url.path) ? url : nil }
 
     func save(_ task: TodoTask) {
@@ -130,6 +135,7 @@ final class TodoStore: ObservableObject {
         guard errorMessage == nil else { return }
         guard let index = data.projects.firstIndex(where: { $0.id == id }) else { return }
         data.projects[index].archivedAt = Date()
+        data.projects[index].updatedAt = Date()
         data.projects[index].revision += 1
         persist()
     }
@@ -137,7 +143,45 @@ final class TodoStore: ObservableObject {
     func restoreProject(_ id: UUID) {
         guard let index = data.projects.firstIndex(where: { $0.id == id }) else { return }
         data.projects[index].archivedAt = nil
+        data.projects[index].updatedAt = Date()
         data.projects[index].revision += 1
+        persist()
+    }
+
+    func moveProject(_ id: UUID, by direction: Int) {
+        guard errorMessage == nil else { return }
+        var ordered = projects.map(\.id)
+        guard let from = ordered.firstIndex(of: id), ordered.indices.contains(from + direction) else { return }
+        ordered.swapAt(from, from + direction)
+        let now = Date()
+        for (position, projectID) in ordered.enumerated() {
+            guard let index = data.projects.firstIndex(where: { $0.id == projectID }) else { continue }
+            let key = Double(position * 1024)
+            if data.projects[index].sortKey != key {
+                data.projects[index].sortKey = key
+                data.projects[index].updatedAt = now
+                data.projects[index].revision += 1
+            }
+        }
+        persist()
+    }
+
+    func moveSection(_ id: UUID, by direction: Int) {
+        guard errorMessage == nil, let section = data.sections.first(where: { $0.id == id && $0.deletedAt == nil }) else { return }
+        var ordered = data.sections.filter { $0.projectID == section.projectID && $0.deletedAt == nil }
+            .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }.map(\.id)
+        guard let from = ordered.firstIndex(of: id), ordered.indices.contains(from + direction) else { return }
+        ordered.swapAt(from, from + direction)
+        let now = Date()
+        for (position, sectionID) in ordered.enumerated() {
+            guard let index = data.sections.firstIndex(where: { $0.id == sectionID }) else { continue }
+            let key = Double(position * 1024)
+            if data.sections[index].sortKey != key {
+                data.sections[index].sortKey = key
+                data.sections[index].updatedAt = now
+                data.sections[index].revision += 1
+            }
+        }
         persist()
     }
 
@@ -151,9 +195,11 @@ final class TodoStore: ObservableObject {
     func deleteSection(_ id: UUID) {
         guard let index = data.sections.firstIndex(where: { $0.id == id }) else { return }
         data.sections[index].deletedAt = Date()
+        data.sections[index].updatedAt = Date()
         data.sections[index].revision += 1
         for taskIndex in data.tasks.indices where data.tasks[taskIndex].sectionID == id {
             data.tasks[taskIndex].sectionID = nil
+            data.tasks[taskIndex].updatedAt = Date()
             data.tasks[taskIndex].revision += 1
         }
         persist()
