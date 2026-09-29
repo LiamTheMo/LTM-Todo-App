@@ -9,6 +9,7 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 - `v0.04` Dashboard checkpoint: web and Apple render a bounded 56-day window and shift by 28-day overlaps, with compact empty-day rows and semantic day/group headings. Web date bucketing indexes tasks and blocks once per query; a 5,000-task/56-day test is in CI.
 - `v0.05` local-data checkpoint: legacy v1 browser snapshots fill absent collections; malformed/unsupported snapshots fail closed. IndexedDB writes compare a document generation in one transaction to detect another tab's write instead of silently overwriting it. Native write failure rolls back the in-memory change; Settings can share the saved JSON backup.
 - `v0.06` organization checkpoint: archiving a project hides its tasks from active Dashboard and task views on both clients, while restoration reveals the same records. Projects and sections have persisted up/down ordering, with web boundary/group regression tests and native confirmation before section deletion or project archiving.
+- `v0.07` search/filter checkpoint: master Tasks can combine title/notes search with status, project/Inbox, tag, priority and due-date scopes on both clients. Results show the active criteria. Normal project/section moves now update one sort key; only dense-key collisions rebalance a group.
 - Local web task state uses versioned IndexedDB transactions. Native task state uses an atomic JSON file. Both clients create, edit, complete and soft-delete tasks locally.
 - Dashboard separates scheduled work from due dates. Web day bucketing uses a work block's stored time zone; date-only deadlines remain date strings.
 - Web domain tests cover date boundaries, anchored monthly recurrence, completion history, parent/subtask behavior, section deletion and stable reordering.
@@ -28,9 +29,9 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 - Phase 1: design tokens and Apple simulator smoke tests need formal coverage.
 - Phase 2: browser migration and invalid-snapshot tests, optimistic-write serialization, cross-tab conflict detection and native backup export are present. Real browser multi-tab/storage failure testing, native migration/recovery tests and offline force-quit checks remain.
 - Phase 3: bounded date-window navigation and compact empty days are implemented; scroll preservation and sticky headers still need long-scroll device/browser validation. Automatic near-boundary extension and richer locale/calendar fixtures remain.
-- Phase 4: project/section ordering and archive visibility/recovery have cross-client controls. Subtask depth and move rules, drag/keyboard/VoiceOver reordering, and broader destructive-action/restart tests still need parity and validation.
+- Phase 4: project/section ordering and archive visibility/recovery have cross-client controls, with normal moves changing only one sort key. Subtask depth and move rules, drag/keyboard/VoiceOver reordering, and broader destructive-action/restart tests still need parity and validation.
 - Phase 5: `v0.03` work adds weekday and end-condition controls, date recurrence checks and serialized native notification reconciliation. Device delivery and a full notification horizon strategy remain unverified. Web reminders are persisted but web notification delivery is not implemented.
-- Phase 6: global filters and accessibility/performance audits, integrity checks, full regression coverage and documented device results remain.
+- Phase 6: combined master-list search and filters are implemented. Saved-query groundwork, accessibility/performance audits, integrity checks, bulk operations, full regression coverage and documented device results remain.
 
 ## v1.00 release gate
 

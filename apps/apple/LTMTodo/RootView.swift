@@ -96,14 +96,38 @@ struct TaskListView: View {
     @State private var query = ""
     @State private var editing: TodoTask?
     @State private var priorityFilter = -1
+    @State private var statusFilter = 0
+    @State private var projectFilter = "all"
+    @State private var tagFilter = "all"
+    @State private var dateFilter = "all"
     @State private var sectionName = ""
     @State private var sectionToDelete: UUID?
 
+    private var isMaster: Bool { projectID == nil && !inboxOnly }
+    private var filterDescription: String {
+        var labels = [isMaster ? (statusFilter == 0 ? "Open" : statusFilter == 1 ? "Completed" : "All statuses") : "Open"]
+        if !query.isEmpty { labels.append("Search: \(query)") }
+        if projectFilter != "all" {
+            if projectFilter == "inbox" { labels.append("Inbox") }
+            else { labels.append(store.projects.first(where: { $0.id.uuidString == projectFilter })?.name ?? "Archived project") }
+        }
+        if priorityFilter >= 0 { labels.append("Priority \(priorityFilter)") }
+        if tagFilter != "all" { labels.append(store.data.tags.first(where: { $0.id.uuidString == tagFilter })?.name ?? "Deleted tag") }
+        if dateFilter != "all" { labels.append(dateFilter) }
+        return labels.joined(separator: " · ")
+    }
     private var visible: [TodoTask] {
-        store.activeTasks.filter { task in
+        let today = DayMath.day(Date())
+        return (isMaster ? store.unarchivedTasks : store.activeTasks).filter { task in
             (inboxOnly ? task.projectID == nil : (projectID == nil || task.projectID == projectID)) &&
             (query.isEmpty || task.title.localizedCaseInsensitiveContains(query) || task.notes.localizedCaseInsensitiveContains(query)) &&
-            (priorityFilter < 0 || task.priority == priorityFilter)
+            (priorityFilter < 0 || task.priority == priorityFilter) &&
+            (!isMaster || (statusFilter == 2 || (task.completedAt != nil) == (statusFilter == 1))) &&
+            (!isMaster || projectFilter == "all" || (projectFilter == "inbox" ? task.projectID == nil : task.projectID?.uuidString == projectFilter)) &&
+            (tagFilter == "all" || task.tagIDs.contains { $0.uuidString == tagFilter }) &&
+            (dateFilter == "all" || (dateFilter == "undated" ? task.dueDay == nil : task.dueDay.map {
+                dateFilter == "today" ? $0 == today : dateFilter == "overdue" ? $0 < today : $0 > today
+            } ?? false))
         }
     }
 
@@ -126,6 +150,31 @@ struct TaskListView: View {
                         Text("Medium").tag(2)
                         Text("High").tag(3)
                     }
+                    if isMaster {
+                        Picker("Status", selection: $statusFilter) {
+                            Text("Open").tag(0)
+                            Text("Completed").tag(1)
+                            Text("All statuses").tag(2)
+                        }
+                        Picker("Project", selection: $projectFilter) {
+                            Text("All projects").tag("all")
+                            Text("Inbox").tag("inbox")
+                            ForEach(store.projects) { project in Text(project.name).tag(project.id.uuidString) }
+                        }
+                    }
+                    Picker("Tag", selection: $tagFilter) {
+                        Text("All tags").tag("all")
+                        ForEach(store.data.tags.filter { $0.deletedAt == nil }) { tag in Text(tag.name).tag(tag.id.uuidString) }
+                    }
+                    Picker("Due date", selection: $dateFilter) {
+                        Text("Any due date").tag("all")
+                        Text("Overdue").tag("overdue")
+                        Text("Due today").tag("today")
+                        Text("Upcoming").tag("upcoming")
+                        Text("No due date").tag("undated")
+                    }
+                    Text("\(visible.count) results · \(filterDescription)")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if let projectID {
                     Section("Project tasks") {
@@ -189,9 +238,13 @@ struct TaskRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button { store.complete(task.id) } label: { Image(systemName: "circle").font(.title3) }
-                .disabled(store.activeTasks.contains(where: { $0.parentTaskID == task.id }))
-                .accessibilityLabel(store.activeTasks.contains(where: { $0.parentTaskID == task.id }) ? "Finish subtasks before completing \(task.title)" : "Complete \(task.title)")
+            Button {
+                if task.completedAt != nil, let completion = store.data.completions.last(where: { $0.taskID == task.id }) {
+                    store.undoCompletion(completion.id)
+                } else { store.complete(task.id) }
+            } label: { Image(systemName: task.completedAt == nil ? "circle" : "checkmark.circle.fill").font(.title3) }
+                .disabled(task.completedAt == nil && store.activeTasks.contains(where: { $0.parentTaskID == task.id }))
+                .accessibilityLabel(task.completedAt != nil ? "Reopen \(task.title)" : store.activeTasks.contains(where: { $0.parentTaskID == task.id }) ? "Finish subtasks before completing \(task.title)" : "Complete \(task.title)")
             Button(action: edit) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(task.title).foregroundStyle(.primary)

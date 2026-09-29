@@ -238,6 +238,13 @@ function reorderEntities<T extends Entity & { sortKey: number }>(items: T[], id:
   if (from < 0 || to < 0 || to >= ordered.length) return items;
   ordered.splice(to, 0, ordered.splice(from, 1)[0]);
   const stamp = new Date().toISOString();
+  const before = ordered[to - 1]?.sortKey;
+  const after = ordered[to + 1]?.sortKey;
+  const key = before === undefined ? (after ?? 0) - 1024 : after === undefined ? before + 1024 : (before + after) / 2;
+  if (Number.isFinite(key) && key !== before && key !== after) {
+    return items.map(item => item.id === id ? { ...item, sortKey: key, updatedAt: stamp, revision: item.revision + 1 } : item);
+  }
+  // Extremely dense or colliding keys need a one-time rebalance.
   const positions = new Map(ordered.map((item, index) => [item.id, index * 1024]));
   return items.map(item => positions.has(item.id) && item.sortKey !== positions.get(item.id) ? {
     ...item, sortKey: positions.get(item.id)!, updatedAt: stamp, revision: item.revision + 1
@@ -267,16 +274,22 @@ export function deleteSection(data: Data, id: string): Data {
     tasks: data.tasks.map(task => task.sectionId === id ? { ...task, sectionId: undefined, updatedAt: stamp, revision: task.revision + 1 } : task)
   };
 }
-export type TaskFilter = { query?: string; projectId?: string; tagId?: string; priority?: Priority; completed?: boolean };
+export type DateScope = "overdue" | "today" | "upcoming" | "undated";
+export type TaskFilter = { query?: string; projectId?: string | null; tagId?: string; priority?: Priority;
+  completed?: boolean; dateScope?: DateScope; today?: string };
 export function filterTasks(data: Data, filter: TaskFilter): Task[] {
   const query = filter.query?.trim().toLocaleLowerCase();
   const archived = new Set(data.projects.filter(project => project.archivedAt && !project.deletedAt).map(project => project.id));
+  const today = filter.today ?? localDate(new Date());
   return data.tasks.filter(task => !task.deletedAt &&
     (!task.projectId || !archived.has(task.projectId)) &&
     (filter.completed === undefined || Boolean(task.completedAt) === filter.completed) &&
-    (!filter.projectId || task.projectId === filter.projectId) &&
+    (filter.projectId === null ? !task.projectId : !filter.projectId || task.projectId === filter.projectId) &&
     (!filter.tagId || task.tagIds.includes(filter.tagId)) &&
     (!filter.priority || task.priority === filter.priority) &&
+    (!filter.dateScope || (filter.dateScope === "undated" ? !task.dueDate :
+      Boolean(task.dueDate && (filter.dateScope === "today" ? task.dueDate === today :
+        filter.dateScope === "overdue" ? task.dueDate < today : task.dueDate > today)))) &&
     (!query || `${task.title} ${task.notes}`.toLocaleLowerCase().includes(query))
   ).sort(taskOrder);
 }

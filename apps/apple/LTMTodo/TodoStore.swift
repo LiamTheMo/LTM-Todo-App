@@ -28,12 +28,13 @@ final class TodoStore: ObservableObject {
         refreshNotifications()
     }
 
-    var activeTasks: [TodoTask] {
+    var unarchivedTasks: [TodoTask] {
         let archived = Set(data.projects.filter { $0.archivedAt != nil && $0.deletedAt == nil }.map(\.id))
-        return data.tasks.filter { $0.deletedAt == nil && $0.completedAt == nil &&
+        return data.tasks.filter { $0.deletedAt == nil &&
             ($0.projectID.map { !archived.contains($0) } ?? true) }
             .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }
     }
+    var activeTasks: [TodoTask] { unarchivedTasks.filter { $0.completedAt == nil } }
     var projects: [TodoProject] {
         data.projects.filter { $0.deletedAt == nil && $0.archivedAt == nil }
             .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }
@@ -73,8 +74,8 @@ final class TodoStore: ObservableObject {
 
     func complete(_ id: UUID) {
         guard errorMessage == nil else { return }
-        guard !data.tasks.contains(where: { $0.parentTaskID == id && $0.completedAt == nil && $0.deletedAt == nil }) else { return }
         guard let index = data.tasks.firstIndex(where: { $0.id == id && $0.deletedAt == nil }) else { return }
+        guard data.tasks[index].completedAt != nil || !data.tasks.contains(where: { $0.parentTaskID == id && $0.completedAt == nil && $0.deletedAt == nil }) else { return }
         let now = Date()
         if data.tasks[index].completedAt != nil {
             data.tasks[index].completedAt = nil
@@ -150,12 +151,24 @@ final class TodoStore: ObservableObject {
 
     func moveProject(_ id: UUID, by direction: Int) {
         guard errorMessage == nil else { return }
-        var ordered = projects.map(\.id)
-        guard let from = ordered.firstIndex(of: id), ordered.indices.contains(from + direction) else { return }
-        ordered.swapAt(from, from + direction)
+        var ordered = projects
+        guard let from = ordered.firstIndex(where: { $0.id == id }), ordered.indices.contains(from + direction) else { return }
+        let to = from + direction
+        ordered.insert(ordered.remove(at: from), at: to)
         let now = Date()
-        for (position, projectID) in ordered.enumerated() {
-            guard let index = data.projects.firstIndex(where: { $0.id == projectID }) else { continue }
+        let before = to > 0 ? ordered[to - 1].sortKey : nil
+        let after = to + 1 < ordered.count ? ordered[to + 1].sortKey : nil
+        let key = before.map { left in after.map { right in (left + right) / 2 } ?? (left + 1024) } ?? ((after ?? 0) - 1024)
+        if key.isFinite && (before.map { key != $0 } ?? true) && (after.map { key != $0 } ?? true),
+           let index = data.projects.firstIndex(where: { $0.id == id }) {
+            data.projects[index].sortKey = key
+            data.projects[index].updatedAt = now
+            data.projects[index].revision += 1
+            persist()
+            return
+        }
+        for (position, project) in ordered.enumerated() {
+            guard let index = data.projects.firstIndex(where: { $0.id == project.id }) else { continue }
             let key = Double(position * 1024)
             if data.projects[index].sortKey != key {
                 data.projects[index].sortKey = key
@@ -169,12 +182,24 @@ final class TodoStore: ObservableObject {
     func moveSection(_ id: UUID, by direction: Int) {
         guard errorMessage == nil, let section = data.sections.first(where: { $0.id == id && $0.deletedAt == nil }) else { return }
         var ordered = data.sections.filter { $0.projectID == section.projectID && $0.deletedAt == nil }
-            .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }.map(\.id)
-        guard let from = ordered.firstIndex(of: id), ordered.indices.contains(from + direction) else { return }
-        ordered.swapAt(from, from + direction)
+            .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }
+        guard let from = ordered.firstIndex(where: { $0.id == id }), ordered.indices.contains(from + direction) else { return }
+        let to = from + direction
+        ordered.insert(ordered.remove(at: from), at: to)
         let now = Date()
-        for (position, sectionID) in ordered.enumerated() {
-            guard let index = data.sections.firstIndex(where: { $0.id == sectionID }) else { continue }
+        let before = to > 0 ? ordered[to - 1].sortKey : nil
+        let after = to + 1 < ordered.count ? ordered[to + 1].sortKey : nil
+        let key = before.map { left in after.map { right in (left + right) / 2 } ?? (left + 1024) } ?? ((after ?? 0) - 1024)
+        if key.isFinite && (before.map { key != $0 } ?? true) && (after.map { key != $0 } ?? true),
+           let index = data.sections.firstIndex(where: { $0.id == id }) {
+            data.sections[index].sortKey = key
+            data.sections[index].updatedAt = now
+            data.sections[index].revision += 1
+            persist()
+            return
+        }
+        for (position, item) in ordered.enumerated() {
+            guard let index = data.sections.firstIndex(where: { $0.id == item.id }) else { continue }
             let key = Double(position * 1024)
             if data.sections[index].sortKey != key {
                 data.sections[index].sortKey = key
