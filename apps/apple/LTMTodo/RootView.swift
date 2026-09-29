@@ -201,6 +201,11 @@ struct SettingsView: View {
                 Section("Your data") {
                     Text("Tasks are stored on this device. Cross-device sync arrives in a later phase.")
                     Text("Notifications need permission and a due date with a time.")
+                    if let backupURL = store.backupURL {
+                        ShareLink(item: backupURL) {
+                            Label("Export local backup JSON", systemImage: "square.and.arrow.up")
+                        }
+                    }
                 }
                 Section("Tags") {
                     HStack {
