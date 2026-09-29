@@ -1,0 +1,41 @@
+name: Documentation CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'v*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required foundation files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            README.md
+            AGENTS.md
+            docs/PRODUCT_SPEC.md
+            docs/ARCHITECTURE.md
+            docs/DATA_MODEL.md
+            docs/DASHBOARD_UX.md
+            docs/ROADMAP.md
+            docs/WORKFLOWS.md
+          )
+          for file in "${required[@]}"; do
+            test -s "$file" || { echo "Missing or empty: $file"; exit 1; }
+          done
+      - name: Reject merge-conflict markers
+        shell: bash
+        run: |
+          if grep -RInE '^(<<<<<<<|=======|>>>>>>>)' -- .             --exclude-dir=.git; then
+            echo "Merge conflict markers found."
+            exit 1
+          fi
