@@ -12,8 +12,14 @@ struct TaskEditorView: View {
     @State private var start: Date
     @State private var end: Date
     @State private var reminder = -1
+    @State private var hasRepeatUntil: Bool
+    @State private var repeatUntil: Date
+    @State private var hasRepeatCount: Bool
+    @State private var repeatCount: Int
+    private let originalDueDay: String?
 
     init(task: TodoTask) {
+        originalDueDay = task.dueDay
         _task = State(initialValue: task)
         _hasDue = State(initialValue: task.dueDay != nil)
         _dueDate = State(initialValue: task.dueDay.flatMap { DayMath.date($0) } ?? Date())
@@ -26,6 +32,10 @@ struct TaskEditorView: View {
         _start = State(initialValue: task.scheduledStart ?? Date())
         _end = State(initialValue: task.scheduledEnd ?? Date().addingTimeInterval(3600))
         _reminder = State(initialValue: task.reminderMinutes ?? -1)
+        _hasRepeatUntil = State(initialValue: task.repeatUntil != nil)
+        _repeatUntil = State(initialValue: task.repeatUntil.flatMap { DayMath.date($0) } ?? Date())
+        _hasRepeatCount = State(initialValue: task.repeatCount != nil)
+        _repeatCount = State(initialValue: task.repeatCount ?? 2)
     }
 
     var body: some View {
@@ -106,6 +116,25 @@ struct TaskEditorView: View {
                     }
                     if task.frequency != .never {
                         Stepper("Every \(task.interval)", value: $task.interval, in: 1...365)
+                        if task.frequency == .weekly {
+                            ForEach(0..<7, id: \.self) { day in
+                                Toggle(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day],
+                                    isOn: Binding(
+                                        get: { task.repeatWeekdays?.contains(day) ?? false },
+                                        set: { enabled in
+                                            var days = task.repeatWeekdays ?? []
+                                            if enabled && !days.contains(day) { days.append(day) }
+                                            if !enabled { days.removeAll { $0 == day } }
+                                            task.repeatWeekdays = days
+                                        }
+                                    ))
+                            }
+                            Text("With no days selected, repeat on the original weekday.").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Toggle("End on date", isOn: $hasRepeatUntil)
+                        if hasRepeatUntil { DatePicker("Last date", selection: $repeatUntil, in: dueDate..., displayedComponents: .date) }
+                        Toggle("End after occurrences", isOn: $hasRepeatCount)
+                        if hasRepeatCount { Stepper("\(repeatCount) occurrences", value: $repeatCount, in: 1...999) }
                     }
                     Picker("Reminder", selection: $reminder) {
                         Text("None").tag(-1)
@@ -152,7 +181,15 @@ struct TaskEditorView: View {
         task.reminderMinutes = hasDue && hasTime && reminder >= 0 ? reminder : nil
         if task.frequency == .never {
             task.repeatAnchor = nil
-        } else if task.repeatAnchor == nil || task.dueDay == nil {
+            task.repeatWeekdays = nil
+            task.repeatUntil = nil
+            task.repeatCount = nil
+        } else {
+            task.repeatUntil = hasRepeatUntil ? DayMath.day(repeatUntil) : nil
+            task.repeatCount = hasRepeatCount ? repeatCount : nil
+            if task.frequency != .weekly { task.repeatWeekdays = nil }
+        }
+        if task.frequency != .never && (task.repeatAnchor == nil || task.dueDay != originalDueDay) {
             task.repeatAnchor = task.dueDay
         }
         store.save(task)
