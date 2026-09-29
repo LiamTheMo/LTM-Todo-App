@@ -180,14 +180,28 @@ export function saveTask(data: Data, task: Task, start = "", end = "", reminderM
 }
 export function dashboardDays(data: Data, start: string, length: number) {
   const active = data.tasks.filter(task => !task.deletedAt && !task.completedAt);
+  const byId = new Map(active.map(task => [task.id, task]));
+  const due = new Map<string, Task[]>();
+  for (const task of active) {
+    if (!task.dueDate) continue;
+    const group = due.get(task.dueDate) ?? [];
+    group.push(task);
+    due.set(task.dueDate, group);
+  }
+  const scheduled = new Map<string, { block: ScheduledBlock; task: Task }[]>();
+  for (const block of data.blocks) {
+    const task = byId.get(block.taskId);
+    if (block.deletedAt || !task) continue;
+    const date = instantDay(block.startInstant, block.timeZone);
+    const group = scheduled.get(date) ?? [];
+    group.push({ block, task });
+    scheduled.set(date, group);
+  }
   const dates = Array.from({ length }, (_, index) => addDays(start, index));
   return dates.map(date => ({
     date,
-    due: active.filter(task => task.dueDate === date).sort(taskOrder),
-    scheduled: data.blocks.filter(block => !block.deletedAt && instantDay(block.startInstant, block.timeZone) === date)
-      .map(block => ({ block, task: active.find(task => task.id === block.taskId) }))
-      .filter((item): item is { block: ScheduledBlock; task: Task } => !!item.task)
-      .sort((a, b) => a.block.startInstant.localeCompare(b.block.startInstant)),
+    due: (due.get(date) ?? []).sort(taskOrder),
+    scheduled: (scheduled.get(date) ?? []).sort((a, b) => a.block.startInstant.localeCompare(b.block.startInstant)),
     overdue: date === localDate(new Date()) ? active.filter(task => task.dueDate && task.dueDate < date).sort(taskOrder) : []
   }));
 }
