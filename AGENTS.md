@@ -20,7 +20,7 @@ Before changing code:
 Completion flow:
 `vX.XX -> temporary branch -> vX.XX -> main -> deployment/manual validation`.
 
-Deployment/publishing is allowed only from `main`. Workflows must enforce this.
+Deployment/publishing is allowed only after a `vX.XX` pull request merges into `main`. Direct pushes, branch pushes, closed-but-unmerged PRs and manual dispatch must not deploy. Workflows must enforce this.
 
 ## 3. Mandatory CI loop
 Repeat until clean or genuinely blocked:

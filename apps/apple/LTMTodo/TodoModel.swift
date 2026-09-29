@@ -6,6 +6,8 @@ struct TodoTask: Codable, Identifiable {
     var notes = ""
     var priority = 0
     var projectID: UUID?
+    var sectionID: UUID?
+    var parentTaskID: UUID?
     var tagIDs: [UUID] = []
     var dueDay: String?
     var dueTime: String?
@@ -49,11 +51,24 @@ struct TodoTag: Codable, Identifiable {
     var revision = 1
 }
 
+struct TodoSection: Codable, Identifiable {
+    var id = UUID()
+    var projectID: UUID
+    var name: String
+    var sortKey = Date().timeIntervalSince1970
+    var deletedAt: Date?
+    var createdAt = Date()
+    var updatedAt = Date()
+    var revision = 1
+}
+
 struct TodoCompletion: Codable, Identifiable {
     var id = UUID()
     var taskID: UUID
     var occurrenceDay: String?
     var completedAt: Date
+    var scheduledStart: Date?
+    var scheduledEnd: Date?
 }
 
 struct TodoData: Codable {
@@ -61,7 +76,20 @@ struct TodoData: Codable {
     var tasks: [TodoTask] = []
     var projects: [TodoProject] = []
     var tags: [TodoTag] = []
+    var sections: [TodoSection] = []
     var completions: [TodoCompletion] = []
+
+    enum CodingKeys: String, CodingKey { case schemaVersion, tasks, projects, tags, sections, completions }
+    init() {}
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        tasks = try values.decodeIfPresent([TodoTask].self, forKey: .tasks) ?? []
+        projects = try values.decodeIfPresent([TodoProject].self, forKey: .projects) ?? []
+        tags = try values.decodeIfPresent([TodoTag].self, forKey: .tags) ?? []
+        sections = try values.decodeIfPresent([TodoSection].self, forKey: .sections) ?? []
+        completions = try values.decodeIfPresent([TodoCompletion].self, forKey: .completions) ?? []
+    }
 }
 
 enum DayMath {

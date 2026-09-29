@@ -17,6 +17,15 @@ LTM Todo is an ad-free, limitation-free personal productivity application for iP
 - **v3.00 — Accounts & Sync:** accounts, cross-device synchronization, conflict resolution, backup/export, attachments and optional collaboration.
 
 See `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, and `docs/phases/` for implementation-ready specifications.
+Current implementation and release blockers are tracked in `docs/V1_STATUS.md`.
 
 ## Development
 All development follows `AGENTS.md`. Major branches are `main` and permanent `vX.XX` checkpoints. Implementation occurs only on temporary branches created from the intended version branch and is merged back after validation. Deployment is only from `main`.
+
+### Run locally
+
+- Web: `cd apps/web && npm ci && npm run dev`; `npm test && npm run typecheck && npm run lint && npm run build`.
+- Apple: install Xcode and XcodeGen, run `xcodegen generate` in `apps/apple`, then open `LTMTodo.xcodeproj` or run the simulator build from App CI.
+- Swift core: `swift test` from the repository root.
+
+The deployed web app stores tasks locally in each browser using IndexedDB. It has no account or cross-device synchronization in v1. Native iPhone/iPad notifications require a due time and device permission.
