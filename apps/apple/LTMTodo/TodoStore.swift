@@ -7,6 +7,8 @@ final class TodoStore: ObservableObject {
     @Published private(set) var data = TodoData()
     @Published private(set) var errorMessage: String?
     private let url: URL
+    private var notificationWork: Task<Void, Never>?
+    private var notificationGeneration = 0
 
     init() {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -21,7 +23,7 @@ final class TodoStore: ObservableObject {
         } catch {
             errorMessage = "Saved tasks could not be opened: \(error.localizedDescription)"
         }
-        Task { await reconcileNotifications() }
+        refreshNotifications()
     }
 
     var activeTasks: [TodoTask] {
@@ -75,9 +77,9 @@ final class TodoStore: ObservableObject {
             let occurrence = data.tasks[index].dueDay
             data.completions.append(TodoCompletion(taskID: id, occurrenceDay: occurrence, completedAt: now,
                 scheduledStart: data.tasks[index].scheduledStart, scheduledEnd: data.tasks[index].scheduledEnd))
+            if data.tasks[index].frequency != .never { data.tasks[index].occurrenceCount += 1 }
             if let next = DayMath.next(data.tasks[index], after: occurrence ?? DayMath.day(now)) {
                 data.tasks[index].dueDay = next
-                data.tasks[index].occurrenceCount += 1
                 data.tasks[index].scheduledStart = nil
                 data.tasks[index].scheduledEnd = nil
             } else {
@@ -186,9 +188,20 @@ final class TodoStore: ObservableObject {
         guard errorMessage == nil else { return }
         do {
             try JSONEncoder().encode(data).write(to: url, options: .atomic)
-            Task { await reconcileNotifications() }
+            refreshNotifications()
         } catch {
             errorMessage = "Changes could not be saved: \(error.localizedDescription)"
+        }
+    }
+
+    func refreshNotifications() {
+        notificationGeneration += 1
+        let generation = notificationGeneration
+        let previous = notificationWork
+        notificationWork = Task { [weak self] in
+            if let previous { await previous.value }
+            guard let self, generation == self.notificationGeneration else { return }
+            await self.reconcileNotifications()
         }
     }
 
@@ -196,23 +209,36 @@ final class TodoStore: ObservableObject {
         let center = UNUserNotificationCenter.current()
         let existing = await center.pendingNotificationRequests()
         center.removePendingNotificationRequests(withIdentifiers: existing.filter { $0.identifier.hasPrefix("ltm-task-") }.map(\.identifier))
-        let reminders = activeTasks.filter { $0.reminderMinutes != nil && $0.dueDay != nil && $0.dueTime != nil }
-            .sorted { ($0.dueDay ?? "") + ($0.dueTime ?? "") < ($1.dueDay ?? "") + ($1.dueTime ?? "") }
-        guard !reminders.isEmpty else { return }
-        let granted = (try? await center.requestAuthorization(options: [.alert, .badge, .sound])) ?? false
-        guard granted else { return }
-        for task in reminders.prefix(60) {
+        let calendar = Calendar.current
+        let now = Date()
+        let reminders: [(task: TodoTask, triggerDate: Date)] = activeTasks.compactMap { task in
             guard let day = task.dueDay, let dueTime = task.dueTime,
                   let date = DayMath.date(day),
                   let hour = Int(dueTime.prefix(2)), let minute = Int(dueTime.suffix(2)),
-                  let due = Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: date),
-                  let triggerDate = Calendar.current.date(byAdding: .minute, value: -(task.reminderMinutes ?? 0), to: due),
-                  triggerDate > Date() else { continue }
+                  let minutes = task.reminderMinutes, (0...525600).contains(minutes),
+                  (0...23).contains(hour), (0...59).contains(minute) else { return nil }
+            var components = calendar.dateComponents([.year, .month, .day], from: date)
+            components.hour = hour
+            components.minute = minute
+            // Spring gaps move forward preserving minutes; fall overlaps use the first instance.
+            guard let due = calendar.nextDate(after: calendar.startOfDay(for: date).addingTimeInterval(-1),
+                matching: components, matchingPolicy: .nextTimePreservingSmallerComponents,
+                repeatedTimePolicy: .first, direction: .forward) else { return nil }
+            let triggerDate = due.addingTimeInterval(TimeInterval(-60 * minutes))
+            return triggerDate > now ? (task, triggerDate) : nil
+        }.sorted { $0.triggerDate < $1.triggerDate }
+        guard !reminders.isEmpty else { return }
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .denied { return }
+        if settings.authorizationStatus == .notDetermined {
+            guard (try? await center.requestAuthorization(options: [.alert, .badge, .sound])) == true else { return }
+        }
+        for (task, triggerDate) in reminders.prefix(60) {
             let content = UNMutableNotificationContent()
             content.title = task.title
             content.body = "Task reminder"
             content.sound = .default
-            let trigger = UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate), repeats: false)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: calendar.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate), repeats: false)
             try? await center.add(UNNotificationRequest(identifier: "ltm-task-\(task.id)", content: content, trigger: trigger))
         }
     }

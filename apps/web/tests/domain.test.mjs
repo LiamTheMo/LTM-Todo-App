@@ -38,6 +38,25 @@ test("recurrence anchors monthly dates and records each completed occurrence", (
   assert.equal(undone.tasks[0].dueDate, "2026-02-28");
   assert.equal(undone.completions.length, 1);
 });
+test("weekly weekday selections respect interval and a distant future date", () => {
+  const rule = { frequency: "weekly", interval: 2, anchorDate: "2026-01-05", weekdays: [1, 3], occurrences: 0 };
+  assert.equal(nextOccurrence(rule, "2026-01-05"), "2026-01-07");
+  assert.equal(nextOccurrence(rule, "2026-01-07"), "2026-01-19");
+  assert.equal(nextOccurrence(rule, "2040-01-04"), "2040-01-16");
+});
+test("recurrence end conditions stop after a count or calendar date", () => {
+  const rule = { frequency: "daily", interval: 1, anchorDate: "2026-03-07", occurrences: 0, count: 2 };
+  const data = emptyData();
+  data.tasks.push(task("repeat", "2026-03-07", { recurrence: rule }));
+  const first = completeTask(data, "repeat", new Date("2026-03-07T18:00:00Z"));
+  assert.equal(first.tasks[0].dueDate, "2026-03-08");
+  const second = completeTask(first, "repeat", new Date("2026-03-08T18:00:00Z"));
+  assert.equal(second.tasks[0].completedAt, "2026-03-08T18:00:00.000Z");
+  assert.equal(completeTask(second, "repeat").completions.length, 2);
+  assert.equal(nextOccurrence({ ...rule, count: undefined, until: "2026-03-08" }, "2026-03-08"), undefined);
+  assert.equal(nextOccurrence({ ...rule, count: undefined }, "2040-01-01"), "2040-01-02");
+  assert.equal(nextOccurrence({ frequency: "yearly", interval: 1, anchorDate: "2024-02-29", occurrences: 0 }, "2025-02-28"), "2026-02-28");
+});
 test("completed and deleted records leave active search", () => {
   const data = emptyData();
   data.tasks.push(task("alpha", "2026-10-01", { notes: "Read chapter", tagIds: ["school"] }));
