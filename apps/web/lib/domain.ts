@@ -36,6 +36,7 @@ export type ProjectSection = Entity & { projectId: string; name: string; sortKey
 export type Tag = Entity & { name: string; color: string };
 export type ScheduledBlock = Entity & { taskId: string; startInstant: string; endInstant: string; timeZone: string };
 export type Reminder = Entity & { taskId: string; minutesBefore: number; enabled: boolean };
+export type SavedView = Entity & { name: string; query: string; projectId?: string | null; priority?: Priority | "all"; tagId?: string; dateScope?: DateScope | "all"; completed?: boolean | "all" };
 export type Completion = { id: string; taskId: string; occurrenceDate?: string; completedAt: string; clearedBlockIds?: string[] };
 export type Data = {
   schemaVersion: 1;
@@ -47,9 +48,10 @@ export type Data = {
   blocks: ScheduledBlock[];
   reminders: Reminder[];
   completions: Completion[];
+  savedViews: SavedView[];
 };
 export const emptyData = (): Data => ({
-  schemaVersion: 1, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [], reminders: [], completions: []
+  schemaVersion: 1, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [], reminders: [], completions: [], savedViews: []
 });
 export const newEntity = (now = new Date()): Entity => ({
   id: crypto.randomUUID(), createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1
@@ -152,6 +154,8 @@ export function undoCompletion(data: Data, completionId: string): Data {
 }
 export function saveTask(data: Data, task: Task, reminderMinutes = "", today = localDate(new Date())): Data {
   if (task.dueDate && !isInRetainedHistory(task.dueDate, today)) return data;
+  const parent = task.parentTaskId && data.tasks.find(item => item.id === task.parentTaskId && !item.deletedAt);
+  if (task.parentTaskId && (!parent || parent.parentTaskId || parent.id === task.id || parent.projectId !== task.projectId || data.tasks.some(item => item.parentTaskId === task.id))) return data;
   const stamp = new Date().toISOString();
   const oldTask = data.tasks.find(item => item.id === task.id);
   const currentReminder = data.reminders.find(reminder => reminder.taskId === task.id && !reminder.deletedAt);
@@ -172,6 +176,43 @@ export function saveTask(data: Data, task: Task, reminderMinutes = "", today = l
       ...(nextReminder && !currentReminder ? [nextReminder] : [])
     ]
   };
+}
+export function bulkCompleteTasks(data: Data, ids: string[], now = new Date()): Data {
+  const selected = new Set(ids);
+  const ordered = [...selected].sort((a, b) =>
+    Number(data.tasks.some(item => item.id === b && item.parentTaskId)) - Number(data.tasks.some(item => item.id === a && item.parentTaskId)));
+  return ordered.reduce((value, id) => completeTask(value, id, now), data);
+}
+
+export function reminderTrigger(task: Task, reminder: Reminder): number | undefined {
+  if (!reminder.enabled || task.completedAt || task.deletedAt || !task.dueDate || !task.dueTime) return;
+  const [year, month, day] = task.dueDate.split("-").map(Number);
+  const [hour, minute] = task.dueTime.split(":").map(Number);
+  const zone = task.dueTimeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (![year, month, day, hour, minute].every(Number.isFinite) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return;
+  // Resolve a wall clock time in its stored zone without converting the date-only deadline to UTC.
+  const desired = Date.UTC(year, month - 1, day, hour, minute);
+  let timestamp = desired;
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(timestamp));
+      const values = Object.fromEntries(parts.map(part => [part.type, Number(part.value)]));
+      const represented = Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute);
+      const correction = desired - represented;
+      timestamp += correction;
+      if (correction === 0) break;
+    }
+  } catch { return; }
+  const trigger = timestamp - Math.max(0, reminder.minutesBefore) * 60_000;
+  return Number.isFinite(trigger) ? trigger : undefined;
+}
+export function pendingReminderTriggers(data: Data, now = Date.now(), horizonDays = 7) {
+  const tasks = new Map(data.tasks.map(task => [task.id, task]));
+  return data.reminders.filter(reminder => !reminder.deletedAt).flatMap(reminder => {
+    const task = tasks.get(reminder.taskId);
+    const triggerAt = task && reminderTrigger(task, reminder);
+    return triggerAt !== undefined && triggerAt >= now && triggerAt <= now + horizonDays * 86_400_000 ? [{ reminder, task: task!, triggerAt }] : [];
+  }).sort((a, b) => a.triggerAt - b.triggerAt);
 }
 export type DashboardCompletion = { task: Task; completionId: string; completedAt: string };
 export function dashboardDays(data: Data, start: string, length: number, today = localDate(new Date())) {

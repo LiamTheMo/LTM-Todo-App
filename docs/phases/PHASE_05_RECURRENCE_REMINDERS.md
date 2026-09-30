@@ -19,6 +19,8 @@ Monthly edge dates; leap year; DST spring/fall; weekday selections; end after co
 ## Acceptance criteria
 No duplicate occurrences under normal/restart flows. Editing a due date correctly updates reminders. Recurrence history is inspectable in the Dashboard's past-day timeline. App remains useful with notifications denied.
 
+For the local-only v1 web client, reminder delivery uses browser notifications while the app is open and reconciles a rolling seven-day timer window. A closed browser cannot run local timers; reliable background delivery requires a push service, so background web delivery is outside the v1 guarantee. Native Apple local notifications are scheduled by the OS and remain subject to permission and platform limits.
+
 ## Manual validation
 Real device notification delivery, snooze/actions, timezone change, device restart/relaunch, permission transitions.
 
