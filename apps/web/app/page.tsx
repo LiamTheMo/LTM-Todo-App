@@ -104,7 +104,7 @@ export default function Home() {
       {!ready ? <p>Opening your local tasks…</p> : <>
         <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Inbox" ? "Capture now. Organize when you're ready." : ""}</p></div><button className="add" onClick={() => setEditing("new")}>+ Add task</button></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
-          {overdue.length > 0 && <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.map(task => taskRow(task, `Due ${dateLabel(task.dueDate!)}`))}</div></section>}
+          <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, `Due ${dateLabel(task.dueDate!)}`)) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
           <div className="stream">{dashboardDays(data, dayStart, dashboardWindow).map(day => {
             const empty = !day.scheduled.length && !day.due.length;
             const label = day.date === today ? "TODAY" : day.date === addDays(today, 1) ? "TOMORROW" : dateLabel(day.date);

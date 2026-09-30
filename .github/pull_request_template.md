@@ -6,11 +6,11 @@ Describe the coherent change and originating version branch.
 - [ ] No unrelated changes
 
 ## Validation
-- [ ] Tests
-- [ ] Lint/format/type checks as applicable
-- [ ] Builds as applicable
-- [ ] Security/dependency checks as applicable
-- [ ] GitHub Actions checked
+- [ ] Local tests, lint/format/type checks and builds completed as applicable
+- [ ] Branch flow checked with `scripts/check-branch-flow.sh <base> <head>`
+- [ ] Security/dependency checks completed as applicable
+
+After a temporary PR merges into its version branch, check that branch's CI result before promoting the version to `main`.
 
 ## Review
 - [ ] Self-review complete

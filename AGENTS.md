@@ -28,6 +28,8 @@ Repeat until clean or genuinely blocked:
 
 Audit architecture, requirements, incomplete work, regressions, security, dead code, duplication, maintainability and existing CI. Run all relevant tests, lint, formatting, type checks, builds and security checks. Review GitHub/Codex findings and resolve actionable items. Preserve unrelated changes.
 
+GitHub CI runs only on pushes to permanent major branches (`main` and `vX.XX`), not on temporary branches or pull requests. Run the relevant checks locally on the temporary branch before opening or merging its PR. After it merges into a version branch, wait for that branch's CI to pass before promoting the version to `main`. Validate PR source/base names locally with `bash scripts/check-branch-flow.sh <base> <head>`. The production deployment remains a separate workflow that runs only for a merged same-repository `vX.XX -> main` PR.
+
 Classify audit results as:
 - Completed / Passed
 - Requires Manual Validation
