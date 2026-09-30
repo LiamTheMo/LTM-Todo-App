@@ -17,7 +17,7 @@
 .dashboardHome{display:flex;flex-direction:column;overflow:hidden}
 .dashboardHome .pageHeader{flex:none;margin-bottom:12px}
 .dashboardHome .streamControls{flex:none;margin:0 0 8px}
-.dashboardHome .overduePanel{flex:0 1 auto;max-height:min(35vh,280px);overflow-y:auto;overscroll-behavior:contain;margin-bottom:12px;border-color:#e8c9bf;background:#fffdfc}
+.dashboardHome .overduePanel{flex:0 0 auto;max-height:min(35vh,280px);overflow-y:auto;overscroll-behavior:contain;margin-bottom:12px;border-color:#e8c9bf;background:#fffdfc}
 .dashboardHome .overduePanel .group h4{position:sticky;top:0;z-index:1;font-size:12px;letter-spacing:0;color:#b84d37;background:#fff3ef}
 .dayScroller{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border-radius:18px}
 .dayPast{background:#faf8f5;color:#817b74}
