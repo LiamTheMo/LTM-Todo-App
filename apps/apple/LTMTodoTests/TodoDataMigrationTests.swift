@@ -3,11 +3,40 @@ import XCTest
 
 final class TodoDataMigrationTests: XCTestCase {
     func testLegacyV1SnapshotFillsNewTaskFieldsAndKeepsIdentity() throws {
-        let bundle = Bundle(for: Self.self)
-        let fixtureURL = bundle.url(forResource: "legacy-v1", withExtension: "json")
-            ?? bundle.url(forResource: "legacy-v1", withExtension: "json", subdirectory: "Fixtures")
-        let fixture = try XCTUnwrap(fixtureURL)
-        let migrated = try TodoDataFile.load(from: fixture)
+        let legacySnapshot = Data(#"""
+        {
+          "schemaVersion": 1,
+          "tasks": [{
+            "id": "8A00FEC0-E034-4D25-9B6C-ED24B9681724",
+            "title": "Legacy task",
+            "dueDay": "2026-09-29"
+          }],
+          "projects": [{
+            "id": "8A00FEC0-E034-4D25-9B6C-ED24B9681725",
+            "name": "Legacy project"
+          }],
+          "tags": [{
+            "id": "8A00FEC0-E034-4D25-9B6C-ED24B9681726",
+            "name": "Legacy tag"
+          }],
+          "sections": [{
+            "id": "8A00FEC0-E034-4D25-9B6C-ED24B9681727",
+            "projectID": "8A00FEC0-E034-4D25-9B6C-ED24B9681725",
+            "name": "Legacy section"
+          }],
+          "completions": [{
+            "id": "8A00FEC0-E034-4D25-9B6C-ED24B9681728",
+            "taskID": "8A00FEC0-E034-4D25-9B6C-ED24B9681724",
+            "completedAt": 1790676000
+          }]
+        }
+        """#.utf8)
+        let fixtureURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("legacy-v1-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fixtureURL) }
+        try legacySnapshot.write(to: fixtureURL, options: .atomic)
+
+        let migrated = try TodoDataFile.load(from: fixtureURL)
 
         XCTAssertEqual(migrated.schemaVersion, 1)
         XCTAssertEqual(migrated.tasks.count, 1)
