@@ -216,6 +216,7 @@ struct TaskRow: View {
     @EnvironmentObject private var store: TodoStore
     let task: TodoTask
     var completion: TodoCompletion? = nil
+    var subtitle: String? = nil
     let edit: () -> Void
 
     private var isCompleted: Bool { completion != nil || task.completedAt != nil }
@@ -238,7 +239,9 @@ struct TaskRow: View {
             Button(action: edit) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(task.title).foregroundStyle(isCompleted ? Color.secondary : Color.primary).strikethrough(isCompleted)
-                    if let completion {
+                    if let subtitle {
+                        Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                    } else if let completion {
                         Text("Completed \(completion.completedAt.formatted(date: .omitted, time: .shortened))")
                             .font(.caption).foregroundStyle(.secondary)
                     } else if let day = task.dueDay {
