@@ -167,8 +167,8 @@ export default function Home() {
             {!!day.scheduled.length && <div className="group"><h4>SCHEDULED</h4>{day.scheduled.map(({ block, task, completionId }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === day.date ? " · Also due today" : ""}`, completionId, `block:${block.id}`))}</div>}
             {!!day.due.length && <div className="group"><h4>DUE</h4>{day.due.map(task => taskRow(task, task.dueTime ? `Due at ${task.dueTime}` : "Due today"))}</div>}
             {!!day.completed.length && <div className="group"><h4>COMPLETED</h4>{day.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
-            {empty ? <div className={`emptyDay ${past ? "pastEmpty" : ""}`}><span>{past ? "No completed items" : "Nothing planned"}</span>{!past && <button onClick={() => setEditing(`new:${day.date}`)}>+ Add</button>}</div> :
-              !past && <button className="dayAdd" onClick={() => setEditing(`new:${day.date}`)}>+ Add task for this day</button>}
+            {empty ? <div className={`emptyDay ${past ? "pastEmpty" : ""}`}><span>{past ? "No completed items" : "Nothing planned"}</span><button onClick={() => setEditing(`new:${day.date}`)}>+ Add</button></div> :
+              <button className="dayAdd" onClick={() => setEditing(`new:${day.date}`)}>+ Add task for this day</button>}
           </article>})}
             <button className="loadMore" onClick={() => shiftDays(1)}>Later days ↓</button>
           </div>

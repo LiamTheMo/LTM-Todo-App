@@ -212,7 +212,7 @@ export function dashboardDays(data: Data, start: string, length: number, today =
     const timestamp = new Date(completion.completedAt);
     if (!task || !Number.isFinite(timestamp.getTime())) continue;
     completionTaskIds.add(task.id);
-    const date = localDate(timestamp);
+    const date = completion.occurrenceDate ?? localDate(timestamp);
     const group = completed.get(date) ?? [];
     group.push({ task, completionId: completion.id, completedAt: completion.completedAt });
     completed.set(date, group);
@@ -221,9 +221,10 @@ export function dashboardDays(data: Data, start: string, length: number, today =
     if (!task.completedAt || completionTaskIds.has(task.id)) continue;
     const timestamp = new Date(task.completedAt);
     if (!Number.isFinite(timestamp.getTime())) continue;
-    const group = completed.get(localDate(timestamp)) ?? [];
+    const date = task.dueDate ?? localDate(timestamp);
+    const group = completed.get(date) ?? [];
     group.push({ task, completionId: "", completedAt: task.completedAt });
-    completed.set(localDate(timestamp), group);
+    completed.set(date, group);
   }
   const dates = Array.from({ length }, (_, index) => addDays(start, index));
   return dates.map(date => ({
