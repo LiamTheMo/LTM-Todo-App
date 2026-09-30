@@ -28,7 +28,7 @@ Repeat until clean or genuinely blocked:
 
 Audit architecture, requirements, incomplete work, regressions, security, dead code, duplication, maintainability and existing CI. Run all relevant tests, lint, formatting, type checks, builds and security checks. Review GitHub/Codex findings and resolve actionable items. Preserve unrelated changes.
 
-GitHub CI runs only on pushes to permanent major branches (`main` and `vX.XX`), not on temporary branches or pull requests. Run the relevant checks locally on the temporary branch before opening or merging its PR. After it merges into a version branch, wait for that branch's CI to pass before promoting the version to `main`. Validate PR source/base names locally with `bash scripts/check-branch-flow.sh <base> <head>`. The production deployment remains a separate workflow that runs only for a merged same-repository `vX.XX -> main` PR.
+GitHub CI runs only on pushes to permanent version branches (`vX.XX`), not on `main`, pull requests, or temporary branches. Run the relevant checks locally on the temporary branch before opening or merging its PR. After it merges into a version branch, wait for that branch's CI to pass before promoting the version to `main`. The `main` ruleset must require a PR and the successful version-branch CI checks. Validate PR source/base names locally with `bash scripts/check-branch-flow.sh <base> <head>`. Cloudflare Workers Builds deploys production from `main`; disable preview builds so version and temporary branches never deploy. GitHub Actions must not deploy.
 
 Classify audit results as:
 - Completed / Passed
