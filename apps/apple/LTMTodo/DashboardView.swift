@@ -19,19 +19,20 @@ private struct DashboardSchedule: Identifiable {
 struct DashboardView: View {
     @EnvironmentObject private var store: TodoStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var windowStart = -28
+    @State private var windowStart = 1 - DashboardRetention.days
     @State private var editing: TodoTask?
     @State private var didInitialScroll = false
     @State private var isShifting = false
     private let windowLength = 84
     private let windowStep = 28
 
-    private var today: String { DayMath.day(Date()) }
+    private var today: String { store.localToday }
+    private var earliestOffset: Int { 1 - DashboardRetention.days }
     private var dates: [String] {
         (windowStart..<(windowStart + windowLength)).compactMap { DayMath.add($0, to: today) }
     }
     private var overdueTasks: [TodoTask] {
-        store.activeTasks.filter { $0.dueDay.map { $0 < today } ?? false }
+        store.activeTasks.filter { $0.dueDay.map { $0 < today && $0 >= DashboardRetention.earliestDay(today: today) } ?? false }
             .sorted { left, right in
                 if left.dueDay != right.dueDay { return (left.dueDay ?? "") < (right.dueDay ?? "") }
                 return left.sortKey == right.sortKey ? left.id.uuidString < right.id.uuidString : left.sortKey < right.sortKey
@@ -41,7 +42,7 @@ struct DashboardView: View {
     private var dueByDay: [String: [TodoTask]] {
         var result: [String: [TodoTask]] = [:]
         for task in store.activeTasks {
-            guard let day = task.dueDay, day >= today else { continue }
+            guard let day = task.dueDay, day >= DashboardRetention.earliestDay(today: today) else { continue }
             result[day, default: []].append(task)
         }
         return result
@@ -51,13 +52,14 @@ struct DashboardView: View {
         for task in store.activeTasks {
             guard let start = task.scheduledStart else { continue }
             let day = DayMath.day(start)
-            guard day >= today else { continue }
+            guard day >= DashboardRetention.earliestDay(today: today) else { continue }
             result[day, default: []].append(DashboardSchedule(task: task, completion: nil, start: start))
         }
         for completion in store.data.completions {
             guard let start = completion.scheduledStart else { continue }
             let day = DayMath.day(start)
-            guard day <= today, let task = tasksByID[completion.taskID] else { continue }
+            guard day >= DashboardRetention.earliestDay(today: today), day <= today,
+                  let task = tasksByID[completion.taskID] else { continue }
             result[day, default: []].append(DashboardSchedule(task: task, completion: completion, start: start))
         }
         return result.mapValues { $0.sorted { $0.start < $1.start } }
@@ -68,11 +70,13 @@ struct DashboardView: View {
         for completion in store.data.completions {
             guard let task = tasksByID[completion.taskID] else { continue }
             let day = completion.occurrenceDay ?? DayMath.day(completion.completedAt)
+            guard day >= DashboardRetention.earliestDay(today: today) else { continue }
             result[day, default: []].append(DashboardOccurrence(task: task, completion: completion, completedAt: completion.completedAt))
         }
         for task in store.unarchivedTasks where task.completedAt != nil && !recordedTaskIDs.contains(task.id) {
             guard let completedAt = task.completedAt else { continue }
             let day = task.dueDay ?? DayMath.day(completedAt)
+            guard day >= DashboardRetention.earliestDay(today: today) else { continue }
             result[day, default: []].append(DashboardOccurrence(task: task, completion: nil, completedAt: completedAt))
         }
         return result.mapValues { $0.sorted { $0.completedAt < $1.completedAt } }
@@ -93,6 +97,7 @@ struct DashboardView: View {
                             }
                             .font(.caption)
                             .padding(.vertical, 10)
+                            .disabled(windowStart <= earliestOffset)
                             ForEach(dates, id: \.self) { day in
                                 let daySchedules = schedules[day] ?? []
                                 let dayDue = dues[day] ?? []
@@ -232,14 +237,16 @@ struct DashboardView: View {
 
     private func extendWindowIfNeeded(_ day: String, reader: ScrollViewProxy) {
         guard didInitialScroll, !isShifting else { return }
-        if day == dates.first { shiftWindow(by: -windowStep, preserving: day, reader: reader) }
+        if day == dates.first && windowStart > earliestOffset { shiftWindow(by: -windowStep, preserving: day, reader: reader) }
         else if day == dates.last { shiftWindow(by: windowStep, preserving: day, reader: reader) }
     }
 
     private func shiftWindow(by amount: Int, preserving day: String, reader: ScrollViewProxy) {
         guard !isShifting else { return }
+        let nextStart = amount < 0 ? max(windowStart + amount, earliestOffset) : windowStart + amount
+        guard nextStart != windowStart else { return }
         isShifting = true
-        windowStart += amount
+        windowStart = nextStart
         DispatchQueue.main.async {
             reader.scrollTo(day, anchor: amount < 0 ? .bottom : .top)
             DispatchQueue.main.async { isShifting = false }
@@ -248,7 +255,7 @@ struct DashboardView: View {
 
     private func returnToToday(_ reader: ScrollViewProxy) {
         isShifting = true
-        windowStart = -windowStep
+        windowStart = earliestOffset
         DispatchQueue.main.async {
             if reduceMotion { reader.scrollTo(today, anchor: .top) }
             else { withAnimation { reader.scrollTo(today, anchor: .top) } }

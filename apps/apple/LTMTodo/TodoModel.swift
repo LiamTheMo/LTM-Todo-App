@@ -164,3 +164,10 @@ enum DayMath {
         return day(result, calendar: calendar)
     }
 }
+
+enum DashboardRetention {
+    static let days = 7
+    static func earliestDay(today: String = DayMath.day(Date())) -> String {
+        DayMath.add(1 - days, to: today) ?? today
+    }
+}

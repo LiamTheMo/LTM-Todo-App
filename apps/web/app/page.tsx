@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
-import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, localDate, newEntity, overdueTasks, parseLocalDate, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
+import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, localDate, newEntity, overdueTasks, parseLocalDate, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
 import { readData, writeData } from "../lib/storage";
 
 type View = "Dashboard" | "Inbox" | "Tasks" | "Projects" | "Settings";
@@ -31,7 +31,10 @@ export default function Home() {
   const [taskProjectFilter, setTaskProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("open");
   const [dateFilter, setDateFilter] = useState<DateScope | "all">("all");
-  const [dayStart, setDayStart] = useState(() => addDays(localDate(new Date()), -dashboardStep));
+  const [today, setToday] = useState(() => localDate(new Date()));
+  const [dayStart, setDayStart] = useState(() => historyStart(localDate(new Date())));
+  const earliestDay = historyStart(today);
+  const visibleDayStart = dayStart < earliestDay ? earliestDay : dayStart;
   const todayRef = useRef<HTMLElement>(null);
   const dayScrollRef = useRef<HTMLDivElement>(null);
   const pendingAnchor = useRef<{ day: string; top: number } | null>(null);
@@ -39,6 +42,15 @@ export default function Home() {
   const initialScrollPending = useRef(true);
   useEffect(() => { readData().then(value => { current.current = value; setData(value); setReady(true); })
     .catch(() => { setError("Local storage could not be opened. Changes are disabled."); setReady(true); }); }, []);
+  useEffect(() => {
+    const refreshToday = () => {
+      const day = localDate(new Date());
+      setToday(previous => previous === day ? previous : day);
+    };
+    const timer = window.setInterval(refreshToday, 60_000);
+    document.addEventListener("visibilitychange", refreshToday);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refreshToday); };
+  }, []);
   useLayoutEffect(() => {
     const anchor = pendingAnchor.current;
     const scroller = dayScrollRef.current;
@@ -50,18 +62,18 @@ export default function Home() {
     if (windowShiftLock.current) {
       requestAnimationFrame(() => { windowShiftLock.current = false; });
     }
-  }, [dayStart]);
+  }, [visibleDayStart]);
   useLayoutEffect(() => {
     const scroller = dayScrollRef.current;
     const element = todayRef.current;
     if (!ready || view !== "Dashboard" || !initialScrollPending.current || !scroller || !element) return;
     initialScrollPending.current = false;
     scroller.scrollTop += element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-  }, [ready, view, dayStart]);
+  }, [ready, view, visibleDayStart]);
   const mutate = useCallback((change: (value: Data) => Data) => {
     if (error || writeFailed.current) return;
     const previous = current.current;
-    const changed = change(previous);
+    const changed = pruneExpiredHistory(change(previous), today);
     if (changed === previous) return;
     const next = { ...changed, generation: previous.generation + 1 };
     current.current = next; setData(next);
@@ -72,7 +84,10 @@ export default function Home() {
       setError(cause instanceof Error && cause.message.includes("another tab") ? cause.message :
         "Changes could not be saved. Download an unsaved backup from Settings before reloading this tab.");
     });
-  }, [error]);
+  }, [error, today]);
+  useEffect(() => {
+    if (ready) mutate(value => pruneExpiredHistory(value, today));
+  }, [ready, today, mutate]);
   const addTask = (title: string, project?: string, dueDate?: string) => {
     if (!title.trim()) return;
     mutate(value => ({ ...value, tasks: [...value.tasks, { ...newEntity(), title: title.trim(), notes: "", priority: "none", projectId: project || undefined, tagIds: [], sortKey: Date.now(), dueDate }] }));
@@ -96,7 +111,6 @@ export default function Home() {
       <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
     </div>;
   };
-  const today = localDate(new Date());
   const overdue = overdueTasks(data, today);
   const visible = filterTasks(data, { query, projectId: taskProjectFilter === "all" ? undefined : taskProjectFilter === "inbox" ? null : taskProjectFilter,
     tagId: tagFilter || undefined, priority: priorityFilter === "all" ? undefined : priorityFilter,
@@ -106,6 +120,9 @@ export default function Home() {
     priorityFilter !== "all" && `${priorityFilter} priority`, tagFilter && `#${tags.find(t => t.id === tagFilter)?.name ?? "tag"}`,
     dateFilter !== "all" && dateFilter].filter(Boolean).join(" · ");
   const shiftDays = (direction: -1 | 1) => {
+    const nextStart = addDays(visibleDayStart, direction * dashboardStep);
+    const boundedStart = direction < 0 && nextStart < earliestDay ? earliestDay : nextStart;
+    if (boundedStart === visibleDayStart) return;
     const scroller = dayScrollRef.current;
     if (scroller) {
       const bounds = scroller.getBoundingClientRect();
@@ -118,7 +135,7 @@ export default function Home() {
       if (anchor?.dataset.day) pendingAnchor.current = { day: anchor.dataset.day, top: anchor.getBoundingClientRect().top - bounds.top };
     }
     windowShiftLock.current = true;
-    setDayStart(addDays(dayStart, direction * dashboardStep));
+    setDayStart(boundedStart);
   };
   const handleDayScroll = (event: UIEvent<HTMLDivElement>) => {
     const scroller = event.currentTarget;
@@ -128,11 +145,11 @@ export default function Home() {
   };
   const goToday = () => {
     const today = localDate(new Date());
-    const start = addDays(today, -dashboardStep);
+    const start = earliestDay;
     const scroller = dayScrollRef.current;
     const element = todayRef.current;
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-    if (dayStart !== start) {
+    if (visibleDayStart !== start) {
       pendingAnchor.current = { day: today, top: 0 };
       windowShiftLock.current = true;
       setDayStart(start);
@@ -141,13 +158,13 @@ export default function Home() {
     }
   };
 
-  const dashboard = dashboardDays(data, dayStart, dashboardWindow, today);
+  const dashboard = dashboardDays(data, visibleDayStart, dashboardWindow, today);
   return <main className="shell">
     <aside className="sidebar"><h1><span className="brandMark">✓</span> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} onClick={() => {
       setProjectId("");
       if (item === "Dashboard" && view !== "Dashboard") {
         initialScrollPending.current = true;
-        setDayStart(addDays(localDate(new Date()), -dashboardStep));
+        setDayStart(historyStart(today));
       } else if (item === "Dashboard") goToday();
       setView(item);
     }}><span aria-hidden>{icon[item]}</span> {item}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
@@ -157,7 +174,7 @@ export default function Home() {
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
           <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, `Due ${dateLabel(task.dueDate!)}`)) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
           <div className="stream dayScroller" ref={dayScrollRef} onScroll={handleDayScroll} role="region" aria-label="Days">
-            <button className="loadMore" onClick={() => shiftDays(-1)}>Earlier days ↑</button>
+            <button className="loadMore" onClick={() => shiftDays(-1)} disabled={visibleDayStart <= earliestDay}>Earlier days ↑</button>
             {dashboard.map(day => {
             const past = day.date < today;
             const empty = !day.scheduled.length && !day.due.length && !day.completed.length;
@@ -195,7 +212,7 @@ export default function Home() {
         </div>}
       </>}
     </section>
-    {editing && <TaskEditor key={editing} task={data.tasks.find(t => t.id === editing)} initialDate={editing.startsWith("new:") ? editing.slice(4) : undefined} initialProject={view === "Projects" ? projectId : undefined} data={data} onClose={() => setEditing(null)} onSave={(task, reminderMinutes) => {
+    {editing && <TaskEditor key={editing} task={data.tasks.find(t => t.id === editing)} initialDate={editing.startsWith("new:") ? editing.slice(4) : undefined} initialProject={view === "Projects" ? projectId : undefined} data={data} earliestDate={historyStart(today)} onClose={() => setEditing(null)} onSave={(task, reminderMinutes) => {
       mutate(value => saveTask(value, task, reminderMinutes)); setEditing(null);
     }} onDelete={id => { mutate(value => { const stamp = new Date().toISOString(); return { ...value,
       tasks: value.tasks.map(t => t.id === id ? { ...t, deletedAt: stamp, revision: t.revision + 1 } : t),
@@ -205,8 +222,8 @@ export default function Home() {
   </main>;
 }
 
-function TaskEditor({ task, initialDate, initialProject, data, onClose, onSave, onDelete }: {
-  task?: Task; initialDate?: string; initialProject?: string; data: Data; onClose: () => void;
+function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onClose, onSave, onDelete }: {
+  task?: Task; initialDate?: string; initialProject?: string; data: Data; earliestDate: string; onClose: () => void;
   onSave: (task: Task, reminder: string) => void; onDelete: (id: string) => void;
 }) {
   const reminder = data.reminders.find(r => r.taskId === task?.id && !r.deletedAt);
@@ -225,8 +242,9 @@ function TaskEditor({ task, initialDate, initialProject, data, onClose, onSave, 
   const [weekdays, setWeekdays] = useState<number[]>(task?.recurrence?.weekdays ?? []);
   const [repeatUntil, setRepeatUntil] = useState(task?.recurrence?.until ?? "");
   const [repeatCount, setRepeatCount] = useState(task?.recurrence?.count ? String(task.recurrence.count) : "");
+  const expiredDueDate = Boolean(dueDate && dueDate < earliestDate);
   return <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><form className="editor" onSubmit={e => {
-    e.preventDefault(); if (!title.trim() || (frequency && (!dueDate || (repeatUntil && repeatUntil < dueDate) || (repeatCount !== "" && Number(repeatCount) < 1)))) return;
+    e.preventDefault(); if (!title.trim() || expiredDueDate || (frequency && (!dueDate || (repeatUntil && repeatUntil < dueDate) || (repeatCount !== "" && Number(repeatCount) < 1)))) return;
     const stamp = new Date().toISOString();
     onSave({ ...(task ?? newEntity()), title: title.trim(), notes, priority, projectId: projectId || undefined, sectionId: projectId && sectionId ? sectionId : undefined,
       parentTaskId: parentTaskId || undefined, tagIds, sortKey: task?.sortKey ?? Date.now(), dueDate: dueDate || undefined,
@@ -240,7 +258,8 @@ function TaskEditor({ task, initialDate, initialProject, data, onClose, onSave, 
     <div className="editorHead"><h2>{task ? "Edit task" : "New task"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
     <label>Title<input autoFocus required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
-    <div className="fieldPair"><label>Due date<input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></label><label>Due time<input type="time" disabled={!dueDate} value={dueTime} onChange={e => setDueTime(e.target.value)} /></label></div>
+    <div className="fieldPair"><label>Due date<input type="date" min={earliestDate} value={dueDate} onChange={e => setDueDate(e.target.value)} /></label><label>Due time<input type="time" disabled={!dueDate} value={dueTime} onChange={e => setDueTime(e.target.value)} /></label></div>
+    {expiredDueDate && <p className="hint">Choose a date within the seven-day history window.</p>}
     <div className="fieldPair"><label>Priority<select value={priority} onChange={e => setPriority(e.target.value as Priority)}>{priorities.map(p => <option key={p} value={p}>{p}</option>)}</select></label><label>Project<select value={projectId} onChange={e => { setProjectId(e.target.value); setSectionId(""); setParentTaskId(""); }}><option value="">Inbox</option>{data.projects.filter(p => !p.deletedAt && !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
     {projectId && <label>Section<select value={sectionId} onChange={e => setSectionId(e.target.value)}><option value="">Project root</option>{data.sections.filter(s => s.projectId === projectId && !s.deletedAt).map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</select></label>}
     <label>Subtask of<select value={parentTaskId} onChange={e => setParentTaskId(e.target.value)}><option value="">No parent</option>{data.tasks.filter(t => !t.deletedAt && !t.parentTaskId && t.id !== task?.id && (t.projectId ?? "") === projectId).map(t => <option value={t.id} key={t.id}>{t.title}</option>)}</select></label>
@@ -250,6 +269,6 @@ function TaskEditor({ task, initialDate, initialProject, data, onClose, onSave, 
     {frequency && <div className="fieldPair"><label>Repeat until<input type="date" min={dueDate} value={repeatUntil} onChange={e => setRepeatUntil(e.target.value)} /></label><label>End after occurrences<input type="number" min="1" value={repeatCount} onChange={e => setRepeatCount(e.target.value)} placeholder="No limit" /></label></div>}
     <label>Reminder before deadline<select value={reminderMinutes} onChange={e => setReminderMinutes(e.target.value)}><option value="">None</option><option value="0">At due time</option><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">1 day</option></select></label>
     {reminderMinutes !== "" && !dueTime && <p className="hint">Choose a due date and time for a timed reminder.</p>}
-    <div className="editorActions">{task && <button type="button" className="danger" onClick={() => { if (confirm("Delete this task?")) onDelete(task.id); }}>Delete task</button>}<button type="button" onClick={onClose}>Cancel</button><button className="add" disabled={!title.trim()}>Save task</button></div>
+    <div className="editorActions">{task && <button type="button" className="danger" onClick={() => { if (confirm("Delete this task?")) onDelete(task.id); }}>Delete task</button>}<button type="button" onClick={onClose}>Cancel</button><button className="add" disabled={!title.trim() || expiredDueDate}>Save task</button></div>
   </form></div>;
 }

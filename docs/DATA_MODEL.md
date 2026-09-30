@@ -38,4 +38,4 @@ localChangeId; entityType; entityId; operation; baseRevision; payload/version; o
 Use stable sortable keys suitable for local reorder without rewriting an entire list. Define deterministic tie-breaking.
 
 ## Deletion
-Syncable deletion is soft/tombstoned until server retention/compaction policy permits physical deletion.
+User-initiated deletion is soft/tombstoned while a record remains in the retained local data window. The v1 local clients physically compact expired history: retain Today and the preceding six local calendar dates; remove tasks after their due date leaves that window, remove undated completed tasks after their local completion date leaves it, and remove completion occurrences after their occurrence date leaves it. Remove scheduled blocks after their start date in the block's saved time zone leaves the window, and clear expired schedules on otherwise-retained tasks. Remove dependent records when a task expires and detach its subtasks. Future sync/server retention must apply the same user-visible seven-day history policy while preserving tombstones for records that have not expired.
