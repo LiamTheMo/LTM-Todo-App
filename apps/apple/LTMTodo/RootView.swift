@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case dashboard = "Dashboard", inbox = "Inbox", tasks = "Tasks", projects = "Projects", history = "History", settings = "Settings"
+    case dashboard = "Dashboard", inbox = "Inbox", tasks = "Tasks", projects = "Projects", settings = "Settings"
     var id: Self { self }
     var icon: String {
         switch self {
@@ -9,7 +9,6 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .inbox: "tray"
         case .tasks: "checkmark.circle"
         case .projects: "folder"
-        case .history: "clock.arrow.circlepath"
         case .settings: "gearshape"
         }
     }
@@ -64,24 +63,6 @@ struct RootView: View {
         case .inbox: TaskListView(title: "Inbox", projectID: nil, inboxOnly: true)
         case .tasks: TaskListView(title: "Tasks", projectID: nil, inboxOnly: false)
         case .projects: ProjectsView()
-        case .history:
-            NavigationStack {
-                List(store.data.completions.reversed()) { completion in
-                    if let task = store.data.tasks.first(where: { $0.id == completion.taskID }) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(task.title)
-                                Text(completion.completedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if store.data.completions.last(where: { $0.taskID == completion.taskID })?.id == completion.id {
-                                Button("Undo") { store.undoCompletion(completion.id) }
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("History")
-            }
         case .settings: SettingsView()
         }
     }
@@ -234,21 +215,35 @@ struct TaskListView: View {
 struct TaskRow: View {
     @EnvironmentObject private var store: TodoStore
     let task: TodoTask
+    var completion: TodoCompletion? = nil
     let edit: () -> Void
+
+    private var isCompleted: Bool { completion != nil || task.completedAt != nil }
+    private var canUndoCompletion: Bool {
+        guard let completion else { return true }
+        return store.data.completions.last(where: { $0.taskID == task.id })?.id == completion.id
+    }
 
     var body: some View {
         HStack(spacing: 12) {
             Button {
-                if task.completedAt != nil, let completion = store.data.completions.last(where: { $0.taskID == task.id }) {
+                if let completion {
+                    store.undoCompletion(completion.id)
+                } else if task.completedAt != nil, let completion = store.data.completions.last(where: { $0.taskID == task.id }) {
                     store.undoCompletion(completion.id)
                 } else { store.complete(task.id) }
-            } label: { Image(systemName: task.completedAt == nil ? "circle" : "checkmark.circle.fill").font(.title3) }
-                .disabled(task.completedAt == nil && store.activeTasks.contains(where: { $0.parentTaskID == task.id }))
-                .accessibilityLabel(task.completedAt != nil ? "Reopen \(task.title)" : store.activeTasks.contains(where: { $0.parentTaskID == task.id }) ? "Finish subtasks before completing \(task.title)" : "Complete \(task.title)")
+            } label: { Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle").font(.title3) }
+                .disabled(!canUndoCompletion || (!isCompleted && store.activeTasks.contains(where: { $0.parentTaskID == task.id })))
+                .accessibilityLabel(isCompleted ? "Reopen \(task.title)" : store.activeTasks.contains(where: { $0.parentTaskID == task.id }) ? "Finish subtasks before completing \(task.title)" : "Complete \(task.title)")
             Button(action: edit) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(task.title).foregroundStyle(.primary)
-                    if let day = task.dueDay { Text("Due \(day)").font(.caption).foregroundStyle(.secondary) }
+                    Text(task.title).foregroundStyle(isCompleted ? Color.secondary : Color.primary).strikethrough(isCompleted)
+                    if let completion {
+                        Text("Completed \(completion.completedAt.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if let day = task.dueDay {
+                        Text("Due \(day)").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, task.parentTaskID == nil ? 0 : 16)
@@ -256,6 +251,7 @@ struct TaskRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 4)
+        .opacity(isCompleted ? 0.72 : 1)
     }
 }
 

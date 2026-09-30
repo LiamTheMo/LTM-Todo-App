@@ -11,7 +11,7 @@ See [V1_STATUS.md](V1_STATUS.md) for the current evidence and release blockers. 
 3. Phase 3 — Chronological Dashboard.
 4. Phase 4 — Projects, subtasks, tags and organization.
 5. Phase 5 — Recurrence, reminders and notifications.
-6. Phase 6 — Search, filters, completion history and v1 hardening.
+6. Phase 6 — Search, filters, Dashboard completion timeline and v1 hardening.
 
 Exit: a polished offline-first task manager usable daily on iPhone/iPad, with web/domain groundwork and no server dependency.
 
