@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
 import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, localDate, newEntity, overdueTasks, parseLocalDate, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
 import { readData, writeData } from "../lib/storage";
 
-type View = "Dashboard" | "Inbox" | "Tasks" | "Projects" | "History" | "Settings";
-const views: View[] = ["Dashboard", "Inbox", "Tasks", "Projects", "History", "Settings"];
-const icon: Record<View, string> = { Dashboard: "◫", Inbox: "▣", Tasks: "☑", Projects: "▦", History: "↺", Settings: "⚙" };
+type View = "Dashboard" | "Inbox" | "Tasks" | "Projects" | "Settings";
+const views: View[] = ["Dashboard", "Inbox", "Tasks", "Projects", "Settings"];
+const icon: Record<View, string> = { Dashboard: "◫", Inbox: "▣", Tasks: "☑", Projects: "▦", Settings: "⚙" };
 const priorities: Priority[] = ["none", "low", "medium", "high"];
-const dashboardWindow = 56;
 const dashboardStep = 28;
+const dashboardWindow = dashboardStep * 3;
 const dateLabel = (day: string) => parseLocalDate(day).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 const timeLabel = (instant: string) => new Date(instant).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -31,18 +31,33 @@ export default function Home() {
   const [taskProjectFilter, setTaskProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("open");
   const [dateFilter, setDateFilter] = useState<DateScope | "all">("all");
-  const [dayStart, setDayStart] = useState(() => localDate(new Date()));
+  const [dayStart, setDayStart] = useState(() => addDays(localDate(new Date()), -dashboardStep));
   const todayRef = useRef<HTMLElement>(null);
+  const dayScrollRef = useRef<HTMLDivElement>(null);
   const pendingAnchor = useRef<{ day: string; top: number } | null>(null);
+  const windowShiftLock = useRef(false);
+  const initialScrollPending = useRef(true);
   useEffect(() => { readData().then(value => { current.current = value; setData(value); setReady(true); })
     .catch(() => { setError("Local storage could not be opened. Changes are disabled."); setReady(true); }); }, []);
   useLayoutEffect(() => {
     const anchor = pendingAnchor.current;
-    if (!anchor) return;
-    pendingAnchor.current = null;
-    const element = document.querySelector<HTMLElement>(`[data-day="${anchor.day}"]`);
-    if (element) window.scrollBy(0, element.getBoundingClientRect().top - anchor.top);
+    const scroller = dayScrollRef.current;
+    if (anchor) {
+      pendingAnchor.current = null;
+      const element = scroller?.querySelector<HTMLElement>(`[data-day="${anchor.day}"]`);
+      if (element && scroller) scroller.scrollTop += element.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchor.top;
+    }
+    if (windowShiftLock.current) {
+      requestAnimationFrame(() => { windowShiftLock.current = false; });
+    }
   }, [dayStart]);
+  useLayoutEffect(() => {
+    const scroller = dayScrollRef.current;
+    const element = todayRef.current;
+    if (!ready || view !== "Dashboard" || !initialScrollPending.current || !scroller || !element) return;
+    initialScrollPending.current = false;
+    scroller.scrollTop += element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  }, [ready, view, dayStart]);
   const mutate = useCallback((change: (value: Data) => Data) => {
     if (error || writeFailed.current) return;
     const previous = current.current;
@@ -72,11 +87,15 @@ export default function Home() {
   });
   const projects = data.projects.filter(p => !p.deletedAt && !p.archivedAt).sort((a, b) => a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const tags = data.tags.filter(t => !t.deletedAt);
-  const taskRow = (task: Task, caption?: string) => <div className={`taskRow ${task.completedAt ? "completed" : ""} ${task.parentTaskId ? "subtask" : ""}`} key={task.id}>
-    <button className="complete" disabled={data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt)} onClick={() => toggle(task)} aria-label={task.completedAt ? `Reopen ${task.title}` : `Complete ${task.title}`}>{task.completedAt ? "✓" : "○"}</button>
-    <button className="taskText" onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt) ? "Finish subtasks first" : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${task.priority} priority`].filter(Boolean).join(" · ")}</small></button>
-    <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
-  </div>;
+  const taskRow = (task: Task, caption?: string, completionId?: string, key = task.id) => {
+    const isComplete = Boolean(completionId || task.completedAt);
+    const latestCompletion = completionId && data.completions.filter(item => item.taskId === task.id).at(-1)?.id === completionId;
+    return <div className={`taskRow ${isComplete ? "completed" : ""} ${task.parentTaskId ? "subtask" : ""}`} key={key}>
+      <button className="complete" disabled={completionId ? !latestCompletion : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt)} onClick={() => completionId ? latestCompletion && mutate(value => undoCompletion(value, completionId)) : toggle(task)} aria-label={isComplete ? `Reopen ${task.title}` : `Complete ${task.title}`}>{isComplete ? "✓" : "○"}</button>
+      <button className="taskText" onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt) ? "Finish subtasks first" : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${task.priority} priority`].filter(Boolean).join(" · ")}</small></button>
+      <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
+    </div>;
+  };
   const today = localDate(new Date());
   const overdue = overdueTasks(data, today);
   const visible = filterTasks(data, { query, projectId: taskProjectFilter === "all" ? undefined : taskProjectFilter === "inbox" ? null : taskProjectFilter,
@@ -86,35 +105,73 @@ export default function Home() {
     (taskProjectFilter === "inbox" ? "Inbox" : projects.find(p => p.id === taskProjectFilter)?.name),
     priorityFilter !== "all" && `${priorityFilter} priority`, tagFilter && `#${tags.find(t => t.id === tagFilter)?.name ?? "tag"}`,
     dateFilter !== "all" && dateFilter].filter(Boolean).join(" · ");
-  const shiftDays = () => {
-    const day = addDays(dayStart, dashboardWindow - 1);
-    const element = document.querySelector<HTMLElement>(`[data-day="${day}"]`);
-    if (element) pendingAnchor.current = { day, top: element.getBoundingClientRect().top };
-    setDayStart(addDays(dayStart, dashboardStep));
+  const shiftDays = (direction: -1 | 1) => {
+    const scroller = dayScrollRef.current;
+    if (scroller) {
+      const bounds = scroller.getBoundingClientRect();
+      const days = [...scroller.querySelectorAll<HTMLElement>("[data-day]")];
+      const visibleDays = days.filter(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.bottom > bounds.top && rect.top < bounds.bottom;
+      });
+      const anchor = direction < 0 ? visibleDays[0] : visibleDays.at(-1);
+      if (anchor?.dataset.day) pendingAnchor.current = { day: anchor.dataset.day, top: anchor.getBoundingClientRect().top - bounds.top };
+    }
+    windowShiftLock.current = true;
+    setDayStart(addDays(dayStart, direction * dashboardStep));
+  };
+  const handleDayScroll = (event: UIEvent<HTMLDivElement>) => {
+    const scroller = event.currentTarget;
+    if (windowShiftLock.current) return;
+    if (scroller.scrollTop < 180) shiftDays(-1);
+    else if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 180) shiftDays(1);
   };
   const goToday = () => {
-    pendingAnchor.current = null;
-    setDayStart(localDate(new Date()));
-    setTimeout(() => todayRef.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }), 0);
+    const today = localDate(new Date());
+    const start = addDays(today, -dashboardStep);
+    const scroller = dayScrollRef.current;
+    const element = todayRef.current;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    if (dayStart !== start) {
+      pendingAnchor.current = { day: today, top: 0 };
+      windowShiftLock.current = true;
+      setDayStart(start);
+    } else if (scroller && element) {
+      scroller.scrollTo({ top: scroller.scrollTop + element.getBoundingClientRect().top - scroller.getBoundingClientRect().top, behavior });
+    }
   };
 
+  const dashboard = dashboardDays(data, dayStart, dashboardWindow, today);
   return <main className="shell">
-    <aside className="sidebar"><h1><span className="brandMark">✓</span> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} onClick={() => { setView(item); setProjectId(""); }}><span aria-hidden>{icon[item]}</span> {item}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
-    <section className="dashboard">{error && <div className="error" role="alert">{error}</div>}
+    <aside className="sidebar"><h1><span className="brandMark">✓</span> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} onClick={() => {
+      setProjectId("");
+      if (item === "Dashboard" && view !== "Dashboard") {
+        initialScrollPending.current = true;
+        setDayStart(addDays(localDate(new Date()), -dashboardStep));
+      } else if (item === "Dashboard") goToday();
+      setView(item);
+    }}><span aria-hidden>{icon[item]}</span> {item}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
+    <section className={`dashboard ${view === "Dashboard" ? "dashboardHome" : ""}`}>{error && <div className="error" role="alert">{error}</div>}
       {!ready ? <p>Opening your local tasks…</p> : <>
         <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Inbox" ? "Capture now. Organize when you're ready." : ""}</p></div><button className="add" onClick={() => setEditing("new")}>+ Add task</button></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
           <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, `Due ${dateLabel(task.dueDate!)}`)) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
-          <div className="stream">{dashboardDays(data, dayStart, dashboardWindow).map(day => {
-            const empty = !day.scheduled.length && !day.due.length;
+          <div className="stream dayScroller" ref={dayScrollRef} onScroll={handleDayScroll} role="region" aria-label="Days">
+            <button className="loadMore" onClick={() => shiftDays(-1)}>Earlier days ↑</button>
+            {dashboard.map(day => {
+            const past = day.date < today;
+            const empty = !day.scheduled.length && !day.due.length && !day.completed.length;
             const label = day.date === today ? "TODAY" : day.date === addDays(today, 1) ? "TOMORROW" : dateLabel(day.date);
-            return <article className={`day ${empty ? "emptyDaySection" : ""}`} data-day={day.date} key={day.date} ref={day.date === today ? todayRef : undefined}>
+            return <article className={`day ${past ? "dayPast" : ""} ${empty ? "emptyDaySection" : ""}`} data-day={day.date} key={day.date} ref={day.date === today ? todayRef : undefined}>
             <div className="dayHeader"><h3 aria-label={`${label} ${day.date}`}>{label}</h3><time dateTime={day.date}>{day.date}</time></div>
-            {!!day.scheduled.length && <div className="group"><h4>SCHEDULED</h4>{day.scheduled.map(({ block, task }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === day.date ? " · Also due today" : ""}`))}</div>}
+            {!!day.scheduled.length && <div className="group"><h4>SCHEDULED</h4>{day.scheduled.map(({ block, task, completionId }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === day.date ? " · Also due today" : ""}`, completionId, `block:${block.id}`))}</div>}
             {!!day.due.length && <div className="group"><h4>DUE</h4>{day.due.map(task => taskRow(task, task.dueTime ? `Due at ${task.dueTime}` : "Due today"))}</div>}
-            {empty ? <div className="emptyDay"><span>Nothing planned</span><button onClick={() => setEditing(`new:${day.date}`)}>+ Add</button></div> :
-              <button className="dayAdd" onClick={() => setEditing(`new:${day.date}`)}>+ Add task for this day</button>}
-          </article>})}<button className="loadMore" onClick={shiftDays}>Later days ↓</button></div>
+            {!!day.completed.length && <div className="group"><h4>COMPLETED</h4>{day.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
+            {empty ? <div className={`emptyDay ${past ? "pastEmpty" : ""}`}><span>{past ? "No completed items" : "Nothing planned"}</span>{!past && <button onClick={() => setEditing(`new:${day.date}`)}>+ Add</button>}</div> :
+              !past && <button className="dayAdd" onClick={() => setEditing(`new:${day.date}`)}>+ Add task for this day</button>}
+          </article>})}
+            <button className="loadMore" onClick={() => shiftDays(1)}>Later days ↓</button>
+          </div>
         </>}
         {(view === "Inbox" || view === "Tasks") && <>
           <form className="quickAdd" onSubmit={e => { e.preventDefault(); addTask(quickTitle); }}><span aria-hidden>＋</span><input aria-label="Quick add task" placeholder="Add a task…" value={quickTitle} onChange={e => setQuickTitle(e.target.value)} /><button disabled={!quickTitle.trim()}>Add</button></form>
@@ -132,7 +189,6 @@ export default function Home() {
             <button className="linkButton" onClick={() => { if (!confirm("Archive this project? Its tasks will leave active views until restored in Settings.")) return; mutate(value => { const stamp = new Date().toISOString(); return { ...value, projects: value.projects.map(p => p.id === projectId ? { ...p, archivedAt: stamp, updatedAt: stamp, revision: p.revision + 1 } : p) }; }); setProjectId(""); }}>Archive project</button>
           </>}
         </>}
-        {view === "History" && <div className="listPanel">{[...data.completions].reverse().map(c => { const task = data.tasks.find(t => t.id === c.taskId); return task && <div className="historyRow" key={c.id}><strong>{task.title}</strong><small>{c.occurrenceDate && `Occurrence ${dateLabel(c.occurrenceDate)} · `}Completed {new Date(c.completedAt).toLocaleString()}</small>{data.completions.filter(item => item.taskId === c.taskId).at(-1)?.id === c.id && <button onClick={() => mutate(value => undoCompletion(value, c.id))}>Undo completion</button>}</div>; })}{!data.completions.length && <div className="empty">Completed work will appear here.</div>}</div>}
         {view === "Settings" && <div className="settingsPanel"><h3>Local and private</h3><p>Your data is stored in this browser on this device. Cross-device sync arrives in a later phase.</p><button onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = `ltm-todo-${today}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Download backup JSON</button>
           <h3>Tags</h3><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("tag") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, tags: [...value.tags, { ...newEntity(), name: input.value.trim(), color: "#c86b24" }] })); input.value = ""; }}><input name="tag" aria-label="New tag name" placeholder="New tag name…" /><button>Add tag</button></form>{tags.map(t => <div className="tagLine" key={t.id}><span>#{t.name}</span><div><button onClick={() => { const name = prompt("Rename tag", t.name)?.trim(); if (name) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, name, revision: item.revision + 1, updatedAt: new Date().toISOString() } : item) })); }}>Rename</button><button onClick={() => { if (confirm(`Delete tag ${t.name}?`)) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, deletedAt: new Date().toISOString(), revision: item.revision + 1 } : item), tasks: value.tasks.map(item => item.tagIds.includes(t.id) ? { ...item, tagIds: item.tagIds.filter(id => id !== t.id), revision: item.revision + 1 } : item) })); }}>Delete</button></div></div>)}
           <h3>Archived projects</h3>{data.projects.filter(p => p.archivedAt && !p.deletedAt).map(p => <div className="tagLine" key={p.id}><span>{p.name}</span><button onClick={() => mutate(value => { const stamp = new Date().toISOString(); return { ...value, projects: value.projects.map(item => item.id === p.id ? { ...item, archivedAt: undefined, updatedAt: stamp, revision: item.revision + 1 } : item) }; })}>Restore</button></div>)}

@@ -19,10 +19,10 @@ Initial product focus is a single owner using iPhone, iPad and web. The architec
 **Dashboard:** chronological day stream combining scheduled items and due items.
 
 ## Dashboard
-Dashboard is the default home surface. It opens with an Overdue section when unfinished task deadlines are before today, then scrolls forward from Today through future dates. Each populated day shows a sticky date header, scheduled content ordered by time, and a visually separate Due section. Today/Tomorrow labels are contextual. Empty days should collapse rather than dominate scrolling. When away from today, expose a fast Return to Today action. Overdue status comes from an unfinished task deadline, never from an event or scheduled work block. Previous dates live in History rather than the Dashboard.
+Dashboard is the default home surface. It opens at Today with a persistent Overdue section above the date stream, then scrolls both forward through future dates and upward into past activity. Past days show completed tasks and scheduled work dimmed, with no add controls. Completion history is grouped by local completion date in the Dashboard, so there is no separate History navigation. Each populated day shows a sticky date header, scheduled content ordered by time, and a visually separate Due section. Today/Tomorrow labels are contextual. Empty days should collapse rather than dominate scrolling. Keep a fast Return to Today action available while away from today. Overdue status comes from an unfinished task deadline, never from a day-to-day event or scheduled work block.
 
 ## v1 requirements
-Unlimited local tasks/projects/sections/tags/subtasks/reminders/recurrence rules; Inbox; Dashboard; task CRUD; priorities; notes; due date/time; scheduled blocks foundation; recurrence; notifications; search; filters; completion history; offline persistence; accessibility; responsive iPhone/iPad layouts.
+Unlimited local tasks/projects/sections/tags/subtasks/reminders/recurrence rules; Inbox; Dashboard; task CRUD; priorities; notes; due date/time; scheduled blocks foundation; recurrence; notifications; search; filters; completion history in the date stream; offline persistence; accessibility; responsive iPhone/iPad layouts.
 
 ## v2 requirements
 First-party calendar; day/week/month/agenda; event CRUD; all-day/timed events; multiple local calendars/colors; drag/drop scheduling; time blocking; routines; templates; Kanban; saved smart views; bulk editing; advanced planning.

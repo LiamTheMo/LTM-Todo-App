@@ -24,14 +24,45 @@ test("scheduled work and due date stay in separate Dashboard groups", () => {
   assert.equal(days[2].due[0].id, "one");
   assert.equal(data.tasks[0].dueDate, "2026-10-05");
 });
-test("Dashboard keeps same-day scheduling distinct and excludes completed work", () => {
+test("Dashboard keeps due and scheduled work distinct and places completed work on its completion day", () => {
   const data = emptyData();
   data.tasks.push(task("both", "2026-10-05"), task("finished", "2026-10-05", { completedAt: "2026-10-04T12:00:00Z" }));
   data.blocks.push({ id: "block", taskId: "both", startInstant: "2026-10-05T15:00:00Z",
     endInstant: "2026-10-05T16:00:00Z", timeZone: "America/Edmonton", createdAt: "", updatedAt: "", revision: 1 });
-  const [day] = dashboardDays(data, "2026-10-05", 1);
-  assert.deepEqual(day.scheduled.map(item => item.task.id), ["both"]);
-  assert.deepEqual(day.due.map(item => item.id), ["both"]);
+  const days = dashboardDays(data, "2026-10-04", 2, "2026-10-05");
+  assert.deepEqual(days[0].completed.map(item => item.task.id), ["finished"]);
+  assert.deepEqual(days[1].scheduled.map(item => item.task.id), ["both"]);
+  assert.deepEqual(days[1].due.map(item => item.id), ["both"]);
+  assert.deepEqual(days[1].completed, []);
+});
+test("past Dashboard dates show completed scheduled tasks without repeating overdue tasks", () => {
+  const data = emptyData();
+  data.tasks.push(task("late", "2026-10-02"), task("finished", "2026-10-02", { completedAt: "2026-10-03T12:00:00Z" }));
+  data.blocks.push(
+    { id: "late-block", taskId: "late", startInstant: "2026-10-02T15:00:00Z", endInstant: "2026-10-02T16:00:00Z", timeZone: "UTC", createdAt: "", updatedAt: "", revision: 1 },
+    { id: "finished-block", taskId: "finished", startInstant: "2026-10-02T16:00:00Z", endInstant: "2026-10-02T17:00:00Z", timeZone: "UTC", createdAt: "", updatedAt: "", revision: 1 }
+  );
+  const [day] = dashboardDays(data, "2026-10-02", 1, "2026-10-04");
+  assert.deepEqual(day.due, []);
+  assert.deepEqual(day.scheduled.map(item => [item.task.id, item.completed]), [["finished", true]]);
+  assert.deepEqual(day.completed.map(item => item.task.id), []);
+});
+test("recurring completion history appears on the completion date with its original task", () => {
+  const data = emptyData();
+  data.tasks.push(task("repeat", "2026-10-10", { recurrence: { frequency: "weekly", interval: 1, anchorDate: "2026-10-03", occurrences: 1 } }));
+  data.completions.push({ id: "occurrence-1", taskId: "repeat", occurrenceDate: "2026-10-03", completedAt: "2026-10-03T09:00:00Z" });
+  const [day] = dashboardDays(data, "2026-10-03", 1, "2026-10-04");
+  assert.deepEqual(day.completed.map(item => [item.task.id, item.completionId]), [["repeat", "occurrence-1"]]);
+});
+test("a completed scheduled occurrence is not duplicated in the same day's completion group", () => {
+  const data = emptyData();
+  data.tasks.push(task("finished", "2026-10-03", { completedAt: "2026-10-03T09:00:00Z" }));
+  data.blocks.push({ id: "finished-block", taskId: "finished", startInstant: "2026-10-03T08:00:00Z",
+    endInstant: "2026-10-03T09:00:00Z", timeZone: "UTC", createdAt: "", updatedAt: "", revision: 1 });
+  data.completions.push({ id: "finished-occurrence", taskId: "finished", occurrenceDate: "2026-10-03", completedAt: "2026-10-03T09:00:00Z" });
+  const [day] = dashboardDays(data, "2026-10-03", 1, "2026-10-04");
+  assert.equal(day.scheduled[0].completed, true);
+  assert.deepEqual(day.completed, []);
 });
 test("overdue includes only unfinished dated deadlines and ignores scheduled events", () => {
   const data = emptyData();
@@ -55,16 +86,16 @@ test("task edits without work-time fields preserve existing scheduled data", () 
   assert.deepEqual(edited.blocks, [block]);
   assert.equal(edited.tasks[0].title, "Edited title");
 });
-test("Dashboard date windows stay bounded and large local lists remain responsive", () => {
+test("84-day Dashboard date windows stay bounded and large local lists remain responsive", () => {
   const data = emptyData();
   for (let index = 0; index < 5000; index++) {
     data.tasks.push(task(String(index), addDays("2026-10-01", index % 56), { sortKey: index }));
   }
   const start = performance.now();
-  const days = dashboardDays(data, "2026-10-01", 56);
-  assert.equal(days.length, 56);
+  const days = dashboardDays(data, "2026-10-01", 84);
+  assert.equal(days.length, 84);
   assert.equal(days.reduce((count, day) => count + day.due.length, 0), 5000);
-  assert.ok(performance.now() - start < 2500, "56-day query should finish within 2.5 seconds for 5,000 tasks");
+  assert.ok(performance.now() - start < 2500, "84-day query should finish within 2.5 seconds for 5,000 tasks");
 });
 test("recurrence anchors monthly dates and records each completed occurrence", () => {
   const recurrence = { frequency: "monthly", interval: 1, anchorDate: "2026-01-31", occurrences: 0 };
