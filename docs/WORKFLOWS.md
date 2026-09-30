@@ -9,14 +9,17 @@ Never develop directly on permanent branches. Never delete permanent version bra
 ## CI loop
 1. Audit current state and requirements.
 2. Implement smallest coherent slice.
-3. Validate formatting/lint/type/tests/build/security.
-4. Review diff, GitHub checks and automated review findings.
-5. Apply valid findings.
-6. Revalidate.
-7. Repeat until clean or manually blocked.
+3. Run formatting/lint/type/tests/build/security locally on the temporary branch.
+4. Validate the intended PR base and head with `bash scripts/check-branch-flow.sh <base> <head>`.
+5. Review the diff and automated review findings.
+6. Apply valid findings.
+7. Revalidate.
+8. Repeat until clean or manually blocked.
+
+GitHub App CI and documentation checks run only after pushes to `main` or `vX.XX`; pull requests and temporary-branch pushes do not start CI workflows. After merging a temporary PR into its version branch, wait for the version-branch CI run to pass before promoting that version to `main`. Production deployment remains limited to a merged same-repository `vX.XX -> main` PR.
 
 ## Pull requests
-Temporary -> originating version branch. PR body states scope, acceptance criteria, automated validation, manual validation and known limitations. After merge, validate version branch. When a version is ready for deployed/manual testing, merge version -> main through a PR. The production workflow responds only to a merged `vX.XX -> main` PR and verifies the merge commit is still current on `main` before deploying.
+Temporary -> originating version branch. PR body states scope, acceptance criteria, local validation, manual validation and known limitations. After merge, wait for the version-branch CI result. When a version is ready for deployed/manual testing, merge version -> main through a PR. The production workflow responds only to a merged `vX.XX -> main` PR and verifies the merge commit is still current on `main` before deploying.
 
 ## Documentation
 Behavioral changes update relevant specs in the same PR. Architecture changes add/update ADRs. Phase status must not be marked complete before acceptance criteria pass.

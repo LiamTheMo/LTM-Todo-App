@@ -12,6 +12,8 @@ Implement the defining LTM Todo home experience: a fast, continuous day-by-day s
 - Compact empty-day representation.
 - A forward-only day stream that begins at Today and continues into future days.
 - A separate Overdue section above the day stream for unfinished tasks with a due date before the local current date.
+- Keep the Overdue section visible when there are no overdue tasks and show “Nothing overdue”.
+- Use the existing Dashboard card, neutral surfaces and orange-brown accent palette for the Overdue section.
 - Return-to-Today control.
 - Overdue treatment.
 - Completion/edit interactions preserving scroll position.
@@ -31,6 +33,7 @@ Day bucketing; due-vs-scheduled split; today boundary; DST; locale/calendar fixt
 
 ## Acceptance criteria
 - Dashboard launches at the top of Overdue (when present), followed by Today and future dates; it does not list previous dates.
+- The Overdue section always appears above the day stream and shows “Nothing overdue” when empty.
 - Continuous scrolling works without opening date pickers.
 - Sticky headers update correctly.
 - Return to Today is reliable.

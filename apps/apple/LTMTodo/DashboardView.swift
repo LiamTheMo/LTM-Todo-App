@@ -26,19 +26,27 @@ struct DashboardView: View {
             ScrollViewReader { reader in
                 ScrollView {
                     LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        if !overdueTasks.isEmpty {
-                            Section {
+                        Section {
+                            if overdueTasks.isEmpty {
+                                Text("Nothing overdue")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal)
+                                    .padding(.vertical, 14)
+                                    .overlay(alignment: .bottom) { Divider() }
+                            } else {
                                 ForEach(overdueTasks) { task in TaskRow(task: task) { editing = task } }
-                            } header: {
-                                HStack {
-                                    Text("OVERDUE").font(.caption.bold()).foregroundStyle(.red)
-                                        .accessibilityAddTraits(.isHeader)
-                                    Spacer()
-                                }
-                                .padding(.horizontal)
-                                .padding(.vertical, 10)
-                                .background(.regularMaterial)
                             }
+                        } header: {
+                            HStack {
+                                Text("OVERDUE").font(.caption.bold()).foregroundStyle(Color.accentColor)
+                                    .accessibilityAddTraits(.isHeader)
+                                Spacer()
+                            }
+                            .padding(.horizontal)
+                            .padding(.vertical, 10)
+                            .background(.regularMaterial)
                         }
                         ForEach(dates, id: \.self) { day in
                             Section {
