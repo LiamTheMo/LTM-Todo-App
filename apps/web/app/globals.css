@@ -17,8 +17,9 @@
 .dashboardHome{display:flex;flex-direction:column;overflow:hidden}
 .dashboardHome .pageHeader{flex:none;margin-bottom:12px}
 .dashboardHome .streamControls{flex:none;margin:0 0 8px}
-.dashboardHome .overduePanel{flex:0 0 auto;max-height:min(35vh,280px);overflow-y:auto;overscroll-behavior:contain;margin-bottom:12px;border-color:#e8c9bf;background:#fffdfc}
-.dashboardHome .overduePanel .group h4{position:sticky;top:0;z-index:1;font-size:12px;letter-spacing:0;color:#b84d37;background:#fff3ef}
+.dashboardHome .overduePanel{flex:0 0 auto;min-height:88px;max-height:min(35vh,280px);overflow-y:auto;overscroll-behavior:contain;margin-bottom:12px;border:1px solid #e5a99d;background:#fffdfc;box-shadow:0 5px 18px #8f39200d}
+.dashboardHome .overduePanel .group h4{position:sticky;top:0;z-index:1;font-size:12px;font-weight:750;letter-spacing:0;color:#b54131;background:#fff0eb}
+.dashboardHome .overduePanel .overdueEmpty{min-height:46px;display:flex;align-items:center;color:#75665e}
 .dayScroller{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border-radius:18px}
 .dayPast{background:#faf8f5;color:#817b74}
 .dayPast .dayHeader{background:#f3f0eb;color:#817b74}

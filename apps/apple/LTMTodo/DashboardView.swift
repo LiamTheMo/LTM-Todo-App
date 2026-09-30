@@ -67,12 +67,12 @@ struct DashboardView: View {
         let recordedTaskIDs = Set(store.data.completions.map(\.taskID))
         for completion in store.data.completions {
             guard let task = tasksByID[completion.taskID] else { continue }
-            let day = DayMath.day(completion.completedAt)
+            let day = completion.occurrenceDay ?? DayMath.day(completion.completedAt)
             result[day, default: []].append(DashboardOccurrence(task: task, completion: completion, completedAt: completion.completedAt))
         }
         for task in store.unarchivedTasks where task.completedAt != nil && !recordedTaskIDs.contains(task.id) {
             guard let completedAt = task.completedAt else { continue }
-            let day = DayMath.day(completedAt)
+            let day = task.dueDay ?? DayMath.day(completedAt)
             result[day, default: []].append(DashboardOccurrence(task: task, completion: nil, completedAt: completedAt))
         }
         return result.mapValues { $0.sorted { $0.completedAt < $1.completedAt } }
@@ -215,11 +215,9 @@ struct DashboardView: View {
                 HStack {
                     Text(past ? "No completed items" : "Nothing planned").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    if !past {
-                        Button("Add") { editing = TodoTask(title: "", dueDay: day) }.font(.caption)
-                    }
+                    Button("Add") { editing = TodoTask(title: "", dueDay: day) }.font(.caption)
                 }
-            } else if !past {
+            } else {
                 Button("Add task for this day") {
                     editing = TodoTask(title: "", dueDay: day)
                 }
