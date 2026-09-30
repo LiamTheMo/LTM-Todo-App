@@ -35,3 +35,6 @@ No secrets in clients/repository. Use platform secure storage for credentials/to
 
 ## ADRs
 Architecturally significant deviations require an ADR under `docs/adr/` describing context, decision, alternatives and consequences.
+
+## Platform icons
+The Apple app icon is the opaque 1024×1024 PNG in `apps/apple/LTMTodo/Assets.xcassets/AppIcon.appiconset`, selected by the XcodeGen target's `ASSETCATALOG_COMPILER_APPICON_NAME` setting. The web client serves its transparent 512×512 WebP icon from `apps/web/public/icons` and a multi-size ICO favicon from `apps/web/app`; web metadata links both formats.
