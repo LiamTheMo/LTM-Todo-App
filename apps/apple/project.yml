@@ -30,10 +30,6 @@ targets:
     platform: iOS
     sources:
       - path: LTMTodoTests
-        excludes:
-          - Fixtures/**
-    resources:
-      - path: LTMTodoTests/Fixtures/legacy-v1.json
     dependencies:
       - target: LTMTodo
     settings:
