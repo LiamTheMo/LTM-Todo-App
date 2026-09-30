@@ -28,6 +28,13 @@ jobs:
       - name: Build iOS app
         working-directory: apps/apple
         run: xcodebuild -project LTMTodo.xcodeproj -scheme LTMTodo -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Test Apple migration and UI smoke suites
+        working-directory: apps/apple
+        shell: bash
+        run: |
+          set -euo pipefail
+          destination_id="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for runtime in devices.values() for device in runtime if device["isAvailable"] and device["name"].startswith("iPhone")))')"
+          xcodebuild test -project LTMTodo.xcodeproj -scheme LTMTodo -destination "platform=iOS Simulator,id=${destination_id}" CODE_SIGNING_ALLOWED=NO
 
   web:
     runs-on: ubuntu-latest
@@ -40,6 +47,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --no-audit --no-fund
+      - run: npm audit --audit-level=high
       - run: npm test
       - run: npm run typecheck
       - run: npm run lint

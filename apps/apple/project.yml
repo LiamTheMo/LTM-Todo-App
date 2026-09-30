@@ -22,4 +22,32 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
     scheme:
-      testTargets: []
+      testTargets:
+        - LTMTodoTests
+        - LTMTodoUITests
+  LTMTodoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: LTMTodoTests
+        excludes:
+          - Fixtures/**
+    resources:
+      - path: LTMTodoTests/Fixtures
+    dependencies:
+      - target: LTMTodo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.ltm.todo.tests
+        GENERATE_INFOPLIST_FILE: YES
+  LTMTodoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: LTMTodoUITests
+    dependencies:
+      - target: LTMTodo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.ltm.todo.uitests
+        GENERATE_INFOPLIST_FILE: YES
