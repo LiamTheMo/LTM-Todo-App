@@ -1,6 +1,6 @@
 # LTM Todo App
 
-LTM Todo is an ad-free, limitation-free personal productivity application for iPhone, iPad, and web. It combines task management with a first-party planning/calendar system rather than depending on Google Calendar or another external calendar provider.
+LTM Todo is an ad-free, limitation-free personal productivity application for iPhone, iPad, and web. It combines task management with a first-party planning/calendar system rather than depending on Google Calendar or another external calendar provider. 
 
 ## Product pillars
 - Fast capture with minimal friction.
