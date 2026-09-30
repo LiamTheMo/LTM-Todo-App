@@ -24,16 +24,15 @@ test("scheduled work and due date stay in separate Dashboard groups", () => {
   assert.equal(days[2].due[0].id, "one");
   assert.equal(data.tasks[0].dueDate, "2026-10-05");
 });
-test("Dashboard keeps due and scheduled work distinct and places completed work on its completion day", () => {
+test("Dashboard keeps a completed task occurrence on its due date", () => {
   const data = emptyData();
-  data.tasks.push(task("both", "2026-10-05"), task("finished", "2026-10-05", { completedAt: "2026-10-04T12:00:00Z" }));
-  data.blocks.push({ id: "block", taskId: "both", startInstant: "2026-10-05T15:00:00Z",
-    endInstant: "2026-10-05T16:00:00Z", timeZone: "America/Edmonton", createdAt: "", updatedAt: "", revision: 1 });
-  const days = dashboardDays(data, "2026-10-04", 2, "2026-10-05");
-  assert.deepEqual(days[0].completed.map(item => item.task.id), ["finished"]);
-  assert.deepEqual(days[1].scheduled.map(item => item.task.id), ["both"]);
-  assert.deepEqual(days[1].due.map(item => item.id), ["both"]);
-  assert.deepEqual(days[1].completed, []);
+  data.tasks.push(task("finished", "2026-10-05"));
+  const checkedOff = completeTask(data, "finished", new Date("2026-10-04T12:00:00Z"));
+  const days = dashboardDays(checkedOff, "2026-10-04", 2, "2026-10-05");
+  assert.deepEqual(days[0].completed, []);
+  assert.deepEqual(days[1].completed.map(item => [item.task.id, item.completionId]), [["finished", checkedOff.completions[0].id]]);
+  assert.deepEqual(days[1].due, []);
+  assert.equal(checkedOff.tasks[0].dueDate, "2026-10-05");
 });
 test("past Dashboard dates show completed scheduled tasks without repeating overdue tasks", () => {
   const data = emptyData();
@@ -47,12 +46,22 @@ test("past Dashboard dates show completed scheduled tasks without repeating over
   assert.deepEqual(day.scheduled.map(item => [item.task.id, item.completed]), [["finished", true]]);
   assert.deepEqual(day.completed.map(item => item.task.id), []);
 });
-test("recurring completion history appears on the completion date with its original task", () => {
+test("recurring completion history appears on the original occurrence date", () => {
   const data = emptyData();
-  data.tasks.push(task("repeat", "2026-10-10", { recurrence: { frequency: "weekly", interval: 1, anchorDate: "2026-10-03", occurrences: 1 } }));
-  data.completions.push({ id: "occurrence-1", taskId: "repeat", occurrenceDate: "2026-10-03", completedAt: "2026-10-03T09:00:00Z" });
-  const [day] = dashboardDays(data, "2026-10-03", 1, "2026-10-04");
-  assert.deepEqual(day.completed.map(item => [item.task.id, item.completionId]), [["repeat", "occurrence-1"]]);
+  data.tasks.push(task("repeat", "2026-10-03", { recurrence: { frequency: "weekly", interval: 1, anchorDate: "2026-10-03", occurrences: 0 } }));
+  const completed = completeTask(data, "repeat", new Date("2026-10-05T09:00:00Z"));
+  assert.equal(completed.tasks[0].dueDate, "2026-10-10");
+  const days = dashboardDays(completed, "2026-10-03", 3, "2026-10-06");
+  const [day] = days;
+  assert.deepEqual(day.completed.map(item => [item.task.id, item.completionId]), [["repeat", completed.completions[0].id]]);
+  assert.deepEqual(days[2].completed, []);
+});
+test("legacy completed tasks with a due date stay on that date", () => {
+  const data = emptyData();
+  data.tasks.push(task("legacy", "2026-10-03", { completedAt: "2026-10-05T09:00:00Z" }));
+  const days = dashboardDays(data, "2026-10-03", 3, "2026-10-06");
+  assert.deepEqual(days[0].completed.map(item => item.task.id), ["legacy"]);
+  assert.deepEqual(days[2].completed, []);
 });
 test("a completed scheduled occurrence is not duplicated in the same day's completion group", () => {
   const data = emptyData();
@@ -74,6 +83,13 @@ test("overdue includes only unfinished dated deadlines and ignores scheduled eve
   data.blocks.push({ id: "event-block", taskId: "event", startInstant: "2026-09-20T15:00:00Z",
     endInstant: "2026-09-20T16:00:00Z", timeZone: "America/Edmonton", createdAt: "", updatedAt: "", revision: 1 });
   assert.deepEqual(overdueTasks(data, "2026-09-29").map(item => item.id), ["oldest", "newer"]);
+});
+test("a task added for a past Dashboard date is overdue and is not repeated in that day", () => {
+  const data = emptyData();
+  const created = saveTask(data, task("past-added", "2026-09-20"));
+  const [pastDay] = dashboardDays(created, "2026-09-20", 1, "2026-09-29");
+  assert.deepEqual(overdueTasks(created, "2026-09-29").map(item => item.id), ["past-added"]);
+  assert.deepEqual(pastDay.due, []);
 });
 test("task edits without work-time fields preserve existing scheduled data", () => {
   const data = emptyData();

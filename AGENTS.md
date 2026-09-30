@@ -5,7 +5,7 @@ This file is authoritative for AI agents and contributors working in this reposi
 ## 1. Product intent
 Build a polished personal productivity system for iPhone, iPad, and web. The app owns its task and calendar models. Do not introduce Google Calendar or another calendar service as a core dependency. External interoperability may be added later only as optional integration.
 
-The primary home experience is a vertically scrolling chronological Dashboard. It opens at Today, scrolls forward into future dates and upward into past activity, and keeps overdue deadlines separate from everyday events. Past completed work is dimmed and cannot be newly added to a past day. Each day is a section containing what is scheduled on that day and what is due on that day. Scheduled time and due time are separate concepts.
+The primary home experience is a vertically scrolling chronological Dashboard. It opens at Today, scrolls forward into future dates and upward into past activity, and keeps overdue deadlines separate from everyday events. Past completed work is dimmed; users can still add a task with a past due date, which appears in Overdue until completed. Due-dated completion history stays on its due/occurrence date, while undated tasks use their completion date. Each day is a section containing what is scheduled on that day and what is due on that day. Scheduled time and due time are separate concepts.
 
 ## 2. Git workflow
 Major branches are only `main` and `vX.XX`. Version branches are permanent checkpoints and must never be deleted. Never implement, fix, refactor, clean up, audit-remediate, or maintain directly on a major branch.
