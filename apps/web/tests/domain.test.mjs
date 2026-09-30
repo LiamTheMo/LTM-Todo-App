@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, nextOccurrence, overdueTasks, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
+import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
@@ -34,7 +34,7 @@ test("Dashboard keeps a completed task occurrence on its due date", () => {
   assert.deepEqual(days[1].due, []);
   assert.equal(checkedOff.tasks[0].dueDate, "2026-10-05");
 });
-test("past Dashboard dates show completed scheduled tasks without repeating overdue tasks", () => {
+test("past Dashboard dates show due tasks alongside completed scheduled tasks", () => {
   const data = emptyData();
   data.tasks.push(task("late", "2026-10-02"), task("finished", "2026-10-02", { completedAt: "2026-10-03T12:00:00Z" }));
   data.blocks.push(
@@ -42,7 +42,7 @@ test("past Dashboard dates show completed scheduled tasks without repeating over
     { id: "finished-block", taskId: "finished", startInstant: "2026-10-02T16:00:00Z", endInstant: "2026-10-02T17:00:00Z", timeZone: "UTC", createdAt: "", updatedAt: "", revision: 1 }
   );
   const [day] = dashboardDays(data, "2026-10-02", 1, "2026-10-04");
-  assert.deepEqual(day.due, []);
+  assert.deepEqual(day.due.map(item => item.id), ["late"]);
   assert.deepEqual(day.scheduled.map(item => [item.task.id, item.completed]), [["finished", true]]);
   assert.deepEqual(day.completed.map(item => item.task.id), []);
 });
@@ -73,23 +73,59 @@ test("a completed scheduled occurrence is not duplicated in the same day's compl
   assert.equal(day.scheduled[0].completed, true);
   assert.deepEqual(day.completed, []);
 });
-test("overdue includes only unfinished dated deadlines and ignores scheduled events", () => {
+test("overdue includes recent unfinished deadlines and ignores older dates and scheduled events", () => {
   const data = emptyData();
   data.projects.push({ id: "archived", name: "Archived", color: "#fff", sortKey: 0, createdAt: "", updatedAt: "", revision: 1,
     archivedAt: "2026-09-01T00:00:00Z" });
-  data.tasks.push(task("oldest", "2026-09-20"), task("newer", "2026-09-28"), task("today", "2026-09-29"),
+  data.tasks.push(task("oldest", "2026-09-20"), task("newer", "2026-09-28"), task("boundary", "2026-09-23"), task("today", "2026-09-29"),
     task("future", "2026-10-01"), task("done", "2026-09-10", { completedAt: "2026-09-10T12:00:00Z" }),
     task("archived", "2026-09-10", { projectId: "archived" }), task("event", undefined));
   data.blocks.push({ id: "event-block", taskId: "event", startInstant: "2026-09-20T15:00:00Z",
     endInstant: "2026-09-20T16:00:00Z", timeZone: "America/Edmonton", createdAt: "", updatedAt: "", revision: 1 });
-  assert.deepEqual(overdueTasks(data, "2026-09-29").map(item => item.id), ["oldest", "newer"]);
+  assert.deepEqual(overdueTasks(data, "2026-09-29").map(item => item.id), ["boundary", "newer"]);
 });
-test("a task added for a past Dashboard date is overdue and is not repeated in that day", () => {
+test("an overdue task stays on its due date and also appears in Overdue", () => {
   const data = emptyData();
-  const created = saveTask(data, task("past-added", "2026-09-20"));
-  const [pastDay] = dashboardDays(created, "2026-09-20", 1, "2026-09-29");
+  const created = saveTask(data, task("past-added", "2026-09-28"), "", "2026-09-29");
+  const [pastDay] = dashboardDays(created, "2026-09-28", 1, "2026-09-29");
   assert.deepEqual(overdueTasks(created, "2026-09-29").map(item => item.id), ["past-added"]);
-  assert.deepEqual(pastDay.due, []);
+  assert.deepEqual(pastDay.due.map(item => item.id), ["past-added"]);
+});
+test("history retention keeps seven calendar days and removes expired task and event data", () => {
+  const today = "2026-10-01";
+  assert.equal(historyStart(today), "2026-09-25");
+  const data = emptyData();
+  data.tasks.push(
+    task("expired", "2026-09-24"),
+    task("boundary", "2026-09-25"),
+    task("parent", "2026-09-24"),
+    task("child", undefined, { parentTaskId: "parent" }),
+    task("old-completed", undefined, { completedAt: "2026-09-24T12:00:00Z" }),
+    task("open-undated", undefined),
+    task("future", "2026-10-02")
+  );
+  data.blocks.push(
+    { id: "expired-block", taskId: "boundary", startInstant: "2026-09-24T15:00:00Z", endInstant: "2026-09-24T16:00:00Z", timeZone: "UTC", createdAt: "", updatedAt: "", revision: 1 },
+    { id: "retained-block", taskId: "boundary", startInstant: "2026-09-25T15:00:00Z", endInstant: "2026-09-25T16:00:00Z", timeZone: "UTC", createdAt: "", updatedAt: "", revision: 1 }
+  );
+  data.reminders.push(
+    { id: "expired-reminder", taskId: "expired", minutesBefore: 0, enabled: true, createdAt: "", updatedAt: "", revision: 1 },
+    { id: "retained-reminder", taskId: "boundary", minutesBefore: 0, enabled: true, createdAt: "", updatedAt: "", revision: 1 }
+  );
+  data.completions.push(
+    { id: "expired-completion", taskId: "boundary", occurrenceDate: "2026-09-24", completedAt: "2026-09-24T16:00:00Z" },
+    { id: "retained-completion", taskId: "boundary", occurrenceDate: "2026-09-25", completedAt: "2026-09-25T16:00:00Z" }
+  );
+  const retained = pruneExpiredHistory(data, today);
+  assert.deepEqual(retained.tasks.map(item => item.id), ["boundary", "child", "open-undated", "future"]);
+  assert.equal(retained.tasks.find(item => item.id === "child").parentTaskId, undefined);
+  assert.deepEqual(retained.blocks.map(item => item.id), ["retained-block"]);
+  assert.deepEqual(retained.reminders.map(item => item.id), ["retained-reminder"]);
+  assert.deepEqual(retained.completions.map(item => item.id), ["retained-completion"]);
+});
+test("task editor domain guard rejects a due date outside the retained week", () => {
+  const data = emptyData();
+  assert.equal(saveTask(data, task("too-old", "2026-09-24"), "", "2026-10-01"), data);
 });
 test("task edits without work-time fields preserve existing scheduled data", () => {
   const data = emptyData();
