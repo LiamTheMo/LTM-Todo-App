@@ -22,6 +22,18 @@ test("normalization rejects broken task relationships and nested subtasks", () =
   assert.throws(() => normalizeData({ schemaVersion: 1, tasks: [{ ...base, projectId: "missing" }] }), /missing project/);
 });
 
+test("normalization validates a large valid task graph without quadratic relationship scans", () => {
+  const tasks = [];
+  const count = 5000;
+  for (let index = 0; index < count; index++) tasks.push({ id: `parent-${index}`, title: `Parent ${index}`, tagIds: [], sortKey: index,
+    createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", revision: 1 });
+  for (let index = 0; index < count; index++) tasks.push({ id: `child-${index}`, title: `Child ${index}`, tagIds: [], sortKey: index,
+    parentTaskId: `parent-${index}`, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", revision: 1 });
+  const start = performance.now();
+  assert.equal(normalizeData({ schemaVersion: 1, tasks }).tasks.length, count * 2);
+  assert.ok(performance.now() - start < 2500, "10,000 task relationship validation should finish within 2.5 seconds");
+});
+
 test("corrupt or unsupported snapshots fail closed instead of being replaced", () => {
   assert.throws(() => normalizeData({ schemaVersion: 2, tasks: [] }), /Unsupported/);
   assert.throws(() => normalizeData({ schemaVersion: 1, tasks: "not an array" }), /Invalid tasks/);
