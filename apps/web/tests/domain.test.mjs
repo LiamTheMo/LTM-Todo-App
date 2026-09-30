@@ -216,16 +216,19 @@ test("bulk completion uses normal parent/subtask rules in one domain operation",
 test("web reminder triggers are bounded, ordered, and ignore completed or disabled items", () => {
   const data = emptyData();
   const due = task("due", "2026-10-01", { dueTime: "13:00", dueTimeZone: "UTC" });
+  const edmonton = task("edmonton", "2026-10-01", { dueTime: "13:00", dueTimeZone: "America/Edmonton" });
   const complete = task("complete", "2026-10-01", { dueTime: "13:00", completedAt: "2026-09-30T12:00:00Z" });
-  data.tasks.push(due, complete);
+  data.tasks.push(due, edmonton, complete);
   data.reminders.push(
     { id: "a", taskId: "due", minutesBefore: 15, enabled: true, createdAt: "", updatedAt: "", revision: 1 },
+    { id: "edmonton", taskId: "edmonton", minutesBefore: 0, enabled: true, createdAt: "", updatedAt: "", revision: 1 },
     { id: "b", taskId: "complete", minutesBefore: 0, enabled: true, createdAt: "", updatedAt: "", revision: 1 },
     { id: "c", taskId: "due", minutesBefore: 0, enabled: false, createdAt: "", updatedAt: "", revision: 1 }
   );
   const results = pendingReminderTriggers(data, Date.parse("2026-10-01T12:00:00Z"));
-  assert.deepEqual(results.map(item => item.reminder.id), ["a"]);
+  assert.deepEqual(results.map(item => item.reminder.id), ["a", "edmonton"]);
   assert.equal(results[0].triggerAt, Date.parse("2026-10-01T12:45:00Z"));
+  assert.equal(results[1].triggerAt, Date.parse("2026-10-01T19:00:00Z"));
 });
 test("reorder retains identity and section deletion moves tasks to project root", () => {
   const data = emptyData();

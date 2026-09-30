@@ -44,21 +44,23 @@ export function normalizeData(value: unknown): Data {
       throw new Error("Invalid completion record");
     }
   }
-  const taskIds = new Set(data.tasks.map(task => task.id));
   const projectIds = new Set(data.projects.map(project => project.id));
-  const sectionIds = new Set(data.sections.map(section => section.id));
+  const sectionsById = new Map(data.sections.map(section => [section.id, section]));
   const tagIds = new Set(data.tags.map(tag => tag.id));
+  const tasksById = new Map(data.tasks.map(task => [task.id, task]));
   for (const task of data.tasks) {
-    if (task.parentTaskId && (!taskIds.has(task.parentTaskId) || task.parentTaskId === task.id)) throw new Error("Invalid task parent relationship");
-    if (task.parentTaskId && data.tasks.some(parent => parent.id === task.parentTaskId && parent.parentTaskId)) throw new Error("Subtasks may only have one level of nesting");
-    if (task.parentTaskId && data.tasks.some(parent => parent.id === task.parentTaskId && parent.projectId !== task.projectId)) throw new Error("Subtask and parent must share a project");
+    if (task.parentTaskId && (!tasksById.has(task.parentTaskId) || task.parentTaskId === task.id)) throw new Error("Invalid task parent relationship");
+    const parent = task.parentTaskId ? tasksById.get(task.parentTaskId) : undefined;
+    if (parent?.parentTaskId) throw new Error("Subtasks may only have one level of nesting");
+    if (parent && parent.projectId !== task.projectId) throw new Error("Subtask and parent must share a project");
     if (task.projectId && !projectIds.has(task.projectId)) throw new Error("Task refers to a missing project");
-    if (task.sectionId && (!sectionIds.has(task.sectionId) || !data.sections.some(section => section.id === task.sectionId && section.projectId === task.projectId))) throw new Error("Task refers to an invalid section");
+    const section = task.sectionId ? sectionsById.get(task.sectionId) : undefined;
+    if (task.sectionId && (!section || section.projectId !== task.projectId)) throw new Error("Task refers to an invalid section");
     if (task.tagIds.some(id => !tagIds.has(id))) throw new Error("Task refers to a missing tag");
   }
   for (const section of data.sections) if (!projectIds.has(section.projectId)) throw new Error("Section refers to a missing project");
-  for (const item of [...data.blocks, ...data.reminders]) if (!taskIds.has(item.taskId)) throw new Error("Task data contains a missing task reference");
-  for (const completion of data.completions) if (!taskIds.has(completion.taskId)) throw new Error("Completion refers to a missing task");
+  for (const item of [...data.blocks, ...data.reminders]) if (!tasksById.has(item.taskId)) throw new Error("Task data contains a missing task reference");
+  for (const completion of data.completions) if (!tasksById.has(completion.taskId)) throw new Error("Completion refers to a missing task");
   return data;
 }
 function openDatabase(): Promise<IDBDatabase> {
