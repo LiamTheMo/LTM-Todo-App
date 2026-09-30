@@ -31,7 +31,7 @@ struct RootView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(selection == section ? Color.orange : Color.primary)
+                        .foregroundStyle(selection == section ? LTMTheme.accent : Color.primary)
                         .accessibilityAddTraits(selection == section ? .isSelected : [])
                     }
                     .navigationTitle("LTM Todo")
@@ -46,7 +46,7 @@ struct RootView: View {
                 }
             }
         }
-        .tint(.orange)
+        .tint(LTMTheme.accent)
         .sheet(item: $editing) { task in TaskEditorView(task: task) }
         .safeAreaInset(edge: .top) {
             if let message = store.errorMessage {
@@ -338,7 +338,7 @@ struct ProjectsView: View {
                     }
                     .buttonStyle(.borderless)
                     .swipeActions {
-                        Button("Archive") { projectToArchive = project.id }.tint(.orange)
+                        Button("Archive") { projectToArchive = project.id }.tint(LTMTheme.accent)
                     }
                 }
             }

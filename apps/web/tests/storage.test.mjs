@@ -10,7 +10,16 @@ test("legacy v1 snapshots gain missing collections and a generation without losi
   assert.equal(restored.tasks[0].title, "Keep me");
   assert.deepEqual(restored.sections, []);
   assert.deepEqual(restored.completions, []);
+  assert.deepEqual(restored.savedViews, []);
   assert.equal(normalizeData({ ...legacy, generation: 7 }).generation, 7);
+});
+
+test("normalization rejects broken task relationships and nested subtasks", () => {
+  const base = { id: "a", title: "A", notes: "", tagIds: [], sortKey: 1,
+    createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", revision: 1 };
+  assert.throws(() => normalizeData({ schemaVersion: 1, tasks: [{ ...base, parentTaskId: "missing" }] }), /parent relationship/);
+  assert.throws(() => normalizeData({ schemaVersion: 1, tasks: [base, { ...base, id: "b", parentTaskId: "a" }, { ...base, id: "c", parentTaskId: "b" }] }), /one level/);
+  assert.throws(() => normalizeData({ schemaVersion: 1, tasks: [{ ...base, projectId: "missing" }] }), /missing project/);
 });
 
 test("corrupt or unsupported snapshots fail closed instead of being replaced", () => {

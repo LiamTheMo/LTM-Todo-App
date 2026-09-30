@@ -48,6 +48,13 @@ final class TodoStore: ObservableObject {
         var updated = task
         guard !updated.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         if let dueDay = updated.dueDay, dueDay < DashboardRetention.earliestDay() { return }
+        if let parentID = updated.parentTaskID {
+            guard parentID != updated.id,
+                  let parent = data.tasks.first(where: { $0.id == parentID && $0.deletedAt == nil }),
+                  parent.parentTaskID == nil,
+                  parent.projectID == updated.projectID,
+                  !data.tasks.contains(where: { $0.parentTaskID == updated.id }) else { return }
+        }
         updated.title = updated.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if let index = data.tasks.firstIndex(where: { $0.id == task.id }) {
             let moved = data.tasks[index].projectID != updated.projectID || data.tasks[index].sectionID != updated.sectionID
