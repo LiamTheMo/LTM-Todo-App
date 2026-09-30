@@ -37,6 +37,7 @@ export type Tag = Entity & { name: string; color: string };
 export type ScheduledBlock = Entity & { taskId: string; startInstant: string; endInstant: string; timeZone: string };
 export type Reminder = Entity & { taskId: string; minutesBefore: number; enabled: boolean };
 export type SavedView = Entity & { name: string; query: string; projectId?: string | null; priority?: Priority | "all"; tagId?: string; dateScope?: DateScope | "all"; completed?: boolean | "all" };
+const reminderFormatters = new Map<string, Intl.DateTimeFormat>();
 export type Completion = { id: string; taskId: string; occurrenceDate?: string; completedAt: string; clearedBlockIds?: string[] };
 export type Data = {
   schemaVersion: 1;
@@ -179,8 +180,9 @@ export function saveTask(data: Data, task: Task, reminderMinutes = "", today = l
 }
 export function bulkCompleteTasks(data: Data, ids: string[], now = new Date()): Data {
   const selected = new Set(ids);
+  const subtasks = new Set(data.tasks.filter(task => task.parentTaskId).map(task => task.id));
   const ordered = [...selected].sort((a, b) =>
-    Number(data.tasks.some(item => item.id === b && item.parentTaskId)) - Number(data.tasks.some(item => item.id === a && item.parentTaskId)));
+    Number(subtasks.has(b)) - Number(subtasks.has(a)));
   return ordered.reduce((value, id) => completeTask(value, id, now), data);
 }
 
@@ -194,8 +196,17 @@ export function reminderTrigger(task: Task, reminder: Reminder): number | undefi
   const desired = Date.UTC(year, month - 1, day, hour, minute);
   let timestamp = desired;
   try {
+    let formatter = reminderFormatters.get(zone);
+    if (!formatter) {
+      formatter = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+      if (reminderFormatters.size >= 32) {
+        const oldestZone = reminderFormatters.keys().next().value;
+        if (oldestZone) reminderFormatters.delete(oldestZone);
+      }
+      reminderFormatters.set(zone, formatter);
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
-      const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(timestamp));
+      const parts = formatter.formatToParts(new Date(timestamp));
       const values = Object.fromEntries(parts.map(part => [part.type, Number(part.value)]));
       const represented = Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute);
       const correction = desired - represented;

@@ -24,7 +24,7 @@ All development follows `AGENTS.md`. Major branches are `main` and permanent `vX
 
 ### Run locally
 
-- Web: `cd apps/web && npm ci && npm run dev`; `npm test && npm run typecheck && npm run lint && npm run build`.
+- Web: `cd apps/web && npm ci && npm run dev`; validate with `npm test && npm run typecheck && npm run lint`. Use `npm run build:vinext` for the Cloudflare production build; `npm run build` runs the Next.js fallback build.
 - Apple: install Xcode and XcodeGen, run `xcodegen generate` in `apps/apple`, then open `LTMTodo.xcodeproj` or run the simulator build from App CI.
 - Swift core: `swift test` from the repository root.
 
