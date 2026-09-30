@@ -14,12 +14,13 @@ final class TodoStore: ObservableObject {
 
     init() {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        url = folder.appendingPathComponent("LTM-Todo-v1.json")
+        let isUITesting = ProcessInfo.processInfo.arguments.contains("--uitesting")
+        url = folder.appendingPathComponent(isUITesting ? "LTM-Todo-uitesting.json" : "LTM-Todo-v1.json")
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            if isUITesting { try? FileManager.default.removeItem(at: url) }
             if FileManager.default.fileExists(atPath: url.path) {
-                let decoded = try JSONDecoder().decode(TodoData.self, from: Data(contentsOf: url))
-                guard decoded.schemaVersion == 1 else { throw CocoaError(.fileReadCorruptFile) }
+                let decoded = try TodoDataFile.load(from: url)
                 data = decoded
                 savedData = decoded
             }
@@ -80,6 +81,43 @@ final class TodoStore: ObservableObject {
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         save(TodoTask(title: clean, projectID: projectID))
+    }
+
+    func moveTask(_ id: UUID, by direction: Int) {
+        guard errorMessage == nil,
+              let task = data.tasks.first(where: { $0.id == id && $0.deletedAt == nil }) else { return }
+        var group = data.tasks.filter {
+            $0.deletedAt == nil && $0.projectID == task.projectID &&
+            $0.sectionID == task.sectionID && $0.parentTaskID == task.parentTaskID
+        }.sorted {
+            $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey
+        }
+        guard let from = group.firstIndex(where: { $0.id == id }) else { return }
+        let to = from + direction
+        guard group.indices.contains(to) else { return }
+        group.insert(group.remove(at: from), at: to)
+
+        let before = to > 0 ? group[to - 1].sortKey : nil
+        let after = to + 1 < group.count ? group[to + 1].sortKey : nil
+        let key = before.map { left in after.map { right in (left + right) / 2 } ?? left + 1024 } ?? ((after ?? 0) - 1024)
+        let now = Date()
+        if key.isFinite && (before.map { key != $0 } ?? true) && (after.map { key != $0 } ?? true),
+           let index = data.tasks.firstIndex(where: { $0.id == id }) {
+            data.tasks[index].sortKey = key
+            data.tasks[index].updatedAt = now
+            data.tasks[index].revision += 1
+        } else {
+            for (position, item) in group.enumerated() {
+                guard let index = data.tasks.firstIndex(where: { $0.id == item.id }) else { continue }
+                let key = Double(position * 1024)
+                if data.tasks[index].sortKey != key {
+                    data.tasks[index].sortKey = key
+                    data.tasks[index].updatedAt = now
+                    data.tasks[index].revision += 1
+                }
+            }
+        }
+        persist()
     }
 
     func complete(_ id: UUID) {
