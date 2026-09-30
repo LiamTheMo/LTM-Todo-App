@@ -17,7 +17,7 @@ Notification scheduling is derived from persisted reminder state and reconciled 
 Monthly edge dates; leap year; DST spring/fall; weekday selections; end after count/date; edit series; complete occurrence; missed occurrence; reminder reschedule/cancel; permission denied abstractions; restart reconciliation.
 
 ## Acceptance criteria
-No duplicate occurrences under normal/restart flows. Editing a due date correctly updates reminders. Recurrence history is inspectable. App remains useful with notifications denied.
+No duplicate occurrences under normal/restart flows. Editing a due date correctly updates reminders. Recurrence history is inspectable in the Dashboard's past-day timeline. App remains useful with notifications denied.
 
 ## Manual validation
 Real device notification delivery, snooze/actions, timezone change, device restart/relaunch, permission transitions.

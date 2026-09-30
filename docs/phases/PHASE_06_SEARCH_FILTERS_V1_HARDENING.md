@@ -5,7 +5,7 @@
 Finish v1 as a coherent daily-driver rather than a collection of features.
 
 ## Scope
-Global search; filter predicates for status/project/tag/priority/date; saved query groundwork; completion history; bulk completion/organization where safe; settings; data integrity checks; performance profiling; accessibility audit; crash/error handling; onboarding/empty states; local backup/export groundwork if low-risk.
+Global search; filter predicates for status/project/tag/priority/date; saved query groundwork; completion history; bulk completion/organization where safe; settings; data integrity checks; performance profiling; accessibility audit; crash/error handling; onboarding/empty states; local backup/export groundwork if low-risk. Completion history is browsed in the Dashboard's past dates; do not add a separate History navigation item.
 
 ## Search
 Search title and notes initially; tags/projects participate through structured filters. Results must explain active filters. Search must not silently hide overdue items because of stale indexes.

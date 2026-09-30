@@ -169,30 +169,71 @@ export function saveTask(data: Data, task: Task, reminderMinutes = ""): Data {
     ]
   };
 }
-export function dashboardDays(data: Data, start: string, length: number) {
-  const active = filterTasks(data, { completed: false });
+export type DashboardCompletion = { task: Task; completionId: string; completedAt: string };
+export function dashboardDays(data: Data, start: string, length: number, today = localDate(new Date())) {
+  const visible = filterTasks(data, {});
+  const visibleById = new Map(visible.map(task => [task.id, task]));
+  const active = visible.filter(task => !task.completedAt);
   const byId = new Map(active.map(task => [task.id, task]));
   const due = new Map<string, Task[]>();
   for (const task of active) {
-    if (!task.dueDate) continue;
+    if (!task.dueDate || task.dueDate < today) continue;
     const group = due.get(task.dueDate) ?? [];
     group.push(task);
     due.set(task.dueDate, group);
   }
-  const scheduled = new Map<string, { block: ScheduledBlock; task: Task }[]>();
+  const scheduled = new Map<string, { block: ScheduledBlock; task: Task; completed: boolean; completionId?: string }[]>();
+  const completionByBlockId = new Map<string, string>();
+  const completionByTaskId = new Map<string, string>();
+  for (const completion of data.completions) {
+    completionByTaskId.set(completion.taskId, completion.id);
+    for (const blockId of completion.clearedBlockIds ?? []) completionByBlockId.set(blockId, completion.id);
+  }
+  const clearedBlockIds = new Set(completionByBlockId.keys());
   for (const block of data.blocks) {
-    const task = byId.get(block.taskId);
-    if (block.deletedAt || !task) continue;
+    const task = visibleById.get(block.taskId);
+    if (!task) continue;
     const date = instantDay(block.startInstant, block.timeZone);
+    const completionId = completionByBlockId.get(block.id) ?? (task.completedAt ? completionByTaskId.get(task.id) : undefined);
+    const completed = Boolean(task.completedAt || completionId);
+    if (completed && date > today) continue;
+    if (date < today && !completed) continue;
+    if (block.deletedAt && !clearedBlockIds.has(block.id)) continue;
+    if (!completed && !byId.has(task.id)) continue;
     const group = scheduled.get(date) ?? [];
-    group.push({ block, task });
+    group.push({ block, task, completed, completionId });
     scheduled.set(date, group);
+  }
+
+  const completed = new Map<string, DashboardCompletion[]>();
+  const completionTaskIds = new Set<string>();
+  for (const completion of data.completions) {
+    const task = visibleById.get(completion.taskId);
+    const timestamp = new Date(completion.completedAt);
+    if (!task || !Number.isFinite(timestamp.getTime())) continue;
+    completionTaskIds.add(task.id);
+    const date = localDate(timestamp);
+    const group = completed.get(date) ?? [];
+    group.push({ task, completionId: completion.id, completedAt: completion.completedAt });
+    completed.set(date, group);
+  }
+  for (const task of visible) {
+    if (!task.completedAt || completionTaskIds.has(task.id)) continue;
+    const timestamp = new Date(task.completedAt);
+    if (!Number.isFinite(timestamp.getTime())) continue;
+    const group = completed.get(localDate(timestamp)) ?? [];
+    group.push({ task, completionId: "", completedAt: task.completedAt });
+    completed.set(localDate(timestamp), group);
   }
   const dates = Array.from({ length }, (_, index) => addDays(start, index));
   return dates.map(date => ({
     date,
     due: (due.get(date) ?? []).sort(taskOrder),
     scheduled: (scheduled.get(date) ?? []).sort((a, b) => a.block.startInstant.localeCompare(b.block.startInstant)),
+    completed: (completed.get(date) ?? []).filter(item =>
+      !(scheduled.get(date) ?? []).some(entry => entry.completed && entry.task.id === item.task.id &&
+        (!item.completionId || !entry.completionId || entry.completionId === item.completionId)))
+      .sort((a, b) => a.completedAt.localeCompare(b.completedAt) || taskOrder(a.task, b.task)),
   }));
 }
 export function overdueTasks(data: Data, today = localDate(new Date())): Task[] {
