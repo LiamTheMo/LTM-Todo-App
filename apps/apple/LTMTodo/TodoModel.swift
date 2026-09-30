@@ -27,6 +27,46 @@ struct TodoTask: Codable, Identifiable {
     var revision = 1
     var deletedAt: Date?
     var sortKey = Date().timeIntervalSince1970
+
+}
+
+extension TodoTask {
+    enum CodingKeys: String, CodingKey {
+        case id, title, notes, priority, projectID, sectionID, parentTaskID, tagIDs, dueDay, dueTime
+        case scheduledStart, scheduledEnd, frequency, interval, repeatAnchor, occurrenceCount
+        case repeatWeekdays, repeatUntil, repeatCount, reminderMinutes, completedAt, createdAt
+        case updatedAt, revision, deletedAt, sortKey
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        title = try values.decode(String.self, forKey: .title)
+        notes = try values.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        priority = try values.decodeIfPresent(Int.self, forKey: .priority) ?? 0
+        projectID = try values.decodeIfPresent(UUID.self, forKey: .projectID)
+        sectionID = try values.decodeIfPresent(UUID.self, forKey: .sectionID)
+        parentTaskID = try values.decodeIfPresent(UUID.self, forKey: .parentTaskID)
+        tagIDs = try values.decodeIfPresent([UUID].self, forKey: .tagIDs) ?? []
+        dueDay = try values.decodeIfPresent(String.self, forKey: .dueDay)
+        dueTime = try values.decodeIfPresent(String.self, forKey: .dueTime)
+        scheduledStart = try values.decodeIfPresent(Date.self, forKey: .scheduledStart)
+        scheduledEnd = try values.decodeIfPresent(Date.self, forKey: .scheduledEnd)
+        frequency = try values.decodeIfPresent(RepeatFrequency.self, forKey: .frequency) ?? .never
+        interval = try values.decodeIfPresent(Int.self, forKey: .interval) ?? 1
+        repeatAnchor = try values.decodeIfPresent(String.self, forKey: .repeatAnchor)
+        occurrenceCount = try values.decodeIfPresent(Int.self, forKey: .occurrenceCount) ?? 0
+        repeatWeekdays = try values.decodeIfPresent([Int].self, forKey: .repeatWeekdays)
+        repeatUntil = try values.decodeIfPresent(String.self, forKey: .repeatUntil)
+        repeatCount = try values.decodeIfPresent(Int.self, forKey: .repeatCount)
+        reminderMinutes = try values.decodeIfPresent(Int.self, forKey: .reminderMinutes)
+        completedAt = try values.decodeIfPresent(Date.self, forKey: .completedAt)
+        createdAt = try values.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        revision = try values.decodeIfPresent(Int.self, forKey: .revision) ?? 1
+        deletedAt = try values.decodeIfPresent(Date.self, forKey: .deletedAt)
+        sortKey = try values.decodeIfPresent(Double.self, forKey: .sortKey) ?? createdAt.timeIntervalSince1970
+    }
 }
 
 enum RepeatFrequency: String, Codable, CaseIterable, Identifiable {
@@ -43,6 +83,31 @@ struct TodoProject: Codable, Identifiable {
     var updatedAt = Date()
     var revision = 1
     var sortKey = Date().timeIntervalSince1970
+
+    init(id: UUID = UUID(), name: String, archivedAt: Date? = nil, deletedAt: Date? = nil,
+         createdAt: Date = Date(), updatedAt: Date? = nil, revision: Int = 1, sortKey: Double? = nil) {
+        self.id = id
+        self.name = name
+        self.archivedAt = archivedAt
+        self.deletedAt = deletedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
+        self.revision = revision
+        self.sortKey = sortKey ?? createdAt.timeIntervalSince1970
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, archivedAt, deletedAt, createdAt, updatedAt, revision, sortKey }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        archivedAt = try values.decodeIfPresent(Date.self, forKey: .archivedAt)
+        deletedAt = try values.decodeIfPresent(Date.self, forKey: .deletedAt)
+        createdAt = try values.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        revision = try values.decodeIfPresent(Int.self, forKey: .revision) ?? 1
+        sortKey = try values.decodeIfPresent(Double.self, forKey: .sortKey) ?? createdAt.timeIntervalSince1970
+    }
 }
 
 struct TodoTag: Codable, Identifiable {
@@ -52,6 +117,27 @@ struct TodoTag: Codable, Identifiable {
     var createdAt = Date()
     var updatedAt = Date()
     var revision = 1
+
+    init(id: UUID = UUID(), name: String, deletedAt: Date? = nil, createdAt: Date = Date(),
+         updatedAt: Date? = nil, revision: Int = 1) {
+        self.id = id
+        self.name = name
+        self.deletedAt = deletedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
+        self.revision = revision
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, deletedAt, createdAt, updatedAt, revision }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        deletedAt = try values.decodeIfPresent(Date.self, forKey: .deletedAt)
+        createdAt = try values.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        revision = try values.decodeIfPresent(Int.self, forKey: .revision) ?? 1
+    }
 }
 
 struct TodoSection: Codable, Identifiable {
@@ -63,6 +149,31 @@ struct TodoSection: Codable, Identifiable {
     var createdAt = Date()
     var updatedAt = Date()
     var revision = 1
+
+    init(id: UUID = UUID(), projectID: UUID, name: String, sortKey: Double? = nil, deletedAt: Date? = nil,
+         createdAt: Date = Date(), updatedAt: Date? = nil, revision: Int = 1) {
+        self.id = id
+        self.projectID = projectID
+        self.name = name
+        self.sortKey = sortKey ?? createdAt.timeIntervalSince1970
+        self.deletedAt = deletedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
+        self.revision = revision
+    }
+
+    enum CodingKeys: String, CodingKey { case id, projectID, name, sortKey, deletedAt, createdAt, updatedAt, revision }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        projectID = try values.decode(UUID.self, forKey: .projectID)
+        name = try values.decode(String.self, forKey: .name)
+        sortKey = try values.decodeIfPresent(Double.self, forKey: .sortKey) ?? Date().timeIntervalSince1970
+        deletedAt = try values.decodeIfPresent(Date.self, forKey: .deletedAt)
+        createdAt = try values.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        revision = try values.decodeIfPresent(Int.self, forKey: .revision) ?? 1
+    }
 }
 
 struct TodoCompletion: Codable, Identifiable {
@@ -72,6 +183,27 @@ struct TodoCompletion: Codable, Identifiable {
     var completedAt: Date
     var scheduledStart: Date?
     var scheduledEnd: Date?
+
+    init(id: UUID = UUID(), taskID: UUID, occurrenceDay: String? = nil, completedAt: Date,
+         scheduledStart: Date? = nil, scheduledEnd: Date? = nil) {
+        self.id = id
+        self.taskID = taskID
+        self.occurrenceDay = occurrenceDay
+        self.completedAt = completedAt
+        self.scheduledStart = scheduledStart
+        self.scheduledEnd = scheduledEnd
+    }
+
+    enum CodingKeys: String, CodingKey { case id, taskID, occurrenceDay, completedAt, scheduledStart, scheduledEnd }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        taskID = try values.decode(UUID.self, forKey: .taskID)
+        occurrenceDay = try values.decodeIfPresent(String.self, forKey: .occurrenceDay)
+        completedAt = try values.decode(Date.self, forKey: .completedAt)
+        scheduledStart = try values.decodeIfPresent(Date.self, forKey: .scheduledStart)
+        scheduledEnd = try values.decodeIfPresent(Date.self, forKey: .scheduledEnd)
+    }
 }
 
 struct TodoData: Codable {
@@ -92,6 +224,30 @@ struct TodoData: Codable {
         tags = try values.decodeIfPresent([TodoTag].self, forKey: .tags) ?? []
         sections = try values.decodeIfPresent([TodoSection].self, forKey: .sections) ?? []
         completions = try values.decodeIfPresent([TodoCompletion].self, forKey: .completions) ?? []
+    }
+}
+
+enum TodoDataFile {
+    static func decode(_ data: Data) throws -> TodoData {
+        let decoded = try JSONDecoder().decode(TodoData.self, from: data)
+        guard decoded.schemaVersion == 1 else {
+            throw TodoDataFileError.unsupportedSchemaVersion(decoded.schemaVersion)
+        }
+        return decoded
+    }
+
+    static func load(from url: URL) throws -> TodoData {
+        try decode(Data(contentsOf: url))
+    }
+}
+
+enum TodoDataFileError: LocalizedError {
+    case unsupportedSchemaVersion(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedSchemaVersion(let version): "Unsupported task data version: \(version)"
+        }
     }
 }
 

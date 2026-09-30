@@ -159,13 +159,15 @@ struct TaskListView: View {
                 }
                 if let projectID {
                     Section("Project tasks") {
-                        ForEach(visible.filter { $0.sectionID == nil }) { task in TaskRow(task: task) { editing = task } }
+                        ForEach(visible.filter { $0.sectionID == nil }) { task in
+                            TaskRow(task: task, showReorderControls: true) { editing = task }
+                        }
                     }
                     ForEach(store.data.sections.filter { $0.projectID == projectID && $0.deletedAt == nil }
                         .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }) { section in
                         Section(section.name) {
                             ForEach(visible.filter { $0.sectionID == section.id }) { task in
-                                TaskRow(task: task) { editing = task }
+                                TaskRow(task: task, showReorderControls: true) { editing = task }
                             }
                             HStack {
                                 Button { store.moveSection(section.id, by: -1) } label: { Label("Move up", systemImage: "arrow.up") }
@@ -217,6 +219,7 @@ struct TaskRow: View {
     let task: TodoTask
     var completion: TodoCompletion? = nil
     var subtitle: String? = nil
+    var showReorderControls = false
     let edit: () -> Void
 
     private var isCompleted: Bool { completion != nil || task.completedAt != nil }
@@ -252,6 +255,19 @@ struct TaskRow: View {
                 .padding(.leading, task.parentTaskID == nil ? 0 : 16)
             }
             .buttonStyle(.plain)
+            if showReorderControls {
+                VStack(spacing: 4) {
+                    Button { store.moveTask(task.id, by: -1) } label: {
+                        Image(systemName: "arrow.up")
+                    }
+                    .accessibilityLabel("Move task \(task.title) up")
+                    Button { store.moveTask(task.id, by: 1) } label: {
+                        Image(systemName: "arrow.down")
+                    }
+                    .accessibilityLabel("Move task \(task.title) down")
+                }
+                .buttonStyle(.borderless)
+            }
         }
         .padding(.vertical, 4)
         .opacity(isCompleted ? 0.72 : 1)
