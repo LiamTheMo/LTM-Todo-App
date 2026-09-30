@@ -33,7 +33,7 @@ targets:
         excludes:
           - Fixtures/**
     resources:
-      - path: LTMTodoTests/Fixtures
+      - path: LTMTodoTests/Fixtures/legacy-v1.json
     dependencies:
       - target: LTMTodo
     settings:

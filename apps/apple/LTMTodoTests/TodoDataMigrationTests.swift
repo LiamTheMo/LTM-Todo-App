@@ -3,7 +3,10 @@ import XCTest
 
 final class TodoDataMigrationTests: XCTestCase {
     func testLegacyV1SnapshotFillsNewTaskFieldsAndKeepsIdentity() throws {
-        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "legacy-v1", withExtension: "json"))
+        let bundle = Bundle(for: Self.self)
+        let fixtureURL = bundle.url(forResource: "legacy-v1", withExtension: "json")
+            ?? bundle.url(forResource: "legacy-v1", withExtension: "json", subdirectory: "Fixtures")
+        let fixture = try XCTUnwrap(fixtureURL)
         let migrated = try TodoDataFile.load(from: fixture)
 
         XCTAssertEqual(migrated.schemaVersion, 1)
