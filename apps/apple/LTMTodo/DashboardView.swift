@@ -153,13 +153,13 @@ struct DashboardView: View {
             HStack {
                 Text("OVERDUE")
                     .font(.caption.bold())
-                    .foregroundStyle(Color(red: 0.72, green: 0.29, blue: 0.21))
+                    .foregroundStyle(LTMTheme.overdue)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
-            .background(Color(red: 1.0, green: 0.95, blue: 0.93))
+            .background(LTMTheme.overdueSurface)
             if overdueTasks.isEmpty {
                 Text("Nothing overdue")
                     .font(.caption)
@@ -178,7 +178,7 @@ struct DashboardView: View {
         }
         .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(red: 0.90, green: 0.77, blue: 0.72)))
+        .overlay(RoundedRectangle(cornerRadius: LTMTheme.Radius.card).stroke(LTMTheme.overdueBorder))
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 8)

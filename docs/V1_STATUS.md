@@ -20,21 +20,22 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 
 ## Requires Manual Validation
 
-- Launch and navigate on an iPhone and iPad; inspect Dynamic Type, VoiceOver, pointer/keyboard, gestures, reduced motion, focus and layout.
-- Add the deployed web client to an iPhone Home Screen from Safari with “Open as Web App” enabled; verify its icon, title and standalone launch.
-- Test airplane mode and force-quit/relaunch with edits pending; verify no task loss.
-- Verify native notification permission, delivery, edits, completion, denial and time-zone changes on a real device.
-- Exercise Dashboard around local midnight and DST changes on device. Check independent pane scrolling, long scroll in both directions, past-day task creation and Overdue placement, Return to Today and edits without position loss.
-- Test deployed web storage across reload, browser privacy modes and realistic task counts. Browser state is per-device and does not sync yet.
+- User reports all previously listed manual checks passed except notification delivery and browser multi-tab storage-failure behavior. This is recorded as user-reported validation, not independently re-run here.
+- Re-test browser notification permission/delivery after enabling the foreground reminder path; also verify denied permission and browser/tab close behavior.
+- Re-test multi-tab storage conflict and storage failure after this update. The app must preserve the unsaved-backup recovery message and must not silently overwrite another tab.
+- Re-test newly added saved views, bulk completion, and subtask constraints on web; verify parity for the Apple subtask constraint.
+- Re-test changed Dashboard and editor UI on iPhone and iPad after the new build. Earlier user-reported UI checks do not cover these code changes.
+- User-reported pass list includes Home Screen icon/install, airplane/offline and relaunch, Dashboard/date behavior, accessibility/layout/navigation, and deployed web persistence, excluding the two explicit exceptions above.
 
 ## Incomplete / Needs Work
 
-- Phase 1: design tokens and Apple simulator smoke tests need formal coverage.
-- Phase 2: browser migration and invalid-snapshot tests, optimistic-write serialization, cross-tab conflict detection and native backup export are present. Real browser multi-tab/storage failure testing, native migration/recovery tests and offline force-quit checks remain.
-- Phase 3: the Dashboard opens anchored at Today with a bounded 84-day date window and a seven-calendar-day history limit (Today plus six prior days). It shifts by 28-day overlaps, keeps navigation/Overdue in place, shows recent overdue tasks in both Overdue and their original Due sections, and removes expired task/event history automatically. Scroll preservation, sticky headers, rounded card edges, and independent scrolling still need long-scroll device/browser validation. Richer locale/calendar fixtures remain.
-- Phase 4: project/section ordering and archive visibility/recovery have cross-client controls, with normal moves changing only one sort key. Subtask depth and move rules, drag/keyboard/VoiceOver reordering, and broader destructive-action/restart tests still need parity and validation.
-- Phase 5: `v0.03` work adds weekday and end-condition controls, date recurrence checks and serialized native notification reconciliation. Device delivery and a full notification horizon strategy remain unverified. Web reminders are persisted but web notification delivery is not implemented.
-- Phase 6: combined master-list search and filters are implemented. Saved-query groundwork, accessibility/performance audits, integrity checks, bulk operations, full regression coverage and documented device results remain.
+- Phase 1: initial web and Apple semantic design tokens now exist. Automated Apple simulator startup/navigation smoke tests and a full token/component accessibility audit remain.
+- Phase 2: browser legacy-snapshot migration, corrupt-snapshot rejection, relationship integrity, generation conflicts and native write rollback/backup are implemented. Real browser multi-tab/storage failure testing and native migration/recovery tests remain.
+- Phase 3: the Dashboard opens anchored at Today with a bounded 84-day date window and a seven-calendar-day history limit (Today plus six prior days). It shifts by 28-day overlaps, keeps navigation/Overdue in place, shows recent overdue tasks in both Overdue and their original Due sections, and removes expired task/event history automatically. Scroll preservation, sticky headers, rounded card edges, independent scrolling, date transitions and past-day editing are user-reported as manually tested and passed. Richer locale/calendar fixtures remain.
+- Phase 4: project/section ordering and archive visibility/recovery have cross-client controls. Both task save paths now enforce root-plus-one-subtask depth and same-project parentage. Drag/keyboard/VoiceOver reorder parity and destructive-action/restart tests remain.
+- Phase 5: recurrence and serialized native notification reconciliation are implemented. Web now schedules reminders with the Notification API while the app is open, for a rolling seven-day window. A closed browser cannot run local timers; reliable background delivery requires a push service and is outside the local-only v1 architecture. Native and web delivery still need manual validation.
+- Phase 6: combined search/filters, saved views, bulk completion, storage relationship checks, and performance regression coverage are implemented. Full accessibility/security audits, Apple UI smoke tests, native migration fixtures and documented device retesting remain.
+- Deployment process: the main-branch ruleset is active, but its required status-check list is empty. Repository CI exposes `swift-core`, `apple`, `web`, and `docs`; the ruleset must require these checks before main merges are actually gated. The connected GitHub integration is read-only for ruleset settings, so this administrative setting remains to be updated in GitHub.
 
 ## v1.00 release gate
 
@@ -42,3 +43,7 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 2. Run the entire CI/review loop with no unresolved findings and validate the destination version branch.
 3. Complete the manual iPhone/iPad checklist in Phase 6. Do not label the release complete solely from automated builds.
 4. Create the permanent `v1.00` branch from the validated final `v0.xx` checkpoint, then merge `v1.00` into `main` for deployment.
+
+## User-reported manual validation (2026-09-30)
+
+All earlier manual checks were reported as passed except notification delivery and browser multi-tab storage-failure behavior. Changes made in this release-hardening pass are not covered by those earlier checks; the targeted re-tests above remain required before declaring v1.00 complete.

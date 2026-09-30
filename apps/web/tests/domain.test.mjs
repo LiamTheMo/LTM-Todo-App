@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
+import { addDays, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pendingReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
@@ -196,6 +196,36 @@ test("parent completion waits for unfinished subtasks", () => {
   assert.equal(completeTask(data, "parent").completions.length, 0);
   const childDone = completeTask(data, "child");
   assert.equal(completeTask(childDone, "parent").completions.length, 2);
+});
+test("task saves enforce one-level subtasks within the same project", () => {
+  const data = emptyData();
+  data.tasks.push(task("parent", undefined, { projectId: "p" }), task("child", undefined, { projectId: "p", parentTaskId: "parent" }));
+  assert.equal(saveTask(data, task("grandchild", undefined, { projectId: "p", parentTaskId: "child" })), data);
+  assert.equal(saveTask(data, task("wrong-project", undefined, { projectId: "other", parentTaskId: "parent" })), data);
+  assert.equal(saveTask(data, { ...data.tasks[0], parentTaskId: "child" }), data);
+  const valid = saveTask(data, task("sibling", undefined, { projectId: "p", parentTaskId: "parent" }));
+  assert.equal(valid.tasks.at(-1).parentTaskId, "parent");
+});
+test("bulk completion uses normal parent/subtask rules in one domain operation", () => {
+  const data = emptyData();
+  data.tasks.push(task("parent", undefined), task("child", undefined, { parentTaskId: "parent" }));
+  const done = bulkCompleteTasks(data, ["parent", "child", "parent"], new Date("2026-10-01T12:00:00Z"));
+  assert.equal(done.completions.length, 2);
+  assert.ok(done.tasks.every(item => item.completedAt));
+});
+test("web reminder triggers are bounded, ordered, and ignore completed or disabled items", () => {
+  const data = emptyData();
+  const due = task("due", "2026-10-01", { dueTime: "13:00", dueTimeZone: "UTC" });
+  const complete = task("complete", "2026-10-01", { dueTime: "13:00", completedAt: "2026-09-30T12:00:00Z" });
+  data.tasks.push(due, complete);
+  data.reminders.push(
+    { id: "a", taskId: "due", minutesBefore: 15, enabled: true, createdAt: "", updatedAt: "", revision: 1 },
+    { id: "b", taskId: "complete", minutesBefore: 0, enabled: true, createdAt: "", updatedAt: "", revision: 1 },
+    { id: "c", taskId: "due", minutesBefore: 0, enabled: false, createdAt: "", updatedAt: "", revision: 1 }
+  );
+  const results = pendingReminderTriggers(data, Date.parse("2026-10-01T12:00:00Z"));
+  assert.deepEqual(results.map(item => item.reminder.id), ["a"]);
+  assert.equal(results[0].triggerAt, Date.parse("2026-10-01T12:45:00Z"));
 });
 test("reorder retains identity and section deletion moves tasks to project root", () => {
   const data = emptyData();
