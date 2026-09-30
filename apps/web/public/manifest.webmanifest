@@ -1,0 +1,31 @@
+{
+  "id": "/",
+  "name": "LTM Todo",
+  "short_name": "LTM Todo",
+  "description": "Personal tasks and planning, without artificial limits.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f4ef",
+  "theme_color": "#f7f4ef",
+  "icons": [
+    {
+      "src": "/icons/ltm-todo-192-apple.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/ltm-todo-512-apple.webp",
+      "sizes": "512x512",
+      "type": "image/webp",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

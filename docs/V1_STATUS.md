@@ -21,6 +21,7 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 ## Requires Manual Validation
 
 - Launch and navigate on an iPhone and iPad; inspect Dynamic Type, VoiceOver, pointer/keyboard, gestures, reduced motion, focus and layout.
+- Add the deployed web client to an iPhone Home Screen from Safari with “Open as Web App” enabled; verify its icon, title and standalone launch.
 - Test airplane mode and force-quit/relaunch with edits pending; verify no task loss.
 - Verify native notification permission, delivery, edits, completion, denial and time-zone changes on a real device.
 - Exercise Dashboard around local midnight and DST changes on device. Check independent pane scrolling, long scroll in both directions, past-day task creation and Overdue placement, Return to Today and edits without position loss.

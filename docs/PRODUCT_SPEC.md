@@ -24,6 +24,8 @@ Dashboard is the default home surface. It opens at Today with a persistent Overd
 ## v1 requirements
 Unlimited local tasks/projects/sections/tags/subtasks/reminders/recurrence rules; Inbox; Dashboard; task CRUD; priorities; notes; due date/time; scheduled blocks foundation; recurrence; notifications; search; filters; completion history in the date stream; offline persistence; accessibility; responsive iPhone/iPad layouts.
 
+The web client exposes the branded site icon in browser/search surfaces and supports adding the site to an iPhone Home Screen as a standalone web app.
+
 ## v2 requirements
 First-party calendar; day/week/month/agenda; event CRUD; all-day/timed events; multiple local calendars/colors; drag/drop scheduling; time blocking; routines; templates; Kanban; saved smart views; bulk editing; advanced planning.
 
