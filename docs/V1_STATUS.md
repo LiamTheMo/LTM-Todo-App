@@ -16,7 +16,7 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 - Basic task editors no longer expose generic work start/end fields. Existing ScheduledBlock data is preserved; calendar-first scheduling remains in the later Phase 8 scope.
 - Web domain tests cover date boundaries, anchored monthly recurrence, completion history and past Dashboard bucketing, parent/subtask behavior, section deletion and stable reordering.
 - The web app has Inbox capture, Dashboard, task editor, projects/sections/tags and search/filters. The Apple app has local capture, Dashboard, task editor, projects, tags and notification scheduling. Completion records remain available from the Dashboard date stream; there is no separate History navigation.
-- GitHub CI runs on major-branch pushes only and covers Swift core tests, Apple simulator build, web tests/typecheck/lint/Next build and documentation. Temporary-branch PR validation runs locally using the same checks; branch flow is checked with `scripts/check-branch-flow.sh`. Cloudflare deploys only after a merged version PR into `main`.
+- GitHub CI runs only on `vX.XX` version-branch pushes and covers Swift core tests, Apple simulator build, web tests/typecheck/lint/Vinext Worker build and documentation. Temporary-branch PR validation runs locally using the same checks; branch flow is checked with `scripts/check-branch-flow.sh`. Cloudflare Workers Builds deploys from `main` only, with preview builds disabled.
 
 ## Requires Manual Validation
 

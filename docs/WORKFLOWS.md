@@ -16,10 +16,10 @@ Never develop directly on permanent branches. Never delete permanent version bra
 7. Revalidate.
 8. Repeat until clean or manually blocked.
 
-GitHub App CI and documentation checks run only after pushes to `main` or `vX.XX`; pull requests and temporary-branch pushes do not start CI workflows. After merging a temporary PR into its version branch, wait for the version-branch CI run to pass before promoting that version to `main`. Production deployment remains limited to a merged same-repository `vX.XX -> main` PR.
+GitHub App CI and documentation checks run only after pushes to `vX.XX` version branches; pushes to `main`, pull requests and temporary-branch pushes do not start GitHub Actions CI. After merging a temporary PR into its version branch, wait for the version-branch CI run to pass before promoting that version to `main`. The `main` ruleset must require a PR and all four successful CI job checks from the latest version-branch commit. Cloudflare Workers Builds deploys from `main` only, with preview builds disabled.
 
 ## Pull requests
-Temporary -> originating version branch. PR body states scope, acceptance criteria, local validation, manual validation and known limitations. After merge, wait for the version-branch CI result. When a version is ready for deployed/manual testing, merge version -> main through a PR. The production workflow responds only to a merged `vX.XX -> main` PR and verifies the merge commit is still current on `main` before deploying.
+Temporary -> originating version branch. PR body states scope, acceptance criteria, local validation, manual validation and known limitations. After merge, wait for the version-branch CI result. When a version is ready for deployed/manual testing, merge version -> main through a PR. The `main` ruleset blocks merges until all required checks pass. Cloudflare Workers Builds deploys the resulting `main` commit.
 
 ## Documentation
 Behavioral changes update relevant specs in the same PR. Architecture changes add/update ADRs. Phase status must not be marked complete before acceptance criteria pass.
