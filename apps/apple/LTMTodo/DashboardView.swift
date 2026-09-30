@@ -31,6 +31,15 @@ struct DashboardView: View {
     private var dates: [String] {
         (windowStart..<(windowStart + windowLength)).compactMap { DayMath.add($0, to: today) }
     }
+    private func overdueDueSubtitle(for task: TodoTask) -> String {
+        guard let dueDay = task.dueDay,
+              let dueDate = DayMath.date(dueDay),
+              let todayDate = DayMath.date(today) else { return "Overdue" }
+        let daysAgo = Calendar.current.dateComponents([.day], from: dueDate, to: todayDate).day ?? 0
+        let unit = daysAgo == 1 ? "day" : "days"
+        return daysAgo > 0 ? "Due \(daysAgo) \(unit) ago" : "Overdue"
+    }
+
     private var overdueTasks: [TodoTask] {
         store.activeTasks.filter { $0.dueDay.map { $0 < today && $0 >= DashboardRetention.earliestDay(today: today) } ?? false }
             .sorted { left, right in
@@ -161,7 +170,7 @@ struct DashboardView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(overdueTasks) { task in TaskRow(task: task) { editing = task } }
+                        ForEach(overdueTasks) { task in TaskRow(task: task, completion: nil, subtitle: overdueDueSubtitle(for: task)) { editing = task } }
                     }
                 }
                 .frame(maxHeight: 200)

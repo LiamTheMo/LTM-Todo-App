@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
 import { addDays, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, localDate, newEntity, overdueTasks, parseLocalDate, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
 import { readData, writeData } from "../lib/storage";
+import { overdueDueCaption } from "../lib/date-labels";
 
 type View = "Dashboard" | "Inbox" | "Tasks" | "Projects" | "Settings";
 const views: View[] = ["Dashboard", "Inbox", "Tasks", "Projects", "Settings"];
@@ -172,7 +173,7 @@ export default function Home() {
       {!ready ? <p>Opening your local tasks…</p> : <>
         <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Inbox" ? "Capture now. Organize when you're ready." : ""}</p></div><button className="add" onClick={() => setEditing("new")}>+ Add task</button></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
-          <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, `Due ${dateLabel(task.dueDate!)}`)) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
+          <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today))) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
           <div className="stream dayScroller" ref={dayScrollRef} onScroll={handleDayScroll} role="region" aria-label="Days">
             <button className="loadMore" onClick={() => shiftDays(-1)} disabled={visibleDayStart <= earliestDay}>Earlier days ↑</button>
             {dashboard.map(day => {
