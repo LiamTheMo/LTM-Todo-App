@@ -4,7 +4,7 @@
 The Dashboard answers: **What is happening and what is due, day by day?** It replaces the need for separate Today and Upcoming top-level pages.
 
 ## Structure
-A vertically scrolling date stream that starts at Today and proceeds into the future. Unfinished tasks with deadlines before Today appear in a separate Overdue section above it. Previous dates are not repeated in the Dashboard; completion history lives in History. Each date section has:
+A vertically scrolling date stream that starts at Today and proceeds into the future. A separate Overdue section always appears above it; unfinished tasks with deadlines before Today appear there, and an empty section says “Nothing overdue”. Previous dates are not repeated in the Dashboard; completion history lives in History. Each date section has:
 1. Sticky date header: relative label when useful + formatted date.
 2. Scheduled area: events and scheduled task blocks in chronological order.
 3. Due area: incomplete tasks whose deadline falls on the date.
@@ -20,6 +20,7 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 - Empty days collapse to a compact row; allow preference to hide entirely later.
 - Overdue means an unfinished task with a due date before the current local date. A scheduled event or work block without an expired task deadline is never overdue.
 - Overdue tasks appear once in their own section above Today. They are not repeated in an old date section.
+- Keep the Overdue section visible when empty and show “Nothing overdue”. Style it with the Dashboard's warm neutral cards and orange-brown accent colors.
 - Completion is optimistic/local and immediately reflected.
 - Tapping an item opens detail without losing scroll position.
 - Quick add defaults intelligently to current dashboard context but must make the assigned date obvious.
