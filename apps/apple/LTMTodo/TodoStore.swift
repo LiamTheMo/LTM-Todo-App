@@ -6,6 +6,7 @@ import UserNotifications
 final class TodoStore: ObservableObject {
     @Published private(set) var data = TodoData()
     @Published private(set) var errorMessage: String?
+    @Published private(set) var localToday = DayMath.day(Date())
     private let url: URL
     private var savedData = TodoData()
     private var notificationWork: Task<Void, Never>?
@@ -25,6 +26,7 @@ final class TodoStore: ObservableObject {
         } catch {
             errorMessage = "Saved tasks could not be opened: \(error.localizedDescription)"
         }
+        if errorMessage == nil && pruneExpiredHistory() { persist() }
         refreshNotifications()
     }
 
@@ -45,6 +47,7 @@ final class TodoStore: ObservableObject {
         guard errorMessage == nil else { return }
         var updated = task
         guard !updated.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if let dueDay = updated.dueDay, dueDay < DashboardRetention.earliestDay() { return }
         updated.title = updated.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if let index = data.tasks.firstIndex(where: { $0.id == task.id }) {
             let moved = data.tasks[index].projectID != updated.projectID || data.tasks[index].sectionID != updated.sectionID
@@ -260,6 +263,7 @@ final class TodoStore: ObservableObject {
 
     private func persist() {
         guard errorMessage == nil else { return }
+        _ = pruneExpiredHistory()
         do {
             try JSONEncoder().encode(data).write(to: url, options: .atomic)
             savedData = data
@@ -268,6 +272,63 @@ final class TodoStore: ObservableObject {
             data = savedData
             errorMessage = "Changes could not be saved: \(error.localizedDescription)"
         }
+    }
+
+    func expireOldHistory() {
+        guard errorMessage == nil else { return }
+        let today = DayMath.day(Date())
+        let dayChanged = localToday != today
+        if dayChanged { localToday = today }
+        if pruneExpiredHistory(today: today) { persist() }
+        else if dayChanged { refreshNotifications() }
+    }
+
+    @discardableResult
+    private func pruneExpiredHistory(today: String = DayMath.day(Date())) -> Bool {
+        let cutoff = DashboardRetention.earliestDay(today: today)
+        let expiredTaskIDs = Set(data.tasks.filter { task in
+            if let dueDay = task.dueDay, dueDay < cutoff { return true }
+            if let deletedAt = task.deletedAt, DayMath.day(deletedAt) < cutoff { return true }
+            if task.dueDay == nil, let completedAt = task.completedAt {
+                return DayMath.day(completedAt) < cutoff
+            }
+            return false
+        }.map(\.id))
+        var changed = !expiredTaskIDs.isEmpty
+        let now = Date()
+        if !expiredTaskIDs.isEmpty {
+            data.tasks.removeAll { expiredTaskIDs.contains($0.id) }
+            for index in data.tasks.indices where data.tasks[index].parentTaskID.map(expiredTaskIDs.contains) == true {
+                data.tasks[index].parentTaskID = nil
+                data.tasks[index].updatedAt = now
+                data.tasks[index].revision += 1
+                changed = true
+            }
+        }
+        for index in data.tasks.indices {
+            if let start = data.tasks[index].scheduledStart, DayMath.day(start) < cutoff {
+                data.tasks[index].scheduledStart = nil
+                data.tasks[index].scheduledEnd = nil
+                data.tasks[index].updatedAt = now
+                data.tasks[index].revision += 1
+                changed = true
+            }
+        }
+        let oldCompletionCount = data.completions.count
+        data.completions.removeAll { completion in
+            if expiredTaskIDs.contains(completion.taskID) { return true }
+            let historyDay = completion.occurrenceDay ?? DayMath.day(completion.completedAt)
+            return historyDay < cutoff
+        }
+        if data.completions.count != oldCompletionCount { changed = true }
+        for index in data.completions.indices {
+            if let start = data.completions[index].scheduledStart, DayMath.day(start) < cutoff {
+                data.completions[index].scheduledStart = nil
+                data.completions[index].scheduledEnd = nil
+                changed = true
+            }
+        }
+        return changed
     }
 
     func refreshNotifications() {

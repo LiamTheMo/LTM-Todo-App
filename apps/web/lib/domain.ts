@@ -65,6 +65,9 @@ export const addDays = (value: string, days: number): string => {
   date.setDate(date.getDate() + days);
   return localDate(date);
 };
+export const historyDays = 7;
+export const historyStart = (today = localDate(new Date())) => addDays(today, 1 - historyDays);
+const isInRetainedHistory = (day: string, today: string) => day >= historyStart(today);
 export const instantDay = (instant: string, timeZone: string): string => {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
     .formatToParts(new Date(instant));
@@ -147,7 +150,8 @@ export function undoCompletion(data: Data, completionId: string): Data {
     } : task)
   };
 }
-export function saveTask(data: Data, task: Task, reminderMinutes = ""): Data {
+export function saveTask(data: Data, task: Task, reminderMinutes = "", today = localDate(new Date())): Data {
+  if (task.dueDate && !isInRetainedHistory(task.dueDate, today)) return data;
   const stamp = new Date().toISOString();
   const oldTask = data.tasks.find(item => item.id === task.id);
   const currentReminder = data.reminders.find(reminder => reminder.taskId === task.id && !reminder.deletedAt);
@@ -177,7 +181,7 @@ export function dashboardDays(data: Data, start: string, length: number, today =
   const byId = new Map(active.map(task => [task.id, task]));
   const due = new Map<string, Task[]>();
   for (const task of active) {
-    if (!task.dueDate || task.dueDate < today) continue;
+    if (!task.dueDate || !isInRetainedHistory(task.dueDate, today)) continue;
     const group = due.get(task.dueDate) ?? [];
     group.push(task);
     due.set(task.dueDate, group);
@@ -193,7 +197,10 @@ export function dashboardDays(data: Data, start: string, length: number, today =
   for (const block of data.blocks) {
     const task = visibleById.get(block.taskId);
     if (!task) continue;
-    const date = instantDay(block.startInstant, block.timeZone);
+    let date: string;
+    try { date = instantDay(block.startInstant, block.timeZone); }
+    catch { continue; }
+    if (!isInRetainedHistory(date, today)) continue;
     const completionId = completionByBlockId.get(block.id) ?? (task.completedAt ? completionByTaskId.get(task.id) : undefined);
     const completed = Boolean(task.completedAt || completionId);
     if (completed && date > today) continue;
@@ -213,6 +220,7 @@ export function dashboardDays(data: Data, start: string, length: number, today =
     if (!task || !Number.isFinite(timestamp.getTime())) continue;
     completionTaskIds.add(task.id);
     const date = completion.occurrenceDate ?? localDate(timestamp);
+    if (!isInRetainedHistory(date, today)) continue;
     const group = completed.get(date) ?? [];
     group.push({ task, completionId: completion.id, completedAt: completion.completedAt });
     completed.set(date, group);
@@ -222,6 +230,7 @@ export function dashboardDays(data: Data, start: string, length: number, today =
     const timestamp = new Date(task.completedAt);
     if (!Number.isFinite(timestamp.getTime())) continue;
     const date = task.dueDate ?? localDate(timestamp);
+    if (!isInRetainedHistory(date, today)) continue;
     const group = completed.get(date) ?? [];
     group.push({ task, completionId: "", completedAt: task.completedAt });
     completed.set(date, group);
@@ -239,8 +248,61 @@ export function dashboardDays(data: Data, start: string, length: number, today =
 }
 export function overdueTasks(data: Data, today = localDate(new Date())): Task[] {
   return filterTasks(data, { completed: false })
-    .filter(task => task.dueDate !== undefined && task.dueDate < today)
+    .filter(task => task.dueDate !== undefined && task.dueDate < today && isInRetainedHistory(task.dueDate, today))
     .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || taskOrder(a, b));
+}
+
+/** Permanently remove task history older than the rolling seven calendar days kept on the Dashboard. */
+export function pruneExpiredHistory(data: Data, today = localDate(new Date())): Data {
+  const cutoff = historyStart(today);
+  const expiredTaskIds = new Set(data.tasks.filter(task => {
+    if (task.dueDate && task.dueDate < cutoff) return true;
+    if (task.deletedAt && localDate(new Date(task.deletedAt)) < cutoff) return true;
+    if (!task.dueDate && task.completedAt) {
+      const completedDay = localDate(new Date(task.completedAt));
+      return completedDay < cutoff;
+    }
+    return false;
+  }).map(task => task.id));
+  const existingTaskIds = new Set(data.tasks.filter(task => !expiredTaskIds.has(task.id)).map(task => task.id));
+  let changed = expiredTaskIds.size > 0;
+  const stamp = new Date().toISOString();
+  let detachedChild = false;
+  const tasks = data.tasks.filter(task => !expiredTaskIds.has(task.id)).map(task => {
+    const detached = task.parentTaskId && expiredTaskIds.has(task.parentTaskId);
+    if (detached) detachedChild = true;
+    return detached ? { ...task, parentTaskId: undefined, updatedAt: stamp, revision: task.revision + 1 } : task;
+  });
+  if (detachedChild) changed = true;
+
+  const blocks = data.blocks.filter(block => {
+    if (!existingTaskIds.has(block.taskId)) return false;
+    if (block.deletedAt && localDate(new Date(block.deletedAt)) < cutoff) return false;
+    try { return instantDay(block.startInstant, block.timeZone) >= cutoff; }
+    catch { return true; }
+  });
+  if (blocks.length !== data.blocks.length) changed = true;
+
+  const reminders = data.reminders.filter(reminder => existingTaskIds.has(reminder.taskId) &&
+    !(reminder.deletedAt && localDate(new Date(reminder.deletedAt)) < cutoff));
+  if (reminders.length !== data.reminders.length) changed = true;
+
+  const completions = data.completions.filter(completion => {
+    if (!existingTaskIds.has(completion.taskId)) return false;
+    const completionDay = completion.occurrenceDate ?? localDate(new Date(completion.completedAt));
+    return completionDay >= cutoff;
+  });
+  if (completions.length !== data.completions.length) changed = true;
+  const retainedBlockIds = new Set(blocks.map(block => block.id));
+  const compactedCompletions = completions.map(completion => {
+    if (!completion.clearedBlockIds) return completion;
+    const clearedBlockIds = completion.clearedBlockIds.filter(id => retainedBlockIds.has(id));
+    if (clearedBlockIds.length === completion.clearedBlockIds.length) return completion;
+    changed = true;
+    return { ...completion, clearedBlockIds };
+  });
+
+  return changed ? { ...data, tasks, blocks, reminders, completions: compactedCompletions } : data;
 }
 export const taskOrder = (a: Task, b: Task): number =>
   a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
@@ -325,7 +387,7 @@ export function filterTasks(data: Data, filter: TaskFilter): Task[] {
     (!filter.priority || task.priority === filter.priority) &&
     (!filter.dateScope || (filter.dateScope === "undated" ? !task.dueDate :
       Boolean(task.dueDate && (filter.dateScope === "today" ? task.dueDate === today :
-        filter.dateScope === "overdue" ? task.dueDate < today : task.dueDate > today)))) &&
+        filter.dateScope === "overdue" ? task.dueDate < today && isInRetainedHistory(task.dueDate, today) : task.dueDate > today)))) &&
     (!query || `${task.title} ${task.notes}`.toLocaleLowerCase().includes(query))
   ).sort(taskOrder);
 }

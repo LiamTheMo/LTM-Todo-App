@@ -14,6 +14,7 @@ struct TaskEditorView: View {
     @State private var hasRepeatCount: Bool
     @State private var repeatCount: Int
     private let originalDueDay: String?
+    private var earliestDueDate: Date { DayMath.date(DashboardRetention.earliestDay()) ?? Calendar.current.startOfDay(for: Date()) }
 
     init(task: TodoTask) {
         originalDueDay = task.dueDay
@@ -87,7 +88,7 @@ struct TaskEditorView: View {
                 Section("Deadline") {
                     Toggle("Due date", isOn: $hasDue)
                     if hasDue {
-                        DatePicker("Date", selection: $dueDate, displayedComponents: .date)
+                        DatePicker("Date", selection: $dueDate, in: earliestDueDate..., displayedComponents: .date)
                         Toggle("Due time", isOn: $hasTime)
                         if hasTime {
                             DatePicker("Time", selection: $dueTime, displayedComponents: .hourAndMinute)
@@ -149,7 +150,8 @@ struct TaskEditorView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
                         .disabled(task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                                  (task.frequency != .never && !hasDue))
+                                  (task.frequency != .never && !hasDue) ||
+                                  (hasDue && DayMath.day(dueDate) < DashboardRetention.earliestDay()))
                         .accessibilityIdentifier("save-task")
                 }
             }

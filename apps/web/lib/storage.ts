@@ -1,4 +1,4 @@
-import { emptyData, type Data } from "./domain.ts";
+import { emptyData, localDate, pruneExpiredHistory, type Data } from "./domain.ts";
 
 const DB_NAME = "ltm-todo";
 const STORE = "state";
@@ -56,17 +56,32 @@ function openDatabase(): Promise<IDBDatabase> {
     request.onerror = () => reject(request.error);
   });
 }
-export async function readData(): Promise<Data> {
+export async function readData(today = localDate(new Date())): Promise<Data> {
   const db = await openDatabase();
   try {
     return await new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE, "readonly");
-      const request = transaction.objectStore(STORE).get(KEY);
+      const transaction = db.transaction(STORE, "readwrite");
+      const store = transaction.objectStore(STORE);
+      let result: Data | undefined;
+      let failure: Error | undefined;
+      const request = store.get(KEY);
       request.onsuccess = () => {
-        try { resolve(normalizeData(request.result)); }
-        catch (error) { reject(error); }
+        try {
+          const stored = normalizeData(request.result);
+          const retained = pruneExpiredHistory(stored, today);
+          if (retained !== stored) {
+            result = { ...retained, generation: stored.generation + 1 };
+            store.put(result, KEY);
+          } else result = stored;
+        } catch (error) {
+          failure = error instanceof Error ? error : new Error("Local task data could not be read");
+          transaction.abort();
+        }
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => { failure = request.error ?? new Error("Local task data could not be read"); };
+      transaction.oncomplete = () => result ? resolve(result) : reject(failure ?? new Error("Local task data could not be read"));
+      transaction.onerror = () => reject(failure ?? transaction.error);
+      transaction.onabort = () => reject(failure ?? transaction.error);
     });
   } finally { db.close(); }
 }
