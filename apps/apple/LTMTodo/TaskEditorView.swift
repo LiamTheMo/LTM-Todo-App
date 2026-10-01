@@ -86,10 +86,10 @@ struct TaskEditorView: View {
                     }
                 }
                 Section("Deadline") {
-                    Toggle("Due date", isOn: $hasDue)
+                    Toggle("Date", isOn: $hasDue)
                     if hasDue {
                         DatePicker("Date", selection: $dueDate, in: earliestDueDate..., displayedComponents: .date)
-                        Toggle("Due time", isOn: $hasTime)
+                        Toggle("Time", isOn: $hasTime)
                         if hasTime {
                             DatePicker("Time", selection: $dueTime, displayedComponents: .hourAndMinute)
                         }
@@ -126,8 +126,13 @@ struct TaskEditorView: View {
                     Picker("Reminder", selection: $reminder) {
                         Text("None").tag(-1)
                         Text("At due time").tag(0)
+                        Text("5 minutes before").tag(5)
+                        Text("10 minutes before").tag(10)
                         Text("15 minutes before").tag(15)
+                        Text("30 minutes before").tag(30)
+                        Text("45 minutes before").tag(45)
                         Text("1 hour before").tag(60)
+                        Text("2 hours before").tag(120)
                         Text("1 day before").tag(1440)
                     }
                     if reminder >= 0 && !(hasDue && hasTime) {
