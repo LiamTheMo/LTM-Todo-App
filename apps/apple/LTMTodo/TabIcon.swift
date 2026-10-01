@@ -19,7 +19,6 @@ struct TabIcon: View {
             context.fill(accent.applying(transform), with: .color(LTMTheme.accent))
         }
         .frame(width: 24, height: 24)
-        .accessibilityHidden(true)
     }
 
     private var outline: Path {

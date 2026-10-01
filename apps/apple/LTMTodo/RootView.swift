@@ -39,18 +39,15 @@ struct RootView: View {
                         destination(for: section)
                             .tabItem {
                                 if section == .settings {
-                                    Label {
-                                        Text(section.rawValue)
-                                    } icon: {
-                                        TabIcon(section: section, isSelected: selection == section)
-                                    }
-                                    .labelStyle(.iconOnly)
-                                    .accessibilityLabel(section.rawValue)
+                                    TabIcon(section: section, isSelected: selection == section)
+                                        .accessibilityElement(children: .ignore)
+                                        .accessibilityLabel(section.rawValue)
                                 } else {
                                     Label {
                                         Text(section.rawValue)
                                     } icon: {
                                         TabIcon(section: section, isSelected: selection == section)
+                                            .accessibilityHidden(true)
                                     }
                                 }
                             }
