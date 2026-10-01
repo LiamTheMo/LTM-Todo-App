@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreGraphics
+import UIKit
 
 /// Original LTM Todo navigation artwork, drawn to stay crisp at tab-bar sizes.
 struct TabIcon: View {
@@ -85,5 +86,19 @@ struct TabIcon: View {
         case .calendar: Path(ellipseIn: CGRect(x: 15.85, y: 15.85, width: 2.3, height: 2.3))
         case .settings: Path(ellipseIn: CGRect(x: 10.9, y: 11.8, width: 2.2, height: 2.2))
         }
+    }
+}
+
+@MainActor
+enum TabIconImage {
+    private static var cache: [String: UIImage] = [:]
+
+    static func image(for section: AppSection) -> UIImage {
+        if let cached = cache[section.rawValue] { return cached }
+        let renderer = ImageRenderer(content: TabIcon(section: section, isSelected: false))
+        renderer.scale = 3
+        let image = renderer.uiImage ?? UIImage()
+        cache[section.rawValue] = image
+        return image
     }
 }

@@ -39,15 +39,15 @@ struct RootView: View {
                         destination(for: section)
                             .tabItem {
                                 if section == .settings {
-                                    TabIcon(section: section, isSelected: selection == section)
-                                        .accessibilityElement(children: .ignore)
+                                    Image(uiImage: TabIconImage.image(for: section))
+                                        .renderingMode(.template)
                                         .accessibilityLabel(section.rawValue)
                                 } else {
                                     Label {
                                         Text(section.rawValue)
                                     } icon: {
-                                        TabIcon(section: section, isSelected: selection == section)
-                                            .accessibilityHidden(true)
+                                        Image(uiImage: TabIconImage.image(for: section))
+                                            .renderingMode(.template)
                                     }
                                 }
                             }
