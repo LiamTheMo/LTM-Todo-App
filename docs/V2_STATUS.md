@@ -23,9 +23,9 @@ Implementation and fixes occur on temporary branches from the active phase check
 
 - Phase 7 is implemented and merged into `v1.01` (PR #77): local calendars, standalone all-day and timed events, recurrence, and calendar visibility.
 - Phase 8 is implemented and merged into `v1.02` (PR #78): scheduled work blocks, task-to-calendar scheduling, editing, removal, restoration, and undo. Domain tests assert that scheduling does not modify task deadlines.
-- Phase 9 is being completed on `feat/v1.03-phase9-advanced-planning`, based on `v1.03`: Kanban grouping, saved filters, bulk task actions, task and event templates, routines, and schema v3 migration. Web tests, typecheck, lint, and production build pass locally; Apple builds require Xcode and remain unverified in this environment.
+- Phase 9 merged into `v1.03` (PRs #79–#81): Kanban grouping, saved filters, bulk task actions, task and event templates, routines, schema v3 migration, and compact due-time captions. Web tests, typecheck, lint, production build, Swift core tests, Apple build, Apple migration tests, and the Apple UI smoke suite passed in the `v1.03` CI run.
 - Due-time captions use compact 12-hour labels such as `Due 9:15am` and `Due 5:30pm` in web and Apple calendar task views.
-- No `v2.00` release branch has been created yet. It is created only after Phase 9 is merged into `v1.03` and the checkpoint CI result is confirmed.
+- `v2.00` has been created from the green `v1.03` checkpoint. Its required version-branch CI run is in progress. Physical iPhone/iPad checks and production deployment remain outstanding.
 
 ## Release gate
 
@@ -33,7 +33,7 @@ Implementation and fixes occur on temporary branches from the active phase check
 - [ ] Phase 7 manual checks pass on iPhone, iPad, and web, including calendar/event persistence, recurrence, time-zone and DST behavior, accessibility, and overlap handling.
 - [x] Phase 8 implementation merged into `v1.02`; automated tests cover scheduling without due-date changes.
 - [ ] Phase 8 manual checks pass for touch, pointer, keyboard, undo, offline persistence, and calendar/Dashboard consistency.
-- [ ] Phase 9 implementation merged into `v1.03`; web automated tests pass locally for planning behavior and migration.
+- [x] Phase 9 implementation merged into `v1.03`; local web checks and version-branch CI pass.
 - [ ] Phase 9 manual checks pass across supported clients, including accessibility and migration behavior.
-- [ ] Create `v2.00` from the validated `v1.03` checkpoint; run its required CI and confirm all phase documentation matches the shipped behavior.
+- [ ] Confirm required CI passes on `v2.00` and phase documentation matches the release candidate.
 - [ ] Promote `v2.00` to `main` through a pull request and verify the production deployment.
