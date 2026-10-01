@@ -3,15 +3,6 @@ import SwiftUI
 enum AppSection: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard", tasks = "Tasks", projects = "Projects", calendar = "Calendar", settings = "Settings"
     var id: Self { self }
-    var icon: String {
-        switch self {
-        case .dashboard: "rectangle.grid.1x2"
-        case .tasks: "checkmark.circle"
-        case .projects: "folder"
-        case .calendar: "calendar"
-        case .settings: "gearshape"
-        }
-    }
 }
 
 struct RootView: View {
@@ -26,11 +17,10 @@ struct RootView: View {
                 NavigationSplitView {
                     List(AppSection.allCases) { section in
                         Button { selection = section } label: {
-                            Group {
-                                if section == .settings {
-                                    Image(systemName: section.icon)
-                                } else {
-                                    Label(section.rawValue, systemImage: section.icon)
+                            HStack(spacing: 12) {
+                                TabIcon(section: section, isSelected: selection == section)
+                                if section != .settings {
+                                    Text(section.rawValue)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -49,9 +39,14 @@ struct RootView: View {
                         destination(for: section)
                             .tabItem {
                                 if section == .settings {
-                                    Image(systemName: section.icon).accessibilityLabel(section.rawValue)
+                                    Label(section.rawValue) {
+                                        TabIcon(section: section, isSelected: selection == section)
+                                    }
+                                    .labelStyle(.iconOnly)
                                 } else {
-                                    Label(section.rawValue, systemImage: section.icon)
+                                    Label(section.rawValue) {
+                                        TabIcon(section: section, isSelected: selection == section)
+                                    }
                                 }
                             }
                             .tag(section)
