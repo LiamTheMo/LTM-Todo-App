@@ -1,14 +1,14 @@
 import SwiftUI
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case dashboard = "Dashboard", inbox = "Inbox", tasks = "Tasks", projects = "Projects", settings = "Settings"
+    case dashboard = "Dashboard", tasks = "Tasks", projects = "Projects", calendar = "Calendar", settings = "Settings"
     var id: Self { self }
     var icon: String {
         switch self {
         case .dashboard: "rectangle.grid.1x2"
-        case .inbox: "tray"
         case .tasks: "checkmark.circle"
         case .projects: "folder"
+        case .calendar: "calendar"
         case .settings: "gearshape"
         }
     }
@@ -26,11 +26,18 @@ struct RootView: View {
                 NavigationSplitView {
                     List(AppSection.allCases) { section in
                         Button { selection = section } label: {
-                            Label(section.rawValue, systemImage: section.icon)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
+                            Group {
+                                if section == .settings {
+                                    Image(systemName: section.icon)
+                                } else {
+                                    Label(section.rawValue, systemImage: section.icon)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(section.rawValue)
                         .foregroundStyle(selection == section ? LTMTheme.accent : Color.primary)
                         .accessibilityAddTraits(selection == section ? .isSelected : [])
                     }
@@ -40,7 +47,13 @@ struct RootView: View {
                 TabView(selection: $selection) {
                     ForEach(AppSection.allCases) { section in
                         destination(for: section)
-                            .tabItem { Label(section.rawValue, systemImage: section.icon) }
+                            .tabItem {
+                                if section == .settings {
+                                    Image(systemName: section.icon).accessibilityLabel(section.rawValue)
+                                } else {
+                                    Label(section.rawValue, systemImage: section.icon)
+                                }
+                            }
                             .tag(section)
                     }
                 }
@@ -60,11 +73,70 @@ struct RootView: View {
     private func destination(for section: AppSection) -> some View {
         switch section {
         case .dashboard: DashboardView()
-        case .inbox: TaskListView(title: "Inbox", projectID: nil, inboxOnly: true)
-        case .tasks: TaskListView(title: "Tasks", projectID: nil, inboxOnly: false)
+        case .tasks: TaskListView(title: "Tasks", projectID: nil)
         case .projects: ProjectsView()
+        case .calendar: CalendarView()
         case .settings: SettingsView()
         }
+    }
+}
+
+struct CalendarView: View {
+    @EnvironmentObject private var store: TodoStore
+    @State private var selectedDate = Date()
+    @State private var editing: TodoTask?
+
+    private var selectedDay: String { DayMath.day(selectedDate) }
+    private var earliestDate: Date { DayMath.date(DashboardRetention.earliestDay()) ?? Calendar.current.startOfDay(for: Date()) }
+
+    private var visibleTasks: [TodoTask] {
+        store.activeTasks.filter { task in
+            task.dueDay == selectedDay || task.scheduledStart.map { Calendar.current.isDate($0, inSameDayAs: selectedDate) } == true
+        }.sorted { left, right in
+            let leftStart = left.scheduledStart ?? .distantFuture
+            let rightStart = right.scheduledStart ?? .distantFuture
+            if leftStart != rightStart { return leftStart < rightStart }
+            if left.dueTime != right.dueTime { return (left.dueTime ?? "") < (right.dueTime ?? "") }
+            return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    DatePicker("Date", selection: $selectedDate, in: earliestDate..., displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                    Button("Go to Today") { selectedDate = Date() }
+                }
+                Section(selectedDate.formatted(date: .complete, time: .omitted)) {
+                    if visibleTasks.isEmpty {
+                        ContentUnavailableView("Nothing planned", systemImage: "calendar", description: Text("Tasks due or scheduled for this day will appear here."))
+                    } else {
+                        ForEach(visibleTasks) { task in
+                            TaskRow(task: task, subtitle: subtitle(for: task)) { editing = task }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Calendar")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { editing = TodoTask(title: "", dueDay: selectedDay) } label: { Label("Add task", systemImage: "plus") }
+                }
+            }
+            .sheet(item: $editing) { task in TaskEditorView(task: task) }
+        }
+    }
+
+    private func subtitle(for task: TodoTask) -> String? {
+        var details: [String] = []
+        if let start = task.scheduledStart, Calendar.current.isDate(start, inSameDayAs: selectedDate) {
+            let end = task.scheduledEnd.map { " – \($0.formatted(date: .omitted, time: .shortened))" } ?? ""
+            details.append("Planned \(start.formatted(date: .omitted, time: .shortened))\(end)")
+        }
+        if task.dueDay == selectedDay { details.append(task.dueTime.map { "Due at \($0)" } ?? "Due today") }
+        return details.isEmpty ? nil : details.joined(separator: " · ")
     }
 }
 
@@ -72,7 +144,6 @@ struct TaskListView: View {
     @EnvironmentObject private var store: TodoStore
     let title: String
     let projectID: UUID?
-    let inboxOnly: Bool
     @State private var quickTitle = ""
     @State private var query = ""
     @State private var editing: TodoTask?
@@ -84,7 +155,7 @@ struct TaskListView: View {
     @State private var sectionName = ""
     @State private var sectionToDelete: UUID?
 
-    private var isMaster: Bool { projectID == nil && !inboxOnly }
+    private var isMaster: Bool { projectID == nil }
     private var filterDescription: String {
         var labels = [isMaster ? (statusFilter == 0 ? "Open" : statusFilter == 1 ? "Completed" : "All statuses") : "Open"]
         if !query.isEmpty { labels.append("Search: \(query)") }
@@ -100,7 +171,7 @@ struct TaskListView: View {
     private var visible: [TodoTask] {
         let today = DayMath.day(Date())
         return (isMaster ? store.unarchivedTasks : store.activeTasks).filter { task in
-            (inboxOnly ? task.projectID == nil : (projectID == nil || task.projectID == projectID)) &&
+            (projectID == nil || task.projectID == projectID) &&
             (query.isEmpty || task.title.localizedCaseInsensitiveContains(query) || task.notes.localizedCaseInsensitiveContains(query)) &&
             (priorityFilter < 0 || task.priority == priorityFilter) &&
             (!isMaster || (statusFilter == 2 || (task.completedAt != nil) == (statusFilter == 1))) &&
@@ -123,7 +194,6 @@ struct TaskListView: View {
                         Button("Add", action: add).disabled(quickTitle.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
-                if !inboxOnly {
                     Picker("Priority", selection: $priorityFilter) {
                         Text("All").tag(-1)
                         Text("None").tag(0)
@@ -154,9 +224,8 @@ struct TaskListView: View {
                         Text("Upcoming").tag("upcoming")
                         Text("No due date").tag("undated")
                     }
-                    Text("\(visible.count) results · \(filterDescription)")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                Text("\(visible.count) results · \(filterDescription)")
+                    .font(.caption).foregroundStyle(.secondary)
                 if let projectID {
                     Section("Project tasks") {
                         ForEach(visible.filter { $0.sectionID == nil }) { task in
@@ -348,7 +417,7 @@ struct ProjectsView: View {
                 ForEach(store.projects) { project in
                     HStack {
                         NavigationLink(project.name) {
-                            TaskListView(title: project.name, projectID: project.id, inboxOnly: false)
+                            TaskListView(title: project.name, projectID: project.id)
                         }
                         Button { store.moveProject(project.id, by: -1) } label: { Image(systemName: "arrow.up") }
                             .accessibilityLabel("Move project \(project.name) up")

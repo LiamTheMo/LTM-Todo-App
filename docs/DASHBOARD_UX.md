@@ -30,6 +30,16 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 - Quick add defaults intelligently to current dashboard context but must make the assigned date obvious.
 - Search/filter state must be visibly distinguishable from the normal dashboard.
 
+## Calendar surface
+
+The Calendar view is a task-planning surface over the existing local task and scheduled-work data. Standalone calendar events are not part of this surface; first-party event management remains Phase 7 scope.
+
+- The web client shows a Sunday-first, six-week month grid with a marker count, a selected-day agenda, Previous/Next month controls, and a Today action.
+- The selected-day agenda separates planned work, due tasks, and retained completions. Add task starts with the selected date.
+- The Apple client uses the native date picker and a selected-day agenda, with an Add task action for that date.
+- Both clients use Dashboard date-only semantics and the same rolling history boundary. Displaying planned work never changes a task deadline.
+- Navigation order is Dashboard, Tasks, Projects, Calendar, Settings. Inbox remains available as a task filter and is not a separate navigation destination; Settings is shown as a gear icon.
+
 ## Accessibility
 Date boundaries cannot rely on color alone. Support Dynamic Type, VoiceOver semantic grouping, keyboard navigation on iPad/web, sufficient targets, reduced motion and logical focus after completion/deletion. The earlier/later date-window controls must remain keyboard and accessibility operable.
 
