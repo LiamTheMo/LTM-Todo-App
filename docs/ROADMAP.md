@@ -3,7 +3,7 @@
 ## Version strategy
 `v0.xx` branches are permanent development checkpoints toward v1.00. `v0.01` contains the initial runnable foundation. `v0.02` is the next organization and reliability checkpoint. Further `v0.xx` checkpoints will advance the remaining v1 phases; create `v1.00` from the final validated checkpoint only after all v1 release criteria and required manual checks pass. Every implementation takes place on a temporary branch from its originating permanent version branch.
 
-See [V1_STATUS.md](V1_STATUS.md) for the current evidence and release blockers. Passing CI on a checkpoint does not mark v1.00 complete.
+See [V1_STATUS.md](V1_STATUS.md) for the v1 release record and [V2_STATUS.md](V2_STATUS.md) for the v2 phase checkpoint plan.
 
 ## v1.00 — Tasks & Dashboard
 1. Phase 1 — Engineering foundation and design system.
