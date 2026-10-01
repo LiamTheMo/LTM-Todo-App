@@ -11,8 +11,17 @@ final class LTMTodoLaunchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Nothing overdue"].exists)
         XCTAssertTrue(app.buttons["Today"].exists)
 
+        XCTAssertFalse(app.tabBars.buttons["Inbox"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Calendar"].exists)
         app.tabBars.buttons["Tasks"].tap()
         XCTAssertTrue(app.navigationBars["Tasks"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.textFields["Add a task…"].exists)
+
+        app.tabBars.buttons["Calendar"].tap()
+        XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Add task"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Settings"].exists)
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
     }
 }

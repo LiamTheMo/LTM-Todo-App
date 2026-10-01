@@ -417,8 +417,8 @@ final class TodoStore: ObservableObject {
         }
         for (task, triggerDate) in reminders.prefix(60) {
             let content = UNMutableNotificationContent()
-            content.title = task.title
-            content.body = "Task reminder"
+            content.title = "LTM Todo reminder"
+            content.body = task.title
             content.sound = .default
             let trigger = UNCalendarNotificationTrigger(dateMatching: calendar.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate), repeats: false)
             try? await center.add(UNNotificationRequest(identifier: "ltm-task-\(task.id)", content: content, trigger: trigger))

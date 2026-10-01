@@ -3,9 +3,9 @@
 self.addEventListener("push", event => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
-  const title = typeof payload.title === "string" && payload.title.trim() ? payload.title : "Task reminder";
-  event.waitUntil(self.registration.showNotification(title, {
-    body: "Task reminder",
+  const taskTitle = typeof payload.title === "string" ? payload.title.trim() : "";
+  event.waitUntil(self.registration.showNotification("LTM Todo reminder", {
+    body: taskTitle || "Task reminder",
     icon: "/icons/ltm-todo-192-apple.png",
     badge: "/icons/ltm-todo-192-apple.png",
     tag: typeof payload.reminderId === "string" ? `ltm-reminder-${payload.reminderId}` : undefined,

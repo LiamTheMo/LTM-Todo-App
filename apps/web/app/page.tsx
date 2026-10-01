@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
-import { addDays, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
+import { addDays, calendarGridDates, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
 import { readData, writeData } from "../lib/storage";
 import { overdueDueCaption } from "../lib/date-labels";
 
-type View = "Dashboard" | "Inbox" | "Tasks" | "Projects" | "Settings";
-const views: View[] = ["Dashboard", "Inbox", "Tasks", "Projects", "Settings"];
-const icon: Record<View, string> = { Dashboard: "◫", Inbox: "▣", Tasks: "☑", Projects: "▦", Settings: "⚙" };
+type View = "Dashboard" | "Tasks" | "Projects" | "Calendar" | "Settings";
+const views: View[] = ["Dashboard", "Tasks", "Projects", "Calendar", "Settings"];
+const icon: Record<View, string> = { Dashboard: "◫", Tasks: "☑", Projects: "▧", Calendar: "▦", Settings: "⚙" };
 const priorities: Priority[] = ["none", "low", "medium", "high"];
+const priorityLabel = (priority: Priority) => priority.charAt(0).toUpperCase() + priority.slice(1);
+const calendarWeekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const dashboardStep = 28;
 const dashboardWindow = dashboardStep * 3;
 const dateLabel = (day: string) => parseLocalDate(day).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
@@ -89,6 +91,8 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState<View>("Dashboard");
+  const [calendarMonth, setCalendarMonth] = useState(() => localDate(new Date()).slice(0, 7));
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState(() => localDate(new Date()));
   const [editing, setEditing] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
   const [quickTitle, setQuickTitle] = useState("");
@@ -247,7 +251,7 @@ export default function Home() {
     const latestCompletion = completionId && data.completions.filter(item => item.taskId === task.id).at(-1)?.id === completionId;
     return <div className={`taskRow ${isComplete ? "completed" : ""} ${task.parentTaskId ? "subtask" : ""}`} key={key}>
       <button className="complete" disabled={completionId ? !latestCompletion : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt)} onClick={() => completionId ? latestCompletion && mutate(value => undoCompletion(value, completionId)) : toggle(task)} aria-label={isComplete ? `Reopen ${task.title}` : `Complete ${task.title}`}>{isComplete ? "✓" : "○"}</button>
-      <button className="taskText" onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt) ? "Finish subtasks first" : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${task.priority} priority`].filter(Boolean).join(" · ")}</small></button>
+      <button className="taskText" onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt) ? "Finish subtasks first" : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
       <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
     </div>;
   };
@@ -257,7 +261,7 @@ export default function Home() {
     completed: statusFilter === "all" ? undefined : statusFilter === "completed", dateScope: dateFilter === "all" ? undefined : dateFilter, today });
   const activeFilters = [query && `search “${query}”`, statusFilter !== "all" && statusFilter, taskProjectFilter !== "all" &&
     (taskProjectFilter === "inbox" ? "Inbox" : projects.find(p => p.id === taskProjectFilter)?.name),
-    priorityFilter !== "all" && `${priorityFilter} priority`, tagFilter && `#${tags.find(t => t.id === tagFilter)?.name ?? "tag"}`,
+    priorityFilter !== "all" && `${priorityLabel(priorityFilter)} priority`, tagFilter && `#${tags.find(t => t.id === tagFilter)?.name ?? "tag"}`,
     dateFilter !== "all" && dateFilter].filter(Boolean).join(" · ");
   const shiftDays = (direction: -1 | 1) => {
     const nextStart = addDays(visibleDayStart, direction * dashboardStep);
@@ -298,19 +302,39 @@ export default function Home() {
     }
   };
 
+  const calendarMonthStart = `${calendarMonth}-01`;
+  const calendarMonthDate = parseLocalDate(calendarMonthStart);
+  const calendarGridStart = calendarGridDates(calendarMonth)[0] ?? calendarMonthStart;
+  const calendarDays = dashboardDays(data, calendarGridStart, 42, today);
+  const calendarAgenda = calendarDays.find(day => day.date === calendarSelectedDate) ?? {
+    date: calendarSelectedDate, due: [], scheduled: [], completed: []
+  };
+  const calendarMonthLabel = calendarMonthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const shiftCalendarMonth = (offset: number) => {
+    const next = new Date(calendarMonthDate);
+    next.setMonth(next.getMonth() + offset);
+    const month = localDate(next).slice(0, 7);
+    setCalendarMonth(month);
+    setCalendarSelectedDate(`${month}-01`);
+  };
+  const goCalendarToday = () => {
+    const date = localDate(new Date());
+    setCalendarMonth(date.slice(0, 7));
+    setCalendarSelectedDate(date);
+  };
   const dashboard = dashboardDays(data, visibleDayStart, dashboardWindow, today);
   return <main className="shell">
-    <aside className="sidebar"><h1><span className="brandMark">✓</span> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} onClick={() => {
+    <aside className="sidebar"><h1><span className="brandMark" aria-hidden="true" /> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} aria-label={item === "Settings" ? "Settings" : undefined} title={item === "Settings" ? "Settings" : undefined} onClick={() => {
       setProjectId("");
       if (item === "Dashboard" && view !== "Dashboard") {
         initialScrollPending.current = true;
         setDayStart(historyStart(today));
       } else if (item === "Dashboard") goToday();
       setView(item);
-    }}><span aria-hidden>{icon[item]}</span> {item}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
+    }}><span aria-hidden>{icon[item]}</span>{item === "Settings" ? null : ` ${item}`}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
     <section className={`dashboard ${view === "Dashboard" ? "dashboardHome" : ""}`}>{error && <div className="error" role="alert">{error}</div>}
       {!ready ? <p>Opening your local tasks…</p> : <>
-        <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Inbox" ? "Capture now. Organize when you're ready." : ""}</p></div><button className="add" onClick={() => setEditing("new")}>+ Add task</button></header>
+        <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Deadlines and planned work, all in one place." : ""}</p></div><button className="add" onClick={() => setEditing(view === "Calendar" ? `new:${calendarSelectedDate}` : "new")}>+ Add task</button></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
           <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today))) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
           <div className="stream dayScroller" ref={dayScrollRef} onScroll={handleDayScroll} role="region" aria-label="Days">
@@ -330,10 +354,39 @@ export default function Home() {
             <button className="loadMore" onClick={() => shiftDays(1)}>Later days ↓</button>
           </div>
         </>}
-        {(view === "Inbox" || view === "Tasks") && <>
+        {view === "Calendar" && <section className="calendarCard" aria-label="Calendar">
+          <div className="calendarToolbar">
+            <div className="calendarMonthControl"><button type="button" aria-label="Previous month" onClick={() => shiftCalendarMonth(-1)}>‹</button><h3>{calendarMonthLabel}</h3><button type="button" aria-label="Next month" onClick={() => shiftCalendarMonth(1)}>›</button></div>
+            <button type="button" className="calendarToday" onClick={goCalendarToday}>Today</button>
+          </div>
+          <div className="calendarLayout">
+            <div>
+              <div className="calendarWeekdays" aria-hidden="true">{calendarWeekdays.map(day => <span key={day}>{day}</span>)}</div>
+              <div className="calendarGrid" role="group" aria-label={`Dates in ${calendarMonthLabel}`}>
+                {calendarDays.map(day => {
+                  const itemCount = day.scheduled.length + day.due.length + day.completed.length;
+                  return <button key={day.date} type="button" className={"calendarDay" + (day.date.slice(0, 7) !== calendarMonth ? " calendarDayOutsideMonth" : "") + (day.date === calendarSelectedDate ? " calendarDaySelected" : "") + (day.date === today ? " calendarDayToday" : "")}
+                    aria-label={dateLabel(day.date) + (itemCount ? `, ${itemCount} calendar item${itemCount === 1 ? "" : "s"}` : ", no calendar items")}
+                    aria-current={day.date === today ? "date" : undefined} aria-pressed={day.date === calendarSelectedDate}
+                    onClick={() => { setCalendarSelectedDate(day.date); if (day.date.slice(0, 7) !== calendarMonth) setCalendarMonth(day.date.slice(0, 7)); }}>
+                    <span>{parseLocalDate(day.date).getDate()}</span>{itemCount > 0 && <small aria-hidden="true">{itemCount}</small>}
+                  </button>;
+                })}
+              </div>
+            </div>
+            <div className="calendarAgenda" aria-live="polite">
+              <div className="calendarAgendaHeader"><div><span className="eyebrow">SELECTED DAY</span><h3>{dateLabel(calendarSelectedDate)}</h3></div></div>
+              {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block:${block.id}`))}</div>}
+              {!!calendarAgenda.due.length && <div className="group"><h4>DUE</h4>{calendarAgenda.due.map(task => taskRow(task, task.dueTime ? `Due at ${task.dueTime}` : "Due today"))}</div>}
+              {!!calendarAgenda.completed.length && <div className="group"><h4>COMPLETED</h4>{calendarAgenda.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `calendar-completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
+              {!calendarAgenda.scheduled.length && !calendarAgenda.due.length && !calendarAgenda.completed.length && <p className="calendarEmpty">Nothing planned for this day.</p>}
+            </div>
+          </div>
+        </section>}
+        {view === "Tasks" && <>
           <form className="quickAdd" onSubmit={e => { e.preventDefault(); addTask(quickTitle); }}><span aria-hidden>＋</span><input aria-label="Quick add task" placeholder="Add a task…" value={quickTitle} onChange={e => setQuickTitle(e.target.value)} /><button disabled={!quickTitle.trim()}>Add</button></form>
-          {view === "Tasks" && <><div className="filters"><input aria-label="Search tasks" placeholder="Search titles and notes…" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Filter status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="open">Open</option><option value="completed">Completed</option><option value="all">All statuses</option></select><select aria-label="Filter project" value={taskProjectFilter} onChange={e => setTaskProjectFilter(e.target.value)}><option value="all">All projects</option><option value="inbox">Inbox</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select><select aria-label="Filter priority" value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as Priority | "all")}><option value="all">All priorities</option>{priorities.map(p => <option key={p} value={p}>{p}</option>)}</select><select aria-label="Filter tag" value={tagFilter} onChange={e => setTagFilter(e.target.value)}><option value="">All tags</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select><select aria-label="Filter due date" value={dateFilter} onChange={e => setDateFilter(e.target.value as DateScope | "all")}><option value="all">Any due date</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="upcoming">Upcoming</option><option value="undated">No due date</option></select></div><p className="filterSummary" aria-live="polite">{visible.length} results · {activeFilters || "No filters"}</p><div className="bulkActions"><button onClick={() => { const name = prompt("Name this saved view")?.trim(); if (!name) return; mutate(value => ({ ...value, savedViews: [...value.savedViews, { ...newEntity(), name, query, projectId: taskProjectFilter === "all" ? undefined : taskProjectFilter === "inbox" ? null : taskProjectFilter, priority: priorityFilter, tagId: tagFilter || undefined, dateScope: dateFilter, completed: statusFilter === "all" ? "all" : statusFilter === "completed" }] })); }}>Save current filters</button><select aria-label="Saved views" value={savedViewId} onChange={e => { const id = e.target.value; setSavedViewId(id); const saved = data.savedViews.find(item => item.id === id); if (!saved) return; setQuery(saved.query); setTaskProjectFilter(saved.projectId === undefined ? "all" : saved.projectId === null ? "inbox" : saved.projectId); setPriorityFilter(saved.priority ?? "all"); setTagFilter(saved.tagId ?? ""); setDateFilter(saved.dateScope ?? "all"); setStatusFilter(saved.completed === "all" ? "all" : saved.completed ? "completed" : "open"); }}><option value="">Saved views…</option>{data.savedViews.filter(item => !item.deletedAt).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button disabled={!savedViewId} aria-label="Delete selected saved view" onClick={() => { const id = savedViewId; mutate(value => ({ ...value, savedViews: value.savedViews.map(item => item.id === id ? { ...item, deletedAt: new Date().toISOString(), revision: item.revision + 1 } : item) })); setSavedViewId(""); }}>Delete view</button><button disabled={!selectedTaskIds.length} onClick={() => { mutate(value => bulkCompleteTasks(value, selectedTaskIds)); setSelectedTaskIds([]); }}>Complete selected ({selectedTaskIds.length})</button><button disabled={!selectedTaskIds.length} onClick={() => setSelectedTaskIds([])}>Clear selection</button></div></>}
-          <div className="listPanel">{(view === "Inbox" ? filterTasks(data, { completed: false }).filter(t => !t.projectId) : visible).map(t => view === "Tasks" ? <div className="bulkTaskRow" key={t.id}><input type="checkbox" aria-label={`Select ${t.title}`} checked={selectedTaskIds.includes(t.id)} onChange={e => setSelectedTaskIds(currentIds => e.target.checked ? [...currentIds, t.id] : currentIds.filter(id => id !== t.id))} />{taskRow(t)}</div> : taskRow(t))}{!(view === "Inbox" ? data.tasks.some(t => !t.deletedAt && !t.completedAt && !t.projectId) : visible.length) && <div className="empty">All clear here. Add a task whenever you&apos;re ready.</div>}</div>
+          {view === "Tasks" && <><div className="filters"><input aria-label="Search tasks" placeholder="Search titles and notes…" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Filter status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="open">Open</option><option value="completed">Completed</option><option value="all">All statuses</option></select><select aria-label="Filter project" value={taskProjectFilter} onChange={e => setTaskProjectFilter(e.target.value)}><option value="all">All projects</option><option value="inbox">Inbox</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select><select aria-label="Filter priority" value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as Priority | "all")}><option value="all">All priorities</option>{priorities.map(p => <option key={p} value={p}>{priorityLabel(p)}</option>)}</select><select aria-label="Filter tag" value={tagFilter} onChange={e => setTagFilter(e.target.value)}><option value="">All tags</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select><select aria-label="Filter due date" value={dateFilter} onChange={e => setDateFilter(e.target.value as DateScope | "all")}><option value="all">Any due date</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="upcoming">Upcoming</option><option value="undated">No due date</option></select></div><p className="filterSummary" aria-live="polite">{visible.length} results · {activeFilters || "No filters"}</p><div className="bulkActions"><button onClick={() => { const name = prompt("Name this saved view")?.trim(); if (!name) return; mutate(value => ({ ...value, savedViews: [...value.savedViews, { ...newEntity(), name, query, projectId: taskProjectFilter === "all" ? undefined : taskProjectFilter === "inbox" ? null : taskProjectFilter, priority: priorityFilter, tagId: tagFilter || undefined, dateScope: dateFilter, completed: statusFilter === "all" ? "all" : statusFilter === "completed" }] })); }}>Save current filters</button><select aria-label="Saved views" value={savedViewId} onChange={e => { const id = e.target.value; setSavedViewId(id); const saved = data.savedViews.find(item => item.id === id); if (!saved) return; setQuery(saved.query); setTaskProjectFilter(saved.projectId === undefined ? "all" : saved.projectId === null ? "inbox" : saved.projectId); setPriorityFilter(saved.priority ?? "all"); setTagFilter(saved.tagId ?? ""); setDateFilter(saved.dateScope ?? "all"); setStatusFilter(saved.completed === "all" ? "all" : saved.completed ? "completed" : "open"); }}><option value="">Saved views…</option>{data.savedViews.filter(item => !item.deletedAt).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button disabled={!savedViewId} aria-label="Delete selected saved view" onClick={() => { const id = savedViewId; mutate(value => ({ ...value, savedViews: value.savedViews.map(item => item.id === id ? { ...item, deletedAt: new Date().toISOString(), revision: item.revision + 1 } : item) })); setSavedViewId(""); }}>Delete view</button><button disabled={!selectedTaskIds.length} onClick={() => { mutate(value => bulkCompleteTasks(value, selectedTaskIds)); setSelectedTaskIds([]); }}>Complete selected ({selectedTaskIds.length})</button><button disabled={!selectedTaskIds.length} onClick={() => setSelectedTaskIds([])}>Clear selection</button></div></>}
+          <div className="listPanel">{visible.map(t => <div className="bulkTaskRow" key={t.id}><input type="checkbox" aria-label={`Select ${t.title}`} checked={selectedTaskIds.includes(t.id)} onChange={e => setSelectedTaskIds(currentIds => e.target.checked ? [...currentIds, t.id] : currentIds.filter(id => id !== t.id))} />{taskRow(t)}</div>)}{!visible.length && <div className="empty">All clear here. Add a task whenever you&apos;re ready.</div>}</div>
         </>}
         {view === "Projects" && <><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("project") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, projects: [...value.projects, { ...newEntity(), name: input.value.trim(), color: "#c86b24", sortKey: Date.now() }] })); input.value = ""; }}><input name="project" aria-label="New project name" placeholder="New project name…" /><button>Create project</button></form>
           {!projectId ? <div className="projectGrid">{projects.map(p => <div className="projectCard" key={p.id}><button className="projectOpen" onClick={() => setProjectId(p.id)}><span className="projectDot" style={{ background: p.color }} /><strong>{p.name}</strong><small>{data.tasks.filter(t => t.projectId === p.id && !t.deletedAt && !t.completedAt).length} open tasks →</small></button><div className="orderControls"><button aria-label={`Move project ${p.name} up`} onClick={() => mutate(value => reorderProject(value, p.id, -1))}>↑</button><button aria-label={`Move project ${p.name} down`} onClick={() => mutate(value => reorderProject(value, p.id, 1))}>↓</button></div></div>)}</div> : <>
@@ -433,16 +486,16 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
     <div className="editorHead"><h2>{task ? "Edit task" : "New task"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
     <label>Title<input autoFocus required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
-    <div className="fieldPair"><label>Due date<input type="date" min={earliestDate} value={dueDate} onChange={e => setDueDate(e.target.value)} /></label><label>Due time<input type="time" disabled={!dueDate} value={dueTime} onChange={e => setDueTime(e.target.value)} /></label></div>
+    <div className="fieldPair"><label>Date<input type="date" min={earliestDate} value={dueDate} onChange={e => setDueDate(e.target.value)} /></label><label>Time<input type="time" disabled={!dueDate} value={dueTime} onChange={e => setDueTime(e.target.value)} /></label></div>
     {expiredDueDate && <p className="hint">Choose a date within the seven-day history window.</p>}
-    <div className="fieldPair"><label>Priority<select value={priority} onChange={e => setPriority(e.target.value as Priority)}>{priorities.map(p => <option key={p} value={p}>{p}</option>)}</select></label><label>Project<select value={projectId} onChange={e => { setProjectId(e.target.value); setSectionId(""); setParentTaskId(""); }}><option value="">Inbox</option>{data.projects.filter(p => !p.deletedAt && !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
+    <div className="fieldPair"><label>Priority<select value={priority} onChange={e => setPriority(e.target.value as Priority)}>{priorities.map(p => <option key={p} value={p}>{priorityLabel(p)}</option>)}</select></label><label>Project<select value={projectId} onChange={e => { setProjectId(e.target.value); setSectionId(""); setParentTaskId(""); }}><option value="">Inbox</option>{data.projects.filter(p => !p.deletedAt && !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
     {projectId && <label>Section<select value={sectionId} onChange={e => setSectionId(e.target.value)}><option value="">Project root</option>{data.sections.filter(s => s.projectId === projectId && !s.deletedAt).map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</select></label>}
     <label>Subtask of<select value={parentTaskId} onChange={e => setParentTaskId(e.target.value)}><option value="">No parent</option>{data.tasks.filter(t => !t.deletedAt && !t.parentTaskId && t.id !== task?.id && (t.projectId ?? "") === projectId).map(t => <option value={t.id} key={t.id}>{t.title}</option>)}</select></label>
     {!!data.tags.length && <fieldset><legend>Tags</legend>{data.tags.filter(t => !t.deletedAt).map(t => <label className="checkLabel" key={t.id}><input type="checkbox" checked={tagIds.includes(t.id)} onChange={e => setTagIds(e.target.checked ? [...tagIds, t.id] : tagIds.filter(id => id !== t.id))} /> {t.name}</label>)}</fieldset>}
     <div className="fieldPair"><label>Repeat<select value={frequency} onChange={e => setFrequency(e.target.value)}><option value="">Never</option>{["daily", "weekly", "monthly", "yearly"].map(f => <option key={f} value={f}>{f}</option>)}</select></label><label>Every<input type="number" min="1" max="365" disabled={!frequency} value={interval} onChange={e => setInterval(Number(e.target.value))} /></label></div>
     {frequency === "weekly" && <fieldset><legend>Repeat on</legend>{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((name, day) => <label className="checkLabel" key={day}><input type="checkbox" checked={weekdays.includes(day)} onChange={e => setWeekdays(e.target.checked ? [...weekdays, day] : weekdays.filter(value => value !== day))} /> {name}</label>)}<p className="hint">If none are selected, repeat on the original weekday.</p></fieldset>}
     {frequency && <div className="fieldPair"><label>Repeat until<input type="date" min={dueDate} value={repeatUntil} onChange={e => setRepeatUntil(e.target.value)} /></label><label>End after occurrences<input type="number" min="1" value={repeatCount} onChange={e => setRepeatCount(e.target.value)} placeholder="No limit" /></label></div>}
-    <label>Reminder before deadline<select value={reminderMinutes} onChange={e => setReminderMinutes(e.target.value)}><option value="">None</option><option value="0">At due time</option><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">1 day</option></select></label>
+    <label>Reminder before deadline<select value={reminderMinutes} onChange={e => setReminderMinutes(e.target.value)}><option value="">None</option><option value="0">At due time</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option></select></label>
     {reminderMinutes !== "" && !dueTime && <p className="hint">Choose a due date and time for a timed reminder.</p>}
     <div className="editorActions">{task && <button type="button" className="danger" onClick={() => { if (confirm("Delete this task?")) onDelete(task.id); }}>Delete task</button>}<button type="button" onClick={onClose}>Cancel</button><button className="add" disabled={!title.trim() || expiredDueDate}>Save task</button></div>
   </form></div>;

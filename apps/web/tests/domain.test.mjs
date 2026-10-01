@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
+import { addDays, calendarGridDates, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
@@ -10,6 +10,13 @@ const task = (id, dueDate, extras = {}) => ({
 test("date-only arithmetic preserves calendar dates across DST", () => {
   assert.equal(addDays("2026-03-08", 1), "2026-03-09");
   assert.equal(addDays("2026-11-01", -1), "2026-10-31");
+});
+test("calendar month grid contains six Sunday-first weeks across month boundaries", () => {
+  const january = calendarGridDates("2026-01");
+  assert.equal(january.length, 42);
+  assert.equal(january[0], "2025-12-28");
+  assert.equal(january.at(-1), "2026-02-07");
+  assert.equal(calendarGridDates("2026-03")[0], "2026-03-01");
 });
 test("scheduled work and due date stay in separate Dashboard groups", () => {
   const data = emptyData();
