@@ -4,10 +4,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent
 import { addDays, calendarGridDates, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
 import { readData, writeData } from "../lib/storage";
 import { overdueDueCaption } from "../lib/date-labels";
+import { TabIcon, type NavigationSection } from "../components/TabIcon";
 
-type View = "Dashboard" | "Tasks" | "Projects" | "Calendar" | "Settings";
+type View = NavigationSection;
 const views: View[] = ["Dashboard", "Tasks", "Projects", "Calendar", "Settings"];
-const icon: Record<View, string> = { Dashboard: "◫", Tasks: "☑", Projects: "▧", Calendar: "▦", Settings: "⚙" };
 const priorities: Priority[] = ["none", "low", "medium", "high"];
 const priorityLabel = (priority: Priority) => priority.charAt(0).toUpperCase() + priority.slice(1);
 const calendarWeekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -324,14 +324,14 @@ export default function Home() {
   };
   const dashboard = dashboardDays(data, visibleDayStart, dashboardWindow, today);
   return <main className="shell">
-    <aside className="sidebar"><h1><span className="brandMark" aria-hidden="true" /> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} aria-label={item === "Settings" ? "Settings" : undefined} title={item === "Settings" ? "Settings" : undefined} onClick={() => {
+    <aside className="sidebar"><h1><span className="brandMark" aria-hidden="true" /> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} aria-current={view === item ? "page" : undefined} aria-label={item === "Settings" ? "Settings" : undefined} title={item === "Settings" ? "Settings" : undefined} onClick={() => {
       setProjectId("");
       if (item === "Dashboard" && view !== "Dashboard") {
         initialScrollPending.current = true;
         setDayStart(historyStart(today));
       } else if (item === "Dashboard") goToday();
       setView(item);
-    }}><span aria-hidden>{icon[item]}</span>{item === "Settings" ? null : ` ${item}`}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
+    }}><span className="navigationIcon"><TabIcon section={item} /></span>{item === "Settings" ? null : ` ${item}`}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
     <section className={`dashboard ${view === "Dashboard" ? "dashboardHome" : ""}`}>{error && <div className="error" role="alert">{error}</div>}
       {!ready ? <p>Opening your local tasks…</p> : <>
         <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Deadlines and planned work, all in one place." : ""}</p></div><button className="add" onClick={() => setEditing(view === "Calendar" ? `new:${calendarSelectedDate}` : "new")}>+ Add task</button></header>
