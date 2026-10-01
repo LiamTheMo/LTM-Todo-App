@@ -107,15 +107,17 @@ final class TodoStore: ObservableObject {
                 : max(1, (calendar.dateComponents([.day], from: calendar.startOfDay(for: eventStart), to: calendar.startOfDay(for: eventEnd.addingTimeInterval(-1))).day ?? 0) + 1)
             let possibleStarts = (0..<duration).compactMap { DayMath.add(-$0, to: day, calendar: calendar) }
             guard let occurrenceDay = possibleStarts.first(where: { eventRecurs(event, anchor: baseDay, on: $0, calendar: calendar) }) else { return false }
-            return event.allDay ? occurrenceDay <= day && (DayMath.add(duration, to: occurrenceDay, calendar: calendar) ?? occurrenceDay) > day : {
-                    guard let start = event.startInstant, let end = event.endInstant else { return false }
-                    let targetStart = calendar.startOfDay(for: target)
-                    let targetEnd = calendar.date(byAdding: .day, value: 1, to: targetStart) ?? targetStart.addingTimeInterval(86400)
-                    let elapsed = calendar.dateComponents([.day], from: baseDate, to: DayMath.date(occurrenceDay, calendar: calendar) ?? baseDate).day ?? 0
-                    let occurrenceStart = calendar.date(byAdding: .day, value: elapsed, to: start) ?? start
-                    let occurrenceEnd = occurrenceStart.addingTimeInterval(end.timeIntervalSince(start))
-                    return occurrenceStart < targetEnd && occurrenceEnd > targetStart
-                }())
+            if event.allDay {
+                let exclusiveEnd = DayMath.add(duration, to: occurrenceDay, calendar: calendar) ?? occurrenceDay
+                return occurrenceDay <= day && exclusiveEnd > day
+            }
+            guard let start = event.startInstant, let end = event.endInstant else { return false }
+            let targetStart = calendar.startOfDay(for: target)
+            let targetEnd = calendar.date(byAdding: .day, value: 1, to: targetStart) ?? targetStart.addingTimeInterval(86400)
+            let elapsed = calendar.dateComponents([.day], from: baseDate, to: DayMath.date(occurrenceDay, calendar: calendar) ?? baseDate).day ?? 0
+            let occurrenceStart = calendar.date(byAdding: .day, value: elapsed, to: start) ?? start
+            let occurrenceEnd = occurrenceStart.addingTimeInterval(end.timeIntervalSince(start))
+            return occurrenceStart < targetEnd && occurrenceEnd > targetStart
         }.sorted { ($0.allDay ? Date.distantPast : $0.startInstant ?? .distantFuture) < ($1.allDay ? Date.distantPast : $1.startInstant ?? .distantFuture) }
     }
 
