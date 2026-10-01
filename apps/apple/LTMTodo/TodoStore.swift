@@ -23,7 +23,7 @@ final class TodoStore: ObservableObject {
             if FileManager.default.fileExists(atPath: url.path) {
                 let bytes = try Data(contentsOf: url)
                 let sourceVersion = (try? JSONSerialization.jsonObject(with: bytes) as? [String: Any])?["schemaVersion"] as? Int ?? 1
-                needsMigration = sourceVersion < 2
+                needsMigration = sourceVersion < 3
                 let decoded = try TodoDataFile.decode(bytes)
                 data = decoded
                 savedData = decoded
@@ -117,6 +117,69 @@ final class TodoStore: ObservableObject {
                     return occurrenceStart < targetEnd && occurrenceEnd > targetStart
                 }())
         }.sorted { ($0.allDay ? Date.distantPast : $0.startInstant ?? .distantFuture) < ($1.allDay ? Date.distantPast : $1.startInstant ?? .distantFuture) }
+    }
+
+    func saveTemplate(name: String, from task: TodoTask) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard errorMessage == nil, !clean.isEmpty, !task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        data.taskTemplates.append(TodoTaskTemplate(name: clean, title: task.title, notes: task.notes, priority: task.priority,
+            projectID: task.projectID, sectionID: task.sectionID, tagIDs: task.tagIDs))
+        persist()
+    }
+
+    func createFromTemplate(_ id: UUID, dueDay: String? = nil) {
+        guard let template = data.taskTemplates.first(where: { $0.id == id && $0.deletedAt == nil }) else { return }
+        var task = TodoTask(title: template.title)
+        task.notes = template.notes
+        task.priority = template.priority
+        task.projectID = template.projectID
+        task.sectionID = template.sectionID
+        task.tagIDs = template.tagIDs
+        task.dueDay = dueDay
+        save(task)
+    }
+
+    func startRoutine(templateID: UUID, name: String, startDay: String, frequency: RepeatFrequency, interval: Int) {
+        guard errorMessage == nil, frequency != .never,
+              let template = data.taskTemplates.first(where: { $0.id == templateID && $0.deletedAt == nil }),
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              DayMath.date(startDay) != nil, startDay >= DashboardRetention.earliestDay() else { return }
+        var task = TodoTask(title: template.title)
+        task.notes = template.notes
+        task.priority = template.priority
+        task.projectID = template.projectID
+        task.sectionID = template.sectionID
+        task.tagIDs = template.tagIDs
+        task.dueDay = startDay
+        task.frequency = frequency
+        task.interval = max(1, interval)
+        task.repeatAnchor = startDay
+        save(task)
+        guard data.tasks.contains(where: { $0.id == task.id }) else { return }
+        data.routines.append(TodoRoutine(name: name.trimmingCharacters(in: .whitespacesAndNewlines), templateID: templateID,
+            taskID: task.id, startDay: startDay, frequency: frequency, interval: max(1, interval)))
+        persist()
+    }
+
+    func setRoutineEnabled(_ id: UUID, enabled: Bool) {
+        guard let index = data.routines.firstIndex(where: { $0.id == id && $0.deletedAt == nil }) else { return }
+        data.routines[index].enabled = enabled
+        data.routines[index].updatedAt = Date()
+        data.routines[index].revision += 1
+        if let taskIndex = data.tasks.firstIndex(where: { $0.id == data.routines[index].taskID && $0.deletedAt == nil }) {
+            if !enabled { data.routines[index].occurrences = data.tasks[taskIndex].occurrenceCount }
+            let routine = data.routines[index]
+            data.tasks[taskIndex].frequency = enabled ? routine.frequency : .never
+            data.tasks[taskIndex].interval = routine.interval
+            data.tasks[taskIndex].repeatAnchor = enabled ? (data.tasks[taskIndex].dueDay ?? routine.startDay) : nil
+            data.tasks[taskIndex].repeatWeekdays = enabled ? routine.weekdays : nil
+            data.tasks[taskIndex].repeatUntil = enabled ? routine.until : nil
+            data.tasks[taskIndex].repeatCount = enabled ? routine.count : nil
+            data.tasks[taskIndex].occurrenceCount = enabled ? (routine.occurrences ?? data.tasks[taskIndex].occurrenceCount) : data.tasks[taskIndex].occurrenceCount
+            data.tasks[taskIndex].updatedAt = Date()
+            data.tasks[taskIndex].revision += 1
+        }
+        persist()
     }
 
     private func eventRecurs(_ event: TodoCalendarEvent, anchor: String, on day: String, calendar: Calendar) -> Bool {

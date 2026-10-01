@@ -8,9 +8,9 @@ export function normalizeData(value: unknown): Data {
   if (value == null) return emptyData();
   if (typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid local task data");
   const raw = value as Record<string, unknown>;
-  if (raw.schemaVersion !== 1 && raw.schemaVersion !== 2) throw new Error("Unsupported local data version");
+  if (raw.schemaVersion !== 1 && raw.schemaVersion !== 2 && raw.schemaVersion !== 3) throw new Error("Unsupported local data version");
   const migratingV1 = raw.schemaVersion === 1;
-  const collections = ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "reminders", "completions", "savedViews"] as const;
+  const collections = ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews"] as const;
   for (const name of collections) {
     if (raw[name] !== undefined && !Array.isArray(raw[name])) throw new Error(`Invalid ${name} collection`);
   }
@@ -21,7 +21,7 @@ export function normalizeData(value: unknown): Data {
   const normalized = { ...raw };
   for (const name of collections) normalized[name] ??= [];
   if (migratingV1 && !(normalized.calendars as unknown[]).length) normalized.calendars = emptyData().calendars;
-  const data = { ...emptyData(), ...normalized, schemaVersion: 2,
+  const data = { ...emptyData(), ...normalized, schemaVersion: 3,
     generation: (raw.generation as number | undefined) ?? 0 } as Data;
   for (const name of collections) {
     const ids = new Set<string>();
@@ -55,6 +55,31 @@ export function normalizeData(value: unknown): Data {
     }
   }
   const calendarIds = new Set(data.calendars.map(calendar => calendar.id));
+  for (const template of data.taskTemplates) {
+    if (typeof template.name !== "string" || !template.name.trim() || typeof template.title !== "string" || !template.title.trim() ||
+        typeof template.notes !== "string" || !Array.isArray(template.tagIds) || !["none", "low", "medium", "high"].includes(template.priority)) {
+      throw new Error("Invalid task template record");
+    }
+  }
+  for (const template of data.eventTemplates) {
+    if (typeof template.name !== "string" || !template.name.trim() || typeof template.title !== "string" || !template.title.trim() ||
+        typeof template.notes !== "string" || !calendarIds.has(template.calendarId) || typeof template.allDay !== "boolean" ||
+        !Number.isSafeInteger(template.duration) || template.duration < 1 || (template.allDay ? false :
+          (typeof template.timeZone !== "string" || typeof template.startTime !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(template.startTime)))) {
+      throw new Error("Invalid event template record");
+    }
+  }
+  const templateIds = new Set(data.taskTemplates.map(template => template.id));
+  const taskIds = new Set(data.tasks.map(task => task.id));
+  for (const routine of data.routines) {
+    const rule = routine.recurrence;
+    if (!templateIds.has(routine.templateId) || !taskIds.has(routine.taskId) || typeof routine.name !== "string" || !routine.name.trim() ||
+        typeof routine.enabled !== "boolean" || !/^\d{4}-\d{2}-\d{2}$/.test(routine.startDate) || !rule ||
+        !["daily", "weekly", "monthly", "yearly"].includes(rule.frequency) || !Number.isSafeInteger(rule.interval) || rule.interval < 1 ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(rule.anchorDate) || !Number.isSafeInteger(rule.occurrences) || rule.occurrences < 0) {
+      throw new Error("Invalid routine record");
+    }
+  }
   for (const event of data.calendarEvents) {
     if (!calendarIds.has(event.calendarId) || !validEvent(event)) throw new Error("Invalid calendar event record");
   }
@@ -73,6 +98,12 @@ export function normalizeData(value: unknown): Data {
     if (task.tagIds.some(id => !tagIds.has(id))) throw new Error("Task refers to a missing tag");
   }
   for (const section of data.sections) if (!projectIds.has(section.projectId)) throw new Error("Section refers to a missing project");
+  for (const template of data.taskTemplates) {
+    const section = template.sectionId ? sectionsById.get(template.sectionId) : undefined;
+    if ((template.projectId && !projectIds.has(template.projectId)) ||
+        (template.sectionId && (!section || section.projectId !== template.projectId)) ||
+        template.tagIds.some(id => !tagIds.has(id))) throw new Error("Task template refers to missing task data");
+  }
   for (const item of [...data.blocks, ...data.reminders]) if (!tasksById.has(item.taskId)) throw new Error("Task data contains a missing task reference");
   for (const completion of data.completions) if (!tasksById.has(completion.taskId)) throw new Error("Completion refers to a missing task");
   return data;
@@ -98,7 +129,7 @@ export async function readData(today = localDate(new Date())): Promise<Data> {
       const request = store.get(KEY);
       request.onsuccess = () => {
         try {
-          const legacy = request.result !== undefined && (request.result as { schemaVersion?: number }).schemaVersion !== 2;
+          const legacy = request.result !== undefined && (request.result as { schemaVersion?: number }).schemaVersion !== 3;
           const stored = normalizeData(request.result);
           const retained = pruneExpiredHistory(stored, today);
           if (legacy || retained !== stored) {
