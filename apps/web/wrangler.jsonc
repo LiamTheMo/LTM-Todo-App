@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ltm-todo-app",
-  "main": "vinext/server/fetch-handler",
+  "main": "./worker.ts",
   "compatibility_date": "2026-09-29",
   "compatibility_flags": ["nodejs_compat"],
   "preview_urls": true,
@@ -10,5 +10,19 @@
     "not_found_handling": "none",
     "binding": "ASSETS"
   },
-  "workers_dev": true
+  "workers_dev": true,
+  "triggers": { "crons": ["* * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ltm-todo-notifications",
+      // Replace this UUID after creating the production D1 database.
+      "database_id": "00000000-0000-4000-8000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "VAPID_PUBLIC_KEY": "BFS4nuWMH5U8GDETLd_jN2fH4NKLRFKnn2VfmpJ3jxwlODNoRXTSlaoI7nOahU3j6bD1J7lBzEu-DFuF9-jwgc4",
+    "VAPID_SUBJECT": "https://todo.liamthemo.com"
+  }
 }

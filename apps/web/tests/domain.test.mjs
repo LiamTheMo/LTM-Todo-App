@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pendingReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
+import { addDays, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
@@ -229,6 +229,20 @@ test("web reminder triggers are bounded, ordered, and ignore completed or disabl
   assert.deepEqual(results.map(item => item.reminder.id), ["a", "edmonton"]);
   assert.equal(results[0].triggerAt, Date.parse("2026-10-01T12:45:00Z"));
   assert.equal(results[1].triggerAt, Date.parse("2026-10-01T19:00:00Z"));
+});
+test("push reminder schedule includes future items beyond the foreground timer horizon", () => {
+  const data = emptyData();
+  const now = Date.parse("2026-10-01T12:00:00Z");
+  data.tasks.push(task("near", "2026-10-03", { dueTime: "09:00", dueTimeZone: "UTC" }),
+    task("far", "2027-01-01", { dueTime: "09:00", dueTimeZone: "UTC" }),
+    task("completed", "2027-01-02", { dueTime: "09:00", dueTimeZone: "UTC", completedAt: "2026-09-30T12:00:00Z" }));
+  data.reminders.push(
+    { id: "near", taskId: "near", minutesBefore: 15, enabled: true, createdAt: "", updatedAt: "", revision: 1 },
+    { id: "far", taskId: "far", minutesBefore: 0, enabled: true, createdAt: "", updatedAt: "", revision: 1 },
+    { id: "completed", taskId: "completed", minutesBefore: 0, enabled: true, createdAt: "", updatedAt: "", revision: 1 }
+  );
+  assert.deepEqual(pendingReminderTriggers(data, now).map(item => item.reminder.id), ["near"]);
+  assert.deepEqual(scheduledReminderTriggers(data, now).map(item => item.reminder.id), ["near", "far"]);
 });
 test("reorder retains identity and section deletion moves tasks to project root", () => {
   const data = emptyData();

@@ -20,27 +20,26 @@ This document tracks the implementation against Phases 1–6. The permanent `v0.
 
 ## Requires Manual Validation
 
-- User reports all previously listed manual checks passed except notification delivery and browser multi-tab storage-failure behavior. This is recorded as user-reported validation, not independently re-run here.
-- Re-test browser notification permission/delivery for the open-app reminder path; also verify denied permission and browser/tab close behavior. Closed-browser delivery needs push infrastructure and is not part of local-only v1.
-- Re-test multi-tab storage conflict and storage failure after this update. The app must preserve the unsaved-backup recovery message and must not silently overwrite another tab.
-- Re-test newly added saved views, bulk completion, and subtask constraints on web; verify parity for the Apple subtask constraint.
-- Re-test changed Dashboard and editor UI, migration recovery, and keyboard/VoiceOver task reordering on iPhone and iPad after the new build. Earlier user-reported UI checks do not cover these code changes.
-- User-reported pass list includes Home Screen icon/install, airplane/offline and relaunch, Dashboard/date behavior, accessibility/layout/navigation, and deployed web persistence, excluding the two explicit exceptions above.
+- User reports all prior manual checks passed except notifications; the earlier multi-tab failure case has since passed. The notification implementation is being replaced with background Web Push.
+- This temporary branch implements the Web Push client, service worker, D1 reminder queue, and minute Cron Trigger. Production setup still requires a D1 database ID and VAPID configuration, followed by deployment and real-device verification.
+- Validate push permission, test notification, delivery with the web app closed/backgrounded, schedule edit/cancel, offline/reconnection, and permission revocation on a real browser/device. On iPhone/iPad, validate from the installed Home Screen app.
+- Earlier Home Screen icon/install, airplane/offline and relaunch, Dashboard/date behavior, accessibility/layout/navigation, deployed web persistence, and multi-tab storage checks were user-reported as passed.
 
 ## Remaining Implementation
 
 - Phase 1: semantic design tokens exist. Automated Apple simulator launch/navigation smoke coverage is now configured; the full token/component accessibility audit remains manual.
-- Phase 2: browser legacy-snapshot migration, corrupt-snapshot rejection, relationship integrity, generation conflicts and native write rollback/backup are implemented. Native legacy-file migration fixtures and unsupported/corrupt JSON rejection now have automated coverage. Real browser multi-tab/storage-failure behavior still needs manual validation.
+- Phase 2: browser legacy-snapshot migration, corrupt-snapshot rejection, relationship integrity, generation conflicts and native write rollback/backup are implemented. Native legacy-file migration fixtures and unsupported/corrupt JSON rejection now have automated coverage. Multi-tab/storage-failure behavior is user-reported as passed.
 - Phase 3: dashboard navigation is bounded to 84 days with a seven-calendar-day history limit (Today plus six prior days), overlap paging, persistent Overdue, tasks shown both in Overdue and on their due date, and automatic expiry. Scroll preservation, sticky headers, rounded card edges, independent scrolling, date transitions and past-day editing are user-reported as manually tested and passed. Richer locale/calendar fixtures remain a test enhancement.
 - Phase 4: project/section ordering and archive visibility/recovery have cross-client controls. Both task save paths enforce root-plus-one-subtask depth and same-project parentage. Apple project task rows now have keyboard/VoiceOver-labeled reorder controls alongside web drag/keyboard ordering. Destructive-action/restart and device VoiceOver checks remain manual.
-- Phase 5: recurrence and native notification reconciliation are implemented. Web schedules reminders with the Notification API while the app is open, for a rolling seven-day window. Closed-browser delivery needs push infrastructure and is outside local-only v1. Native and web delivery still need manual validation.
+- Phase 5: recurrence and native notification reconciliation are implemented. Web reminders now use standards-based Web Push and a server-side D1 queue so the browser can deliver while the app is backgrounded or closed. Production D1/VAPID setup and real-device delivery checks remain outstanding.
 - Phase 6: combined search/filters, saved views, bulk completion, storage relationship checks, and performance regression coverage are implemented. The v0.07 CI now includes Apple migration fixtures, Apple launch/navigation smoke tests, and a high-severity npm dependency audit. Full accessibility/security audits and device retesting remain manual.
 - Optimization pass: web reminder planning reuses a bounded timezone formatter cache; task-graph integrity checks use indexed lookups instead of rescanning collections. Baseline measurements for 2,000 reminders were ~251 ms before caching and ~37 ms after; 10,000 task relationship validation completes in ~14 ms locally.
 - Deployment process: the main-branch ruleset is active, but its required status-check list is empty. Repository CI exposes `swift-core`, `apple`, `web`, and `docs`; the ruleset must require these checks before main merges are actually gated. The connected GitHub integration is read-only for ruleset settings, so this administrative setting remains to be updated in GitHub.
+- Web Push cannot be production-enabled until Cloudflare creates `ltm-todo-notifications`, its D1 database ID replaces the config placeholder, and the VAPID public key, subject, and private Worker secret are configured. `wrangler` is unauthenticated in the current environment, so account setup cannot be completed here.
 
 ## v1.00 release gate
 
-1. Resolve actionable in-scope Phase 1–6 implementation gaps in temporary branches and merge them into permanent `v0.xx` checkpoints. Manual/device checks and administrator-only GitHub ruleset changes remain explicitly gated.
+1. Resolve actionable in-scope Phase 1–6 implementation gaps in temporary branches and merge them into permanent `v0.xx` checkpoints. Push service account setup and notification delivery checks remain explicitly gated.
 2. Run the entire CI/review loop with no unresolved findings and validate the destination version branch.
 3. Complete the manual iPhone/iPad checklist in Phase 6. Do not label the release complete solely from automated builds.
 4. Create the permanent `v1.00` branch from the validated final `v0.xx` checkpoint, then merge `v1.00` into `main` for deployment.
