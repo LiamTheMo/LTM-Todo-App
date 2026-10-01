@@ -1,10 +1,5 @@
 import { env } from "cloudflare:workers";
-
-export type PushSubscriptionRecord = {
-  endpoint: string;
-  expirationTime: number | null;
-  keys: { p256dh: string; auth: string };
-};
+import { validatePushRegistration, type PushSubscriptionRecord } from "./push-registration";
 
 export type ScheduledReminder = {
   id: string;
@@ -55,21 +50,6 @@ async function sha256(value: string) {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function isSubscription(value: unknown): value is PushSubscriptionRecord {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Partial<PushSubscriptionRecord>;
-  try {
-    const endpoint = new URL(record.endpoint ?? "");
-    const host = endpoint.hostname.toLowerCase();
-    const supportedPushHost = host === "fcm.googleapis.com" || host.endsWith(".push.apple.com") ||
-      host.endsWith(".push.services.mozilla.com") || host.endsWith(".notify.windows.com");
-    return endpoint.protocol === "https:" && supportedPushHost &&
-      (record.expirationTime === null || (typeof record.expirationTime === "number" && Number.isFinite(record.expirationTime))) &&
-      typeof record.keys?.auth === "string" && record.keys.auth.length <= 256 &&
-      typeof record.keys?.p256dh === "string" && record.keys.p256dh.length <= 256;
-  } catch { return false; }
-}
-
 async function authorizedDevice(request: Request) {
   const token = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
   if (!token || token.length < 40 || token.length > 128) return;
@@ -113,10 +93,9 @@ export async function handleNotificationRequest(request: Request) {
     if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.VAPID_SUBJECT || !env.DB) return json({ error: "Push notifications are not configured yet" }, 503);
     let input: unknown;
     try { input = await readJson(request); } catch (cause) { return json({ error: cause instanceof RequestTooLargeError ? "Request is too large" : "Invalid request body" }, cause instanceof RequestTooLargeError ? 413 : 400); }
-    const record = input as { token?: unknown; subscription?: unknown };
-    if (typeof record?.token !== "string" || !/^[a-zA-Z0-9_-]{40,128}$/.test(record.token) || !isSubscription(record.subscription)) {
-      return json({ error: "Invalid push registration" }, 400);
-    }
+    const validation = validatePushRegistration(input);
+    if (!validation.ok) return json({ error: validation.error }, 400);
+    const record = validation.value;
     const tokenHash = await sha256(record.token);
     const endpointHash = await sha256(record.subscription.endpoint);
     const prior = await env.DB.prepare("SELECT token_hash FROM push_devices WHERE token_hash = ?")
