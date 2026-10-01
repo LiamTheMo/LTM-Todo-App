@@ -39,12 +39,16 @@ struct RootView: View {
                         destination(for: section)
                             .tabItem {
                                 if section == .settings {
-                                    Label(section.rawValue) {
+                                    Label {
+                                        Text(section.rawValue)
+                                    } icon: {
                                         TabIcon(section: section, isSelected: selection == section)
                                     }
                                     .labelStyle(.iconOnly)
                                 } else {
-                                    Label(section.rawValue) {
+                                    Label {
+                                        Text(section.rawValue)
+                                    } icon: {
                                         TabIcon(section: section, isSelected: selection == section)
                                     }
                                 }
