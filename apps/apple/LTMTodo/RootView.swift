@@ -45,6 +45,7 @@ struct RootView: View {
                                         TabIcon(section: section, isSelected: selection == section)
                                     }
                                     .labelStyle(.iconOnly)
+                                    .accessibilityLabel(section.rawValue)
                                 } else {
                                     Label {
                                         Text(section.rawValue)
