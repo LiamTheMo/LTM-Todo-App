@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calendarEventsForDay, calendarEventOccurrences, saveCalendarEvent, validEvent, zonedDateTimeToInstant } from "../lib/calendar-domain.ts";
+import { calendarEventsForDay, calendarEventOccurrences, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, validEvent, zonedDateTimeToInstant } from "../lib/calendar-domain.ts";
 import { emptyData, newEntity } from "../lib/domain.ts";
 
 const eventBase = (data, fields) => ({
@@ -82,4 +82,18 @@ test("invalid events are rejected and editing preserves record identity", () => 
   assert.equal(edited.calendarEvents[0].revision, 2);
   assert.equal(validEvent(eventBase(data, { startDate: "2026-03-10", endDate: "2026-03-10" })), false);
   assert.equal(saveCalendarEvent(data, eventBase(data, { calendarId: "missing" })), data);
+});
+
+test("event templates preserve local start time and duration while creating fresh events", () => {
+  const data = emptyData();
+  const event = eventBase(data, { allDay: false, startInstant: "2026-10-01T15:30:00.000Z", endInstant: "2026-10-01T16:15:00.000Z", timeZone: "America/Edmonton" });
+  const saved = saveEventTemplate(data, event, "  School pickup  ");
+  assert.equal(saved.eventTemplates[0].name, "School pickup");
+  assert.equal(saved.eventTemplates[0].startTime, "09:30");
+  assert.equal(saved.eventTemplates[0].duration, 45);
+  const created = instantiateEventTemplate(saved, saved.eventTemplates[0].id, "2026-10-02");
+  assert.equal(created.calendarEvents.length, 1);
+  assert.equal(created.calendarEvents[0].startInstant, "2026-10-02T15:30:00.000Z");
+  assert.equal(created.calendarEvents[0].endInstant, "2026-10-02T16:15:00.000Z");
+  assert.notEqual(created.calendarEvents[0].id, event.id);
 });

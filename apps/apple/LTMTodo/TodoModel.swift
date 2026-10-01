@@ -249,8 +249,42 @@ struct TodoCalendarEvent: Codable, Identifiable {
     var deletedAt: Date?
 }
 
+struct TodoTaskTemplate: Codable, Identifiable {
+    var id = UUID()
+    var name: String
+    var title: String
+    var notes = ""
+    var priority = 0
+    var projectID: UUID?
+    var sectionID: UUID?
+    var tagIDs: [UUID] = []
+    var createdAt = Date()
+    var updatedAt = Date()
+    var revision = 1
+    var deletedAt: Date?
+}
+
+struct TodoRoutine: Codable, Identifiable {
+    var id = UUID()
+    var name: String
+    var templateID: UUID
+    var taskID: UUID
+    var startDay: String
+    var frequency: RepeatFrequency
+    var interval = 1
+    var weekdays: [Int]?
+    var until: String?
+    var count: Int?
+    var occurrences: Int? = nil
+    var enabled = true
+    var createdAt = Date()
+    var updatedAt = Date()
+    var revision = 1
+    var deletedAt: Date?
+}
+
 struct TodoData: Codable {
-    var schemaVersion = 2
+    var schemaVersion = 3
     var tasks: [TodoTask] = []
     var projects: [TodoProject] = []
     var tags: [TodoTag] = []
@@ -258,8 +292,10 @@ struct TodoData: Codable {
     var completions: [TodoCompletion] = []
     var calendars: [TodoCalendar] = [TodoData.personalCalendar()]
     var calendarEvents: [TodoCalendarEvent] = []
+    var taskTemplates: [TodoTaskTemplate] = []
+    var routines: [TodoRoutine] = []
 
-    enum CodingKeys: String, CodingKey { case schemaVersion, tasks, projects, tags, sections, completions, calendars, calendarEvents }
+    enum CodingKeys: String, CodingKey { case schemaVersion, tasks, projects, tags, sections, completions, calendars, calendarEvents, taskTemplates, routines }
     init() {}
     static func personalCalendar() -> TodoCalendar {
         TodoCalendar(id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!, name: "Personal", color: .orange, visible: true, sortKey: 0)
@@ -274,18 +310,20 @@ struct TodoData: Codable {
         completions = try values.decodeIfPresent([TodoCompletion].self, forKey: .completions) ?? []
         calendars = try values.decodeIfPresent([TodoCalendar].self, forKey: .calendars) ?? [Self.personalCalendar()]
         calendarEvents = try values.decodeIfPresent([TodoCalendarEvent].self, forKey: .calendarEvents) ?? []
+        taskTemplates = try values.decodeIfPresent([TodoTaskTemplate].self, forKey: .taskTemplates) ?? []
+        routines = try values.decodeIfPresent([TodoRoutine].self, forKey: .routines) ?? []
     }
 }
 
 enum TodoDataFile {
     static func decode(_ data: Data) throws -> TodoData {
         let decoded = try JSONDecoder().decode(TodoData.self, from: data)
-        guard decoded.schemaVersion == 1 || decoded.schemaVersion == 2 else {
+        guard decoded.schemaVersion == 1 || decoded.schemaVersion == 2 || decoded.schemaVersion == 3 else {
             throw TodoDataFileError.unsupportedSchemaVersion(decoded.schemaVersion)
         }
         var migrated = decoded
-        migrated.schemaVersion = 2
-        if migrated.calendars.isEmpty && migrated.schemaVersion == 2 { migrated.calendars = [TodoData.personalCalendar()] }
+        migrated.schemaVersion = 3
+        if migrated.calendars.isEmpty { migrated.calendars = [TodoData.personalCalendar()] }
         return migrated
     }
 

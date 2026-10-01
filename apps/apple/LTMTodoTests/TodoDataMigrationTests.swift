@@ -38,7 +38,7 @@ final class TodoDataMigrationTests: XCTestCase {
 
         let migrated = try TodoDataFile.load(from: fixtureURL)
 
-        XCTAssertEqual(migrated.schemaVersion, 2)
+        XCTAssertEqual(migrated.schemaVersion, 3)
         XCTAssertEqual(migrated.calendars.first?.name, "Personal")
         XCTAssertEqual(migrated.tasks.count, 1)
         XCTAssertEqual(migrated.tasks[0].id.uuidString, "8A00FEC0-E034-4D25-9B6C-ED24B9681724")
@@ -64,13 +64,13 @@ final class TodoDataMigrationTests: XCTestCase {
         XCTAssertTrue(restored.tags.isEmpty)
         XCTAssertTrue(restored.sections.isEmpty)
         XCTAssertTrue(restored.completions.isEmpty)
-        XCTAssertEqual(restored.schemaVersion, 2)
+        XCTAssertEqual(restored.schemaVersion, 3)
         XCTAssertEqual(restored.calendars.first?.name, "Personal")
         XCTAssertTrue(restored.calendarEvents.isEmpty)
     }
 
     func testUnsupportedVersionAndCorruptJSONFailClosed() {
-        XCTAssertThrowsError(try TodoDataFile.decode(Data(#"{"schemaVersion":3}"#.utf8)))
+        XCTAssertThrowsError(try TodoDataFile.decode(Data(#"{"schemaVersion":4}"#.utf8)))
         XCTAssertThrowsError(try TodoDataFile.decode(Data("not json".utf8)))
     }
 
@@ -86,5 +86,14 @@ final class TodoDataMigrationTests: XCTestCase {
         XCTAssertEqual(restored.calendarEvents.first?.title, "Conference")
         XCTAssertEqual(restored.calendarEvents.first?.endDay, "2026-10-03")
         XCTAssertTrue(restored.tasks.isEmpty)
+    }
+
+    func testSchemaV2CalendarSnapshotMigratesWithPlanningCollections() throws {
+        let snapshot = Data(#"{"schemaVersion":2,"tasks":[],"calendars":[],"calendarEvents":[]}"#.utf8)
+        let restored = try TodoDataFile.decode(snapshot)
+        XCTAssertEqual(restored.schemaVersion, 3)
+        XCTAssertEqual(restored.calendars.first?.name, "Personal")
+        XCTAssertTrue(restored.taskTemplates.isEmpty)
+        XCTAssertTrue(restored.routines.isEmpty)
     }
 }

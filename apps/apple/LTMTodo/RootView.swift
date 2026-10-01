@@ -5,6 +5,13 @@ enum AppSection: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+private func dueTimeCaption(_ value: String) -> String {
+    let pieces = value.split(separator: ":").compactMap { Int($0) }
+    guard pieces.count == 2, (0...23).contains(pieces[0]), (0...59).contains(pieces[1]) else { return value }
+    let suffix = pieces[0] < 12 ? "am" : "pm"
+    return String(format: "%d:%02d%@", pieces[0] % 12 == 0 ? 12 : pieces[0] % 12, pieces[1], suffix)
+}
+
 struct RootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @EnvironmentObject private var store: TodoStore
@@ -189,7 +196,7 @@ struct CalendarView: View {
             let end = task.scheduledEnd.map { " – \($0.formatted(date: .omitted, time: .shortened))" } ?? ""
             details.append("Planned \(start.formatted(date: .omitted, time: .shortened))\(end)")
         }
-        if task.dueDay == selectedDay { details.append(task.dueTime.map { "Due at \($0)" } ?? "Due today") }
+        if task.dueDay == selectedDay { details.append(task.dueTime.map { "Due \(dueTimeCaption($0))" } ?? "Due today") }
         return details.isEmpty ? nil : details.joined(separator: " · ")
     }
 }
@@ -406,6 +413,13 @@ struct TaskRow: View {
 struct SettingsView: View {
     @EnvironmentObject private var store: TodoStore
     @State private var tagName = ""
+    @State private var templateName = ""
+    @State private var templateTitle = ""
+    @State private var routineName = ""
+    @State private var routineTemplateID: UUID?
+    @State private var routineStart = Date()
+    @State private var routineFrequency: RepeatFrequency = .weekly
+    @State private var routineInterval = 1
 
     var body: some View {
         NavigationStack {
@@ -426,6 +440,40 @@ struct SettingsView: View {
                     }
                     ForEach(store.data.tags.filter { $0.deletedAt == nil }) { tag in
                         TagRow(tag: tag)
+                    }
+                }
+                Section("Task templates") {
+                    TextField("Template name", text: $templateName)
+                    TextField("Task title", text: $templateTitle)
+                    Button("Save template") {
+                        store.saveTemplate(name: templateName, from: TodoTask(title: templateTitle))
+                        templateName = ""
+                        templateTitle = ""
+                    }.disabled(templateName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || templateTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    ForEach(store.data.taskTemplates.filter { $0.deletedAt == nil }) { template in
+                        HStack {
+                            VStack(alignment: .leading) { Text(template.name); Text(template.title).font(.caption).foregroundStyle(.secondary) }
+                            Spacer()
+                            Button("Create task") { store.createFromTemplate(template.id) }
+                        }
+                    }
+                }
+                Section("Routines") {
+                    TextField("Routine name", text: $routineName)
+                    Picker("Template", selection: $routineTemplateID) {
+                        Text("Choose template").tag(Optional<UUID>.none)
+                        ForEach(store.data.taskTemplates.filter { $0.deletedAt == nil }) { template in Text(template.name).tag(Optional(template.id)) }
+                    }
+                    DatePicker("First due date", selection: $routineStart, in: (DayMath.date(DashboardRetention.earliestDay()) ?? Date())..., displayedComponents: .date)
+                    Picker("Repeat", selection: $routineFrequency) { Text("Daily").tag(RepeatFrequency.daily); Text("Weekly").tag(RepeatFrequency.weekly); Text("Monthly").tag(RepeatFrequency.monthly); Text("Yearly").tag(RepeatFrequency.yearly) }
+                    Stepper("Every \(routineInterval)", value: $routineInterval, in: 1...365)
+                    Button("Create routine") {
+                        guard let templateID = routineTemplateID else { return }
+                        store.startRoutine(templateID: templateID, name: routineName, startDay: DayMath.day(routineStart), frequency: routineFrequency, interval: routineInterval)
+                        routineName = ""
+                    }.disabled(routineTemplateID == nil || routineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    ForEach(store.data.routines.filter { $0.deletedAt == nil }) { routine in
+                        HStack { Text(routine.name); Spacer(); Button(routine.enabled ? "Pause" : "Resume") { store.setRoutineEnabled(routine.id, enabled: !routine.enabled) } }
                     }
                 }
                 Section("Archived projects") {

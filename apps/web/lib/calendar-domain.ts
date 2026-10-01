@@ -1,6 +1,6 @@
 import {
   addDays, instantDay, newEntity, parseLocalDate, type CalendarColor,
-  type CalendarEvent, type CalendarEventOccurrence, type Data, type LocalCalendar
+  type CalendarEvent, type CalendarEventOccurrence, type Data, type EventTemplate, type LocalCalendar
 } from "./domain.ts";
 
 export const calendarColors: CalendarColor[] = ["orange", "blue", "green", "purple", "red", "teal"];
@@ -174,6 +174,32 @@ export function createCalendar(name: string, color: CalendarColor = "orange", no
   const clean = name.trim();
   if (!clean || !calendarColors.includes(color)) return;
   return { ...newEntity(now), name: clean, color, visible: true, sortKey: now.getTime() };
+}
+
+export function saveEventTemplate(data: Data, event: CalendarEvent, name: string): Data {
+  const clean = name.trim();
+  if (!clean || !validEvent(event) || !data.calendars.some(calendar => calendar.id === event.calendarId && !calendar.deletedAt)) return data;
+  const duration = event.allDay ? Math.max(1, eventDurationDays(event)) :
+    Math.max(1, Math.round((Date.parse(event.endInstant) - Date.parse(event.startInstant)) / 60_000));
+  const startTime = event.allDay ? undefined : (() => {
+    const parts = zonedParts(Date.parse(event.startInstant), event.timeZone);
+    return `${String(parts.hour).padStart(2, "0")}:${String(parts.minute).padStart(2, "0")}`;
+  })();
+  const template: EventTemplate = { ...newEntity(), name: clean, calendarId: event.calendarId, title: event.title,
+    notes: event.notes, allDay: event.allDay, duration, timeZone: event.allDay ? undefined : event.timeZone, startTime };
+  return { ...data, eventTemplates: [...data.eventTemplates, template] };
+}
+
+export function instantiateEventTemplate(data: Data, templateId: string, date: string): Data {
+  const template = data.eventTemplates.find(item => item.id === templateId && !item.deletedAt);
+  if (!template || !validDay(date) || !data.calendars.some(calendar => calendar.id === template.calendarId && !calendar.deletedAt)) return data;
+  const base = { ...newEntity(), calendarId: template.calendarId, title: template.title, notes: template.notes };
+  if (template.allDay) return saveCalendarEvent(data, { ...base, allDay: true, startDate: date, endDate: addDays(date, template.duration) });
+  const timeZone = template.timeZone ?? "UTC";
+  const startInstant = zonedDateTimeToInstant(date, template.startTime ?? "09:00", timeZone);
+  if (!startInstant || template.duration < 1) return data;
+  const endInstant = new Date(Date.parse(startInstant) + template.duration * 60_000).toISOString();
+  return saveCalendarEvent(data, { ...base, allDay: false, startInstant, endInstant, timeZone });
 }
 
 export function saveCalendarEvent(data: Data, event: CalendarEvent): Data {

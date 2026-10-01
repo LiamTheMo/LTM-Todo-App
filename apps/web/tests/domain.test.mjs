@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, calendarGridDates, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, undoCompletion } from "../lib/domain.ts";
+import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
@@ -162,6 +162,35 @@ test("scheduling, moving, unscheduling, and undo leave task due fields unchanged
   assert.equal(undone.blocks[0].startInstant, "2026-10-15T15:00:00Z");
   assert.equal(undone.tasks[0].dueDate, due.dueDate);
   assert.equal(saveScheduledBlock(data, { ...block, timeZone: "Not/AZone" }), data);
+});
+test("templates create fresh task identities and routines carry their recurrence", () => {
+  const initial = emptyData();
+  const template = { ...newEntity(), name: "Weekly review", title: "Review goals", notes: "", priority: "medium", tagIds: [] };
+  const withTemplate = saveTaskTemplate(initial, template);
+  const due = localDate(new Date());
+  const once = instantiateTaskTemplate(withTemplate, template.id, due);
+  const twice = instantiateTaskTemplate(once, template.id, due);
+  const first = twice.tasks[0];
+  const second = twice.tasks[1];
+  assert.notEqual(first.id, second.id);
+  assert.equal(first.title, "Review goals");
+  const withRoutine = createRoutine(twice, template.id, "Weekly review", due, { frequency: "weekly", interval: 1, weekdays: [1] });
+  const routine = withRoutine.routines[0];
+  const routineTask = withRoutine.tasks.find(item => item.id === routine.taskId);
+  assert.equal(routineTask.recurrence.frequency, "weekly");
+  assert.equal(routineTask.recurrence.anchorDate, due);
+  const progressed = { ...withRoutine, tasks: withRoutine.tasks.map(item => item.id === routine.taskId ? { ...item, recurrence: { ...item.recurrence, occurrences: 3 } } : item) };
+  const paused = setRoutineEnabled(progressed, routine.id, false);
+  assert.equal(paused.tasks.find(item => item.id === routine.taskId).recurrence, undefined);
+  assert.equal(paused.routines[0].recurrence.occurrences, 3);
+  assert.equal(setRoutineEnabled(paused, routine.id, true).tasks.find(item => item.id === routine.taskId).recurrence.occurrences, 3);
+});
+test("bulk priority edits update selected open tasks atomically", () => {
+  const data = { ...emptyData(), tasks: [task("one", undefined), task("two", undefined), { ...task("done", undefined), completedAt: "2026-10-01T00:00:00Z" }] };
+  const updated = bulkSetPriority(data, ["one", "done"], "high");
+  assert.equal(updated.tasks.find(item => item.id === "one").priority, "high");
+  assert.equal(updated.tasks.find(item => item.id === "done").priority, "none");
+  assert.equal(updated.tasks.find(item => item.id === "two").priority, "none");
 });
 test("84-day Dashboard date windows stay bounded and large local lists remain responsive", () => {
   const data = emptyData();
