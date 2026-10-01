@@ -1,3 +1,4 @@
+import { calendarColors, validEvent } from "./calendar-domain.ts";
 import { emptyData, localDate, pruneExpiredHistory, type Data } from "./domain.ts";
 
 const DB_NAME = "ltm-todo";
@@ -7,18 +8,21 @@ export function normalizeData(value: unknown): Data {
   if (value == null) return emptyData();
   if (typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid local task data");
   const raw = value as Record<string, unknown>;
-  if (raw.schemaVersion !== 1) throw new Error("Unsupported local data version");
-  const collections = ["tasks", "projects", "sections", "tags", "blocks", "reminders", "completions", "savedViews"] as const;
+  if (raw.schemaVersion !== 1 && raw.schemaVersion !== 2) throw new Error("Unsupported local data version");
+  const migratingV1 = raw.schemaVersion === 1;
+  const collections = ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "reminders", "completions", "savedViews"] as const;
   for (const name of collections) {
     if (raw[name] !== undefined && !Array.isArray(raw[name])) throw new Error(`Invalid ${name} collection`);
   }
   if (raw.generation !== undefined && (!Number.isSafeInteger(raw.generation) || (raw.generation as number) < 0)) {
     throw new Error("Invalid local data generation");
   }
-  // Older v1 snapshots may predate some collections and the generation counter.
+  // v1 snapshots may predate collections added by later phases and the generation counter.
   const normalized = { ...raw };
   for (const name of collections) normalized[name] ??= [];
-  const data = { ...emptyData(), ...normalized, generation: (raw.generation as number | undefined) ?? 0 } as Data;
+  if (migratingV1 && !(normalized.calendars as unknown[]).length) normalized.calendars = emptyData().calendars;
+  const data = { ...emptyData(), ...normalized, schemaVersion: 2,
+    generation: (raw.generation as number | undefined) ?? 0 } as Data;
   for (const name of collections) {
     const ids = new Set<string>();
     for (const item of data[name]) {
@@ -43,6 +47,16 @@ export function normalizeData(value: unknown): Data {
     if (typeof completion.taskId !== "string" || typeof completion.completedAt !== "string") {
       throw new Error("Invalid completion record");
     }
+  }
+  for (const calendar of data.calendars) {
+    if (typeof calendar.name !== "string" || !calendar.name.trim() ||
+        !calendarColors.includes(calendar.color) || typeof calendar.visible !== "boolean" || !Number.isFinite(calendar.sortKey)) {
+      throw new Error("Invalid local calendar record");
+    }
+  }
+  const calendarIds = new Set(data.calendars.map(calendar => calendar.id));
+  for (const event of data.calendarEvents) {
+    if (!calendarIds.has(event.calendarId) || !validEvent(event)) throw new Error("Invalid calendar event record");
   }
   const projectIds = new Set(data.projects.map(project => project.id));
   const sectionsById = new Map(data.sections.map(section => [section.id, section]));
@@ -84,9 +98,10 @@ export async function readData(today = localDate(new Date())): Promise<Data> {
       const request = store.get(KEY);
       request.onsuccess = () => {
         try {
+          const legacy = request.result !== undefined && (request.result as { schemaVersion?: number }).schemaVersion !== 2;
           const stored = normalizeData(request.result);
           const retained = pruneExpiredHistory(stored, today);
-          if (retained !== stored) {
+          if (legacy || retained !== stored) {
             result = { ...retained, generation: stored.generation + 1 };
             store.put(result, KEY);
           } else result = stored;

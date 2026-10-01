@@ -38,7 +38,8 @@ final class TodoDataMigrationTests: XCTestCase {
 
         let migrated = try TodoDataFile.load(from: fixtureURL)
 
-        XCTAssertEqual(migrated.schemaVersion, 1)
+        XCTAssertEqual(migrated.schemaVersion, 2)
+        XCTAssertEqual(migrated.calendars.first?.name, "Personal")
         XCTAssertEqual(migrated.tasks.count, 1)
         XCTAssertEqual(migrated.tasks[0].id.uuidString, "8A00FEC0-E034-4D25-9B6C-ED24B9681724")
         XCTAssertEqual(migrated.tasks[0].title, "Legacy task")
@@ -63,10 +64,27 @@ final class TodoDataMigrationTests: XCTestCase {
         XCTAssertTrue(restored.tags.isEmpty)
         XCTAssertTrue(restored.sections.isEmpty)
         XCTAssertTrue(restored.completions.isEmpty)
+        XCTAssertEqual(restored.schemaVersion, 2)
+        XCTAssertEqual(restored.calendars.first?.name, "Personal")
+        XCTAssertTrue(restored.calendarEvents.isEmpty)
     }
 
     func testUnsupportedVersionAndCorruptJSONFailClosed() {
-        XCTAssertThrowsError(try TodoDataFile.decode(Data(#"{"schemaVersion":2}"#.utf8)))
+        XCTAssertThrowsError(try TodoDataFile.decode(Data(#"{"schemaVersion":3}"#.utf8)))
         XCTAssertThrowsError(try TodoDataFile.decode(Data("not json".utf8)))
+    }
+
+    func testCalendarEventAndCalendarRoundTripAsSeparateEntities() throws {
+        var model = TodoData()
+        let calendar = model.calendars[0]
+        let event = TodoCalendarEvent(calendarID: calendar.id, title: "Conference", allDay: true,
+                                      startDay: "2026-10-01", endDay: "2026-10-03")
+        model.calendarEvents.append(event)
+        let encoded = try JSONEncoder().encode(model)
+        let restored = try TodoDataFile.decode(encoded)
+        XCTAssertEqual(restored.calendars.count, 1)
+        XCTAssertEqual(restored.calendarEvents.first?.title, "Conference")
+        XCTAssertEqual(restored.calendarEvents.first?.endDay, "2026-10-03")
+        XCTAssertTrue(restored.tasks.isEmpty)
     }
 }

@@ -35,24 +35,60 @@ export type Project = Entity & { name: string; color: string; sortKey: number; a
 export type ProjectSection = Entity & { projectId: string; name: string; sortKey: number };
 export type Tag = Entity & { name: string; color: string };
 export type ScheduledBlock = Entity & { taskId: string; startInstant: string; endInstant: string; timeZone: string };
+export type CalendarColor = "orange" | "blue" | "green" | "purple" | "red" | "teal";
+export type LocalCalendar = Entity & { name: string; color: CalendarColor; visible: boolean; sortKey: number };
+export type EventRecurrence = {
+  frequency: Frequency;
+  interval: number;
+  weekdays?: number[];
+  until?: string;
+  count?: number;
+};
+type CalendarEventBase = Entity & {
+  calendarId: string;
+  title: string;
+  notes: string;
+  recurrence?: EventRecurrence;
+};
+export type CalendarEvent = CalendarEventBase & (
+  | { allDay: true; startDate: string; endDate: string }
+  | { allDay: false; startInstant: string; endInstant: string; timeZone: string }
+);
+export type CalendarEventOccurrence = {
+  event: CalendarEvent;
+  occurrenceDate: string;
+  startDate?: string;
+  endDate?: string; // Exclusive end date for an all-day span.
+  startInstant?: string;
+  endInstant?: string;
+  allDay: boolean;
+};
 export type Reminder = Entity & { taskId: string; minutesBefore: number; enabled: boolean };
 export type SavedView = Entity & { name: string; query: string; projectId?: string | null; priority?: Priority | "all"; tagId?: string; dateScope?: DateScope | "all"; completed?: boolean | "all" };
 const reminderFormatters = new Map<string, Intl.DateTimeFormat>();
 export type Completion = { id: string; taskId: string; occurrenceDate?: string; completedAt: string; clearedBlockIds?: string[] };
 export type Data = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   generation: number; // Monotonic document revision for cross-tab write detection.
   tasks: Task[];
   projects: Project[];
   sections: ProjectSection[];
   tags: Tag[];
   blocks: ScheduledBlock[];
+  calendars: LocalCalendar[];
+  calendarEvents: CalendarEvent[];
   reminders: Reminder[];
   completions: Completion[];
   savedViews: SavedView[];
 };
+const defaultCalendarID = "00000000-0000-4000-8000-000000000001";
+export const defaultCalendar = (now = new Date()): LocalCalendar => ({
+  id: defaultCalendarID, name: "Personal", color: "orange", visible: true, sortKey: 0,
+  createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1
+});
 export const emptyData = (): Data => ({
-  schemaVersion: 1, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [], reminders: [], completions: [], savedViews: []
+  schemaVersion: 2, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [],
+  calendars: [defaultCalendar()], calendarEvents: [], reminders: [], completions: [], savedViews: []
 });
 export const newEntity = (now = new Date()): Entity => ({
   id: crypto.randomUUID(), createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1

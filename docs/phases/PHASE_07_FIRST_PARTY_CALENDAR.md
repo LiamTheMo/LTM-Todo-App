@@ -10,6 +10,8 @@ Calendar and CalendarEvent domain entities; multiple local calendars with semant
 ## Rules
 Events are commitments; tasks are completable work. An event does not become a task merely because it appears near one. All-day values are dates, not midnight UTC instants. Timed events retain time-zone semantics. Calendar views consume the same scheduling domain used by Dashboard.
 
+Event recurrence supports daily, weekly (selected weekdays), monthly, and yearly series with an interval and optional end date or occurrence count. Editing or deleting an event applies to its whole series; per-occurrence exceptions are outside this phase. Month summaries and agenda rows sort deterministically. A hidden calendar hides its events while leaving tasks and scheduled work visible.
+
 ## Layout
 Handle overlapping events deterministically. Month cells summarize without becoming unreadable. Day/week views support current-time indicator and accessible alternatives to visual geometry.
 
