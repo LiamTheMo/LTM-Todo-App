@@ -82,6 +82,9 @@ struct CalendarView: View {
     @EnvironmentObject private var store: TodoStore
     @State private var selectedDate = Date()
     @State private var editing: TodoTask?
+    @State private var editingEvent: TodoCalendarEvent?
+    @State private var showingNewCalendar = false
+    @State private var newCalendarName = ""
 
     private var selectedDay: String { DayMath.day(selectedDate) }
     private var earliestDate: Date { DayMath.date(DashboardRetention.earliestDay()) ?? Calendar.current.startOfDay(for: Date()) }
@@ -101,15 +104,36 @@ struct CalendarView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("Calendars") {
+                    ForEach(store.visibleCalendars) { calendar in
+                        Toggle(isOn: Binding(get: { calendar.visible }, set: { store.setCalendarVisible(calendar.id, visible: $0) })) {
+                            Label(calendar.name, systemImage: "circle.fill").tint(color(for: calendar.color))
+                        }
+                    }
+                    Button("Add calendar") { showingNewCalendar = true }
+                }
                 Section {
                     DatePicker("Date", selection: $selectedDate, in: earliestDate..., displayedComponents: .date)
                         .datePickerStyle(.graphical)
                     Button("Go to Today") { selectedDate = Date() }
                 }
                 Section(selectedDate.formatted(date: .complete, time: .omitted)) {
-                    if visibleTasks.isEmpty {
-                        ContentUnavailableView("Nothing planned", systemImage: "calendar", description: Text("Tasks due or scheduled for this day will appear here."))
-                    } else {
+                    if visibleTasks.isEmpty && store.calendarEvents(on: selectedDay).isEmpty {
+                        ContentUnavailableView("Nothing planned", systemImage: "calendar", description: Text("Events and tasks due or scheduled for this day will appear here."))
+                    }
+                    ForEach(store.calendarEvents(on: selectedDay)) { event in
+                        Button { editingEvent = event } label: {
+                            HStack(spacing: 10) {
+                                Circle().fill(color(for: store.visibleCalendars.first(where: { $0.id == event.calendarID })?.color ?? .orange)).frame(width: 9, height: 9)
+                                VStack(alignment: .leading) {
+                                    Text(event.title).foregroundStyle(.primary)
+                                    Text(event.allDay ? "All day event" : "Event · \(event.startInstant?.formatted(date: .omitted, time: .shortened) ?? "")")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    if !visibleTasks.isEmpty {
                         ForEach(visibleTasks) { task in
                             TaskRow(task: task, subtitle: subtitle(for: task)) { editing = task }
                         }
@@ -119,10 +143,30 @@ struct CalendarView: View {
             .navigationTitle("Calendar")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { editing = TodoTask(title: "", dueDay: selectedDay) } label: { Label("Add task", systemImage: "plus") }
+                    Menu {
+                        Button("Add task", systemImage: "checkmark.circle") { editing = TodoTask(title: "", dueDay: selectedDay) }
+                        Button("Add event", systemImage: "calendar.badge.plus") { editingEvent = TodoCalendarEvent(calendarID: store.visibleCalendars.first?.id ?? UUID(), title: "", allDay: true, startDay: selectedDay, endDay: DayMath.add(1, to: selectedDay)) }
+                    } label: { Label("Add", systemImage: "plus") }
                 }
             }
             .sheet(item: $editing) { task in TaskEditorView(task: task) }
+            .sheet(item: $editingEvent) { event in CalendarEventEditorView(event: event) }
+            .alert("New calendar", isPresented: $showingNewCalendar) {
+                TextField("Calendar name", text: $newCalendarName)
+                Button("Cancel", role: .cancel) { newCalendarName = "" }
+                Button("Create") { store.addCalendar(name: newCalendarName, color: TodoCalendarColor.allCases[store.visibleCalendars.count % TodoCalendarColor.allCases.count]); newCalendarName = "" }
+            }
+        }
+    }
+
+    private func color(for color: TodoCalendarColor) -> Color {
+        switch color {
+        case .orange: .orange
+        case .blue: .blue
+        case .green: .green
+        case .purple: .purple
+        case .red: .red
+        case .teal: .teal
         }
     }
 
