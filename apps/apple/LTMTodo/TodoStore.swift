@@ -188,6 +188,26 @@ final class TodoStore: ObservableObject {
         save(TodoTask(title: clean, projectID: projectID))
     }
 
+    func schedule(_ taskID: UUID, from start: Date, to end: Date) {
+        guard errorMessage == nil, end > start,
+              let index = data.tasks.firstIndex(where: { $0.id == taskID && $0.deletedAt == nil && $0.completedAt == nil }) else { return }
+        data.tasks[index].scheduledStart = start
+        data.tasks[index].scheduledEnd = end
+        data.tasks[index].updatedAt = Date()
+        data.tasks[index].revision += 1
+        persist()
+    }
+
+    func unschedule(_ taskID: UUID) {
+        guard errorMessage == nil,
+              let index = data.tasks.firstIndex(where: { $0.id == taskID && $0.deletedAt == nil }) else { return }
+        data.tasks[index].scheduledStart = nil
+        data.tasks[index].scheduledEnd = nil
+        data.tasks[index].updatedAt = Date()
+        data.tasks[index].revision += 1
+        persist()
+    }
+
     func moveTask(_ id: UUID, by direction: Int) {
         guard errorMessage == nil,
               let task = data.tasks.first(where: { $0.id == id && $0.deletedAt == nil }) else { return }

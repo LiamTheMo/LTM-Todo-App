@@ -219,6 +219,34 @@ export function saveTask(data: Data, task: Task, reminderMinutes = "", today = l
     ]
   };
 }
+export function saveScheduledBlock(data: Data, block: ScheduledBlock): Data {
+  const task = data.tasks.find(item => item.id === block.taskId && !item.deletedAt && !item.completedAt);
+  const start = Date.parse(block.startInstant);
+  const end = Date.parse(block.endInstant);
+  if (!task || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return data;
+  try { new Intl.DateTimeFormat("en", { timeZone: block.timeZone }); } catch { return data; }
+  const existing = data.blocks.find(item => item.id === block.id);
+  const stamp = new Date().toISOString();
+  const saved = { ...block, createdAt: existing?.createdAt ?? block.createdAt, updatedAt: stamp,
+    revision: existing ? existing.revision + 1 : 1, deletedAt: undefined };
+  return { ...data, blocks: existing
+    ? data.blocks.map(item => item.id === block.id ? saved : item)
+    : [...data.blocks, saved] };
+}
+export function deleteScheduledBlock(data: Data, id: string): Data {
+  const existing = data.blocks.find(item => item.id === id && !item.deletedAt);
+  if (!existing) return data;
+  const stamp = new Date().toISOString();
+  return { ...data, blocks: data.blocks.map(item => item.id === id
+    ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item) };
+}
+export function restoreScheduledBlock(data: Data, block: ScheduledBlock): Data {
+  const task = data.tasks.find(item => item.id === block.taskId && !item.deletedAt);
+  if (!task) return data;
+  const stamp = new Date().toISOString();
+  return { ...data, blocks: data.blocks.map(item => item.id === block.id
+    ? { ...block, deletedAt: undefined, updatedAt: stamp, revision: item.revision + 1 } : item) };
+}
 export function bulkCompleteTasks(data: Data, ids: string[], now = new Date()): Data {
   const selected = new Set(ids);
   const subtasks = new Set(data.tasks.filter(task => task.parentTaskId).map(task => task.id));
