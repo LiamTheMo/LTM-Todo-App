@@ -22,7 +22,7 @@
     }
   ],
   "vars": {
-    "VAPID_PUBLIC_KEY": "",
-    "VAPID_SUBJECT": ""
+    "VAPID_PUBLIC_KEY": "BFS4nuWMH5U8GDETLd_jN2fH4NKLRFKnn2VfmpJ3jxwlODNoRXTSlaoI7nOahU3j6bD1J7lBzEu-DFuF9-jwgc4",
+    "VAPID_SUBJECT": "https://todo.liamthemo.com"
   }
 }
