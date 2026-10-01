@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
-import { addDays, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, localDate, newEntity, overdueTasks, parseLocalDate, pendingReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
+import { addDays, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
 import { readData, writeData } from "../lib/storage";
 import { overdueDueCaption } from "../lib/date-labels";
 
@@ -14,6 +14,72 @@ const dashboardWindow = dashboardStep * 3;
 const dateLabel = (day: string) => parseLocalDate(day).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 const timeLabel = (instant: string) => new Date(instant).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+const pushTokenKey = "ltm-todo-push-device-token";
+type PushConfig = { enabled: boolean; publicKey: string | null };
+
+async function pushConfig(): Promise<PushConfig> {
+  const response = await fetch("/api/notifications/config", { cache: "no-store" });
+  if (!response.ok) throw new Error("Notification setup could not be checked.");
+  return response.json() as Promise<PushConfig>;
+}
+
+function applicationServerKey(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const decoded = atob(base64 + "=".repeat((4 - base64.length % 4) % 4));
+  return Uint8Array.from(decoded, character => character.charCodeAt(0));
+}
+
+async function getPushSubscription(registration: ServiceWorkerRegistration, publicKey: string) {
+  const expected = applicationServerKey(publicKey);
+  let subscription = await registration.pushManager.getSubscription();
+  const existing = subscription?.options.applicationServerKey;
+  const current = existing && new Uint8Array(existing);
+  const matches = !existing || Boolean(current && current.length === expected.length && current.every((byte, index) => byte === expected[index]));
+  if (subscription && !matches) { await subscription.unsubscribe(); subscription = null; }
+  return subscription ?? registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: expected });
+}
+
+function newPushToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function registerPushDevice(config: PushConfig, promptForPermission: boolean) {
+  if (!config.enabled || !config.publicKey) throw new Error("Push notifications are not configured on the server yet.");
+  if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    throw new Error("This browser does not support push notifications.");
+  }
+  if (!window.isSecureContext) throw new Error("Push notifications need a secure website connection.");
+  let permission = Notification.permission;
+  if (permission === "default" && promptForPermission) permission = await Notification.requestPermission();
+  if (permission !== "granted") throw new Error(permission === "denied"
+    ? "Notifications are blocked in browser settings. Allow them there, then try again."
+    : "Allow notifications to enable reminders.");
+  const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  await navigator.serviceWorker.ready;
+  const subscription = await getPushSubscription(registration, config.publicKey);
+  const token = localStorage.getItem(pushTokenKey) ?? newPushToken();
+  const response = await fetch("/api/notifications/register", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, subscription: subscription.toJSON() })
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(result.error ?? "This device could not be registered for push notifications.");
+  }
+  localStorage.setItem(pushTokenKey, token);
+  return token;
+}
+
+async function removePushDevice(token: string) {
+  try {
+    await fetch("/api/notifications/register", { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  } finally {
+    const registration = await navigator.serviceWorker.getRegistration("/");
+    await registration?.pushManager.getSubscription().then(subscription => subscription?.unsubscribe());
+    localStorage.removeItem(pushTokenKey);
+  }
+}
 
 export default function Home() {
   const [data, setData] = useState<Data>(emptyData);
@@ -34,7 +100,14 @@ export default function Home() {
   const [dateFilter, setDateFilter] = useState<DateScope | "all">("all");
   const [savedViewId, setSavedViewId] = useState("");
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [reminderPermission, setReminderPermission] = useState(false);
+  const [pushToken, setPushToken] = useState("");
+  const [pushActive, setPushActive] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushStatus, setPushStatus] = useState("Checking push notification support…");
+  const [pushSyncRevision, setPushSyncRevision] = useState(0);
+  const pushSyncQueue = useRef(Promise.resolve());
   const [today, setToday] = useState(() => localDate(new Date()));
   const [dayStart, setDayStart] = useState(() => historyStart(localDate(new Date())));
   const earliestDay = historyStart(today);
@@ -56,14 +129,68 @@ export default function Home() {
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refreshToday); };
   }, []);
   useEffect(() => {
-    if (!ready || !("Notification" in window) || Notification.permission !== "granted") return;
-    const timers = pendingReminderTriggers(data).map(({ reminder, task, triggerAt }) => window.setTimeout(() => {
-      if (document.visibilityState === "visible" && Notification.permission === "granted") {
-        new Notification(task.title, { body: "Task reminder" });
+    const retryPushSync = () => setPushSyncRevision(value => value + 1);
+    window.addEventListener("online", retryPushSync);
+    return () => window.removeEventListener("online", retryPushSync);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const supported = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window && window.isSecureContext;
+    void (async () => {
+      try {
+        await Promise.resolve();
+        if (cancelled) return;
+        setPushSupported(supported);
+        if (!supported) { setPushPermission("unsupported"); setPushStatus("Push notifications are not supported in this browser context."); return; }
+        setPushPermission(Notification.permission);
+        const config = await pushConfig();
+        if (cancelled) return;
+        if (!config.enabled || !config.publicKey) { setPushStatus("Push notification service setup is not complete yet."); return; }
+        const token = localStorage.getItem(pushTokenKey);
+        if (!token || Notification.permission !== "granted") {
+          if (token && Notification.permission === "denied") await removePushDevice(token);
+          setPushStatus(Notification.permission === "denied" ? "Notifications are blocked in browser settings." : "Enable notifications on this device to receive reminders.");
+          return;
+        }
+        const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        const subscription = await getPushSubscription(registration, config.publicKey);
+        const response = await fetch("/api/notifications/register", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, subscription: subscription.toJSON() })
+        });
+        if (!response.ok) throw new Error("This device could not reconnect to push notifications.");
+        if (!cancelled) { setPushToken(token); setPushActive(true); setPushStatus("Push notifications are enabled on this device."); }
+      } catch (cause) {
+        if (!cancelled) setPushStatus(cause instanceof Error ? cause.message : "Push notification setup could not be checked.");
       }
-    }, Math.max(0, triggerAt - Date.now())));
-    return () => timers.forEach(window.clearTimeout);
-  }, [data, ready, reminderPermission]);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    if (!ready || error || !pushActive || !pushToken) return;
+    let cancelled = false;
+    const reminders = scheduledReminderTriggers(data).slice(0, 5_000).map(({ reminder, task, triggerAt }) => ({
+      id: reminder.id, title: task.title, triggerAt: Math.floor(triggerAt)
+    }));
+    pushSyncQueue.current = pushSyncQueue.current.catch(() => undefined).then(async () => {
+      if (cancelled) return;
+      const response = await fetch("/api/notifications/schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${pushToken}` },
+        body: JSON.stringify({ reminders })
+      });
+      if (!response.ok) throw new Error("Reminder schedules could not be synchronized. Check your connection and reopen Settings to retry.");
+      if (!cancelled) {
+        const total = scheduledReminderTriggers(data).length;
+        setPushStatus(reminders.length < total
+          ? `First ${reminders.length.toLocaleString()} of ${total.toLocaleString()} reminders synced; this device supports up to 5,000 scheduled reminders.`
+          : `${reminders.length} reminder${reminders.length === 1 ? "" : "s"} synced to this device.`);
+      }
+    }).catch(cause => {
+      if (!cancelled) setPushStatus(cause instanceof Error ? cause.message : "Reminder schedules could not be synchronized.");
+    });
+    return () => { cancelled = true; };
+  }, [data, error, pushActive, pushToken, pushSyncRevision, ready]);
   useLayoutEffect(() => {
     const anchor = pendingAnchor.current;
     const scroller = dayScrollRef.current;
@@ -219,8 +346,42 @@ export default function Home() {
             <button className="linkButton" onClick={() => { if (!confirm("Archive this project? Its tasks will leave active views until restored in Settings.")) return; mutate(value => { const stamp = new Date().toISOString(); return { ...value, projects: value.projects.map(p => p.id === projectId ? { ...p, archivedAt: stamp, updatedAt: stamp, revision: p.revision + 1 } : p) }; }); setProjectId(""); }}>Archive project</button>
           </>}
         </>}
-        {view === "Settings" && <div className="settingsPanel"><h3>Local and private</h3><p>Your data is stored in this browser on this device. Cross-device sync arrives in a later phase.</p><button onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = `ltm-todo-${today}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Download backup JSON</button>
-          {"Notification" in window && <><h3>Browser reminders</h3><p>Reminders can appear while this app is open in a supported browser. Browser notifications are not scheduled after the tab or browser closes.</p><button onClick={() => { void Notification.requestPermission().then(permission => setReminderPermission(permission === "granted")); }}>Enable browser notifications</button></>}
+        {view === "Settings" && <div className="settingsPanel"><h3>Local and private</h3><p>Your tasks are stored on this device. To deliver reminders while the app is closed, reminder titles and scheduled times are sent to LTM Todo&apos;s Cloudflare reminder service. Each device has its own notification subscription.</p><button onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = `ltm-todo-${today}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Download backup JSON</button>
+          <h3>Push reminders</h3><p>Enable push for notifications when LTM Todo is in the background or closed. On iPhone or iPad, open the Home Screen app copy to enable push. Push scheduling checks once per minute, so delivery can be slightly after the selected time.</p>
+          <p>Browser permission: {pushPermission === "granted" ? "Allowed" : pushPermission === "denied" ? "Blocked in browser settings" : pushPermission === "unsupported" ? "Not supported" : "Not granted"}. Push subscription: {pushActive ? "Set up on this device" : "Not set up"}.</p>
+          <p role="status" aria-live="polite">{pushStatus}</p>
+          {!pushSupported ? <p>Push notifications are not available in this browser context.</p> : <div className="settingsActions">{!pushActive && <button disabled={pushBusy} onClick={() => { void (async () => {
+            setPushBusy(true);
+            try {
+              const token = await registerPushDevice(await pushConfig(), true);
+              setPushPermission(Notification.permission); setPushToken(token); setPushActive(true); setPushStatus("Push notifications are set up on this device.");
+            } catch (cause) { setPushPermission(Notification.permission); setPushStatus(cause instanceof Error ? cause.message : "Push notifications could not be enabled."); }
+            finally { setPushBusy(false); }
+          })(); }}>{pushBusy ? "Setting up…" : pushPermission === "granted" ? "Retry push setup" : "Enable push notifications"}</button>}
+            {pushActive && <button disabled={pushBusy} onClick={() => setPushSyncRevision(value => value + 1)}>Sync reminders now</button>}
+            <button disabled={pushBusy} onClick={() => { void (async () => {
+              setPushBusy(true);
+              try {
+                let token = pushToken;
+                if (!pushActive || !token) {
+                  token = await registerPushDevice(await pushConfig(), true);
+                  setPushPermission(Notification.permission); setPushToken(token); setPushActive(true);
+                }
+                const response = await fetch("/api/notifications/test", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+                if (!response.ok) throw new Error("The test notification could not be sent. Re-enable notifications if this device subscription expired.");
+                setPushStatus("Test push sent. Check this device’s notification center.");
+              } catch (cause) { setPushPermission(Notification.permission); setPushStatus(cause instanceof Error ? cause.message : "The test notification could not be sent."); }
+              finally { setPushBusy(false); }
+            })(); }}>Send test notification</button>
+            {pushActive && <button disabled={pushBusy} onClick={() => { void (async () => {
+              setPushBusy(true);
+              try {
+                await removePushDevice(pushToken);
+                setPushToken(""); setPushActive(false); setPushStatus("Push notifications are disabled on this device.");
+              } catch { setPushStatus("Push notifications could not be disabled right now. Please retry."); }
+              finally { setPushBusy(false); }
+            })(); }}>Disable on this device</button>}
+          </div>}
           <h3>Tags</h3><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("tag") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, tags: [...value.tags, { ...newEntity(), name: input.value.trim(), color: "#c86b24" }] })); input.value = ""; }}><input name="tag" aria-label="New tag name" placeholder="New tag name…" /><button>Add tag</button></form>{tags.map(t => <div className="tagLine" key={t.id}><span>#{t.name}</span><div><button onClick={() => { const name = prompt("Rename tag", t.name)?.trim(); if (name) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, name, revision: item.revision + 1, updatedAt: new Date().toISOString() } : item) })); }}>Rename</button><button onClick={() => { if (confirm(`Delete tag ${t.name}?`)) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, deletedAt: new Date().toISOString(), revision: item.revision + 1 } : item), tasks: value.tasks.map(item => item.tagIds.includes(t.id) ? { ...item, tagIds: item.tagIds.filter(id => id !== t.id), revision: item.revision + 1 } : item) })); }}>Delete</button></div></div>)}
           <h3>Archived projects</h3>{data.projects.filter(p => p.archivedAt && !p.deletedAt).map(p => <div className="tagLine" key={p.id}><span>{p.name}</span><button onClick={() => mutate(value => { const stamp = new Date().toISOString(); return { ...value, projects: value.projects.map(item => item.id === p.id ? { ...item, archivedAt: undefined, updatedAt: stamp, revision: item.revision + 1 } : item) }; })}>Restore</button></div>)}
         </div>}

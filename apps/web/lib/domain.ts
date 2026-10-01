@@ -225,6 +225,14 @@ export function pendingReminderTriggers(data: Data, now = Date.now(), horizonDay
     return triggerAt !== undefined && triggerAt >= now && triggerAt <= now + horizonDays * 86_400_000 ? [{ reminder, task: task!, triggerAt }] : [];
   }).sort((a, b) => a.triggerAt - b.triggerAt);
 }
+export function scheduledReminderTriggers(data: Data, now = Date.now()) {
+  const tasks = new Map(data.tasks.map(task => [task.id, task]));
+  return data.reminders.filter(reminder => !reminder.deletedAt).flatMap(reminder => {
+    const task = tasks.get(reminder.taskId);
+    const triggerAt = task && reminderTrigger(task, reminder);
+    return triggerAt !== undefined && triggerAt >= now ? [{ reminder, task: task!, triggerAt }] : [];
+  }).sort((a, b) => a.triggerAt - b.triggerAt);
+}
 export type DashboardCompletion = { task: Task; completionId: string; completedAt: string };
 export function dashboardDays(data: Data, start: string, length: number, today = localDate(new Date())) {
   const visible = filterTasks(data, {});
