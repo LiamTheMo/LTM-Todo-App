@@ -85,6 +85,8 @@ struct CalendarView: View {
     @State private var editingEvent: TodoCalendarEvent?
     @State private var showingNewCalendar = false
     @State private var newCalendarName = ""
+    @State private var scheduleTask: TodoTask?
+    @State private var showingSchedulePicker = false
 
     private var selectedDay: String { DayMath.day(selectedDate) }
     private var earliestDate: Date { DayMath.date(DashboardRetention.earliestDay()) ?? Calendar.current.startOfDay(for: Date()) }
@@ -135,7 +137,7 @@ struct CalendarView: View {
                     }
                     if !visibleTasks.isEmpty {
                         ForEach(visibleTasks) { task in
-                            TaskRow(task: task, subtitle: subtitle(for: task)) { editing = task }
+                            TaskRow(task: task, subtitle: subtitle(for: task), schedule: { scheduleTask = task }) { editing = task }
                         }
                     }
                 }
@@ -146,11 +148,22 @@ struct CalendarView: View {
                     Menu {
                         Button("Add task", systemImage: "checkmark.circle") { editing = TodoTask(title: "", dueDay: selectedDay) }
                         Button("Add event", systemImage: "calendar.badge.plus") { editingEvent = TodoCalendarEvent(calendarID: store.visibleCalendars.first?.id ?? UUID(), title: "", allDay: true, startDay: selectedDay, endDay: DayMath.add(1, to: selectedDay)) }
+                        Button("Schedule task", systemImage: "clock") { showingSchedulePicker = true }
                     } label: { Label("Add", systemImage: "plus") }
                 }
             }
             .sheet(item: $editing) { task in TaskEditorView(task: task) }
             .sheet(item: $editingEvent) { event in CalendarEventEditorView(event: event) }
+            .sheet(item: $scheduleTask) { task in ScheduledWorkEditorView(task: task, selectedDate: selectedDate) }
+            .sheet(isPresented: $showingSchedulePicker) {
+                NavigationStack {
+                    List(store.activeTasks) { task in
+                        Button { showingSchedulePicker = false; scheduleTask = task } label: {
+                            VStack(alignment: .leading) { Text(task.title).foregroundStyle(.primary); Text(task.dueDay.map { "Due \($0)" } ?? "No deadline").font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }.navigationTitle("Choose a task").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingSchedulePicker = false } } }
+                }
+            }
             .alert("New calendar", isPresented: $showingNewCalendar) {
                 TextField("Calendar name", text: $newCalendarName)
                 Button("Cancel", role: .cancel) { newCalendarName = "" }
@@ -330,6 +343,7 @@ struct TaskRow: View {
     var completion: TodoCompletion? = nil
     var subtitle: String? = nil
     var showReorderControls = false
+    var schedule: (() -> Void)? = nil
     let edit: () -> Void
 
     private var isCompleted: Bool { completion != nil || task.completedAt != nil }
@@ -365,6 +379,11 @@ struct TaskRow: View {
                 .padding(.leading, task.parentTaskID == nil ? 0 : 16)
             }
             .buttonStyle(.plain)
+            if !isCompleted, let schedule {
+                Button(action: schedule) { Image(systemName: "clock.badge.plus") }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Schedule work for \(task.title)")
+            }
             if showReorderControls {
                 VStack(spacing: 4) {
                     Button { store.moveTask(task.id, by: -1) } label: {

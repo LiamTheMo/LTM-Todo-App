@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
-import { addDays, calendarGridDates, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion, type CalendarEvent, type Data, type DateScope, type Priority, type Task } from "../lib/domain";
+import { addDays, calendarGridDates, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, undoCompletion, type CalendarEvent, type Data, type DateScope, type Priority, type ScheduledBlock, type Task } from "../lib/domain";
 import { calendarColors, calendarEventsForDay, calendarEventOccurrences, createCalendar, saveCalendarEvent, zonedDateTimeToInstant } from "../lib/calendar-domain";
 import { readData, writeData } from "../lib/storage";
 import { overdueDueCaption } from "../lib/date-labels";
@@ -96,6 +96,8 @@ export default function Home() {
   const [calendarSelectedDate, setCalendarSelectedDate] = useState(() => localDate(new Date()));
   const [calendarMode, setCalendarMode] = useState<"month" | "week" | "day" | "agenda">("month");
   const [eventEditing, setEventEditing] = useState<{ id?: string; date: string } | null>(null);
+  const [scheduleEditing, setScheduleEditing] = useState<{ taskId: string; blockId?: string; date: string } | null>(null);
+  const [scheduleUndo, setScheduleUndo] = useState<ScheduledBlock[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
   const [quickTitle, setQuickTitle] = useState("");
@@ -254,7 +256,8 @@ export default function Home() {
     const latestCompletion = completionId && data.completions.filter(item => item.taskId === task.id).at(-1)?.id === completionId;
     return <div className={`taskRow ${isComplete ? "completed" : ""} ${task.parentTaskId ? "subtask" : ""}`} key={key}>
       <button className="complete" disabled={completionId ? !latestCompletion : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt)} onClick={() => completionId ? latestCompletion && mutate(value => undoCompletion(value, completionId)) : toggle(task)} aria-label={isComplete ? `Reopen ${task.title}` : `Complete ${task.title}`}>{isComplete ? "✓" : "○"}</button>
-      <button className="taskText" onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt) ? "Finish subtasks first" : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
+      <button className="taskText" draggable={!isComplete} onDragStart={e => { if (isComplete) return; e.dataTransfer.setData("application/x-ltm-task", task.id); e.dataTransfer.effectAllowed = "copy"; }} onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt) ? "Finish subtasks first" : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
+      {!isComplete && <button className="scheduleAction" onClick={() => setScheduleEditing({ taskId: task.id, date: calendarSelectedDate })} aria-label={`Schedule work for ${task.title}`} title="Schedule work">◷</button>}
       <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
     </div>;
   };
@@ -369,6 +372,7 @@ export default function Home() {
             <div className="calendarMonthControl"><button type="button" aria-label="Previous period" onClick={() => { if (calendarMode === "month") shiftCalendarMonth(-1); else setCalendarSelectedDate(addDays(calendarSelectedDate, calendarMode === "week" ? -7 : -1)); }}>‹</button><h3>{calendarMode === "month" ? calendarMonthLabel : dateLabel(calendarSelectedDate)}</h3><button type="button" aria-label="Next period" onClick={() => { if (calendarMode === "month") shiftCalendarMonth(1); else setCalendarSelectedDate(addDays(calendarSelectedDate, calendarMode === "week" ? 7 : 1)); }}>›</button></div>
             <div className="calendarActions"><select aria-label="Calendar view" value={calendarMode} onChange={e => setCalendarMode(e.target.value as typeof calendarMode)}><option value="month">Month</option><option value="week">Week</option><option value="day">Day</option><option value="agenda">Agenda</option></select><button type="button" className="calendarToday" onClick={goCalendarToday}>Today</button><button type="button" className="calendarToday" onClick={() => setEventEditing({ date: calendarSelectedDate })}>+ Event</button></div>
           </div>
+          {scheduleUndo && <div className="scheduleUndo" role="status"><span>Planning change saved.</span><button type="button" onClick={() => { const blocks = scheduleUndo; mutate(value => ({ ...value, blocks })); setScheduleUndo(null); }}>Undo</button></div>}
           <div className="calendarManagement"><div className="calendarToggles" aria-label="Visible calendars">{activeCalendars.map(calendar => <label key={calendar.id}><input type="checkbox" checked={calendar.visible} onChange={e => mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: e.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }))} /><span className={`calendarColor calendarColor-${calendar.color}`} />{calendar.name}</label>)}</div><button type="button" onClick={() => { const name = prompt("Calendar name")?.trim(); if (!name) return; const color = calendarColors[activeCalendars.length % calendarColors.length]; const calendar = createCalendar(name, color); if (calendar) mutate(value => ({ ...value, calendars: [...value.calendars, calendar] })); }}>+ Calendar</button></div>
           <div className="calendarLayout">
             <div>
@@ -381,7 +385,9 @@ export default function Home() {
                   return <button key={day.date} type="button" className={"calendarDay" + (day.date.slice(0, 7) !== calendarMonth ? " calendarDayOutsideMonth" : "") + (day.date === calendarSelectedDate ? " calendarDaySelected" : "") + (day.date === today ? " calendarDayToday" : "")}
                     aria-label={dateLabel(day.date) + (itemCount ? `, ${itemCount} calendar item${itemCount === 1 ? "" : "s"}` : ", no calendar items")}
                     aria-current={day.date === today ? "date" : undefined} aria-pressed={day.date === calendarSelectedDate}
-                    onClick={() => { setCalendarSelectedDate(day.date); if (day.date.slice(0, 7) !== calendarMonth) setCalendarMonth(day.date.slice(0, 7)); }}>
+                    onClick={() => { setCalendarSelectedDate(day.date); if (day.date.slice(0, 7) !== calendarMonth) setCalendarMonth(day.date.slice(0, 7)); }}
+                    onDragOver={e => { if (e.dataTransfer.types.includes("application/x-ltm-task")) e.preventDefault(); }}
+                    onDrop={e => { e.preventDefault(); const taskId = e.dataTransfer.getData("application/x-ltm-task"); if (!taskId || !data.tasks.some(task => task.id === taskId && !task.completedAt && !task.deletedAt)) return; setCalendarSelectedDate(day.date); setScheduleEditing({ taskId, date: day.date }); }}>
                     <span>{calendarMode === "agenda" ? dateLabel(day.date) : parseLocalDate(day.date).getDate()}</span>{itemCount > 0 && <small aria-hidden="true">{itemCount} item{itemCount === 1 ? "" : "s"}</small>}
                   </button>;
                 })}
@@ -389,7 +395,7 @@ export default function Home() {
             </div>
             <div className="calendarAgenda" aria-live="polite">
               <div className="calendarAgendaHeader"><div><span className="eyebrow">SELECTED DAY</span><h3>{dateLabel(calendarSelectedDate)}</h3></div></div>
-              {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block:${block.id}`))}</div>}
+              {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => <div className="plannedRow" key={`calendar-block:${block.id}`}>{taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block-task:${block.id}`)}<button type="button" className="scheduleAction" aria-label={`Edit scheduled block for ${task.title}`} onClick={() => setScheduleEditing({ taskId: task.id, blockId: block.id, date: calendarSelectedDate })}>Edit time</button><button type="button" className="scheduleAction" aria-label={`Unschedule ${task.title}`} onClick={() => { setScheduleUndo(data.blocks); mutate(value => deleteScheduledBlock(value, block.id)); }}>Remove</button></div>)}</div>}
               {!!calendarAgenda.due.length && <div className="group"><h4>DUE</h4>{calendarAgenda.due.map(task => taskRow(task, task.dueTime ? `Due at ${task.dueTime}` : "Due today"))}</div>}
               {!!calendarAgenda.completed.length && <div className="group"><h4>COMPLETED</h4>{calendarAgenda.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `calendar-completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
               {!!calendarEvents.length && <div className="group"><h4>EVENTS</h4>{calendarEvents.map(item => <div className="eventRow" key={`${item.event.id}:${item.occurrenceDate}`}><span className={`calendarColor calendarColor-${activeCalendars.find(c => c.id === item.event.calendarId)?.color ?? "orange"}`} /><button type="button" className="eventTitle" onClick={() => setEventEditing({ id: item.event.id, date: item.occurrenceDate })}><strong>{item.event.title}</strong><small>{item.allDay ? "All day" : `${timeLabel(item.startInstant!)} – ${timeLabel(item.endInstant!)}`} · {activeCalendars.find(c => c.id === item.event.calendarId)?.name ?? "Calendar"}</small></button></div>)}</div>}
@@ -463,6 +469,7 @@ export default function Home() {
       reminders: value.reminders.map(r => r.taskId === id && !r.deletedAt ? { ...r, deletedAt: stamp, revision: r.revision + 1 } : r)
     }; }); setEditing(null); }} />}
     {eventEditing && <CalendarEventEditor key={`${eventEditing.id ?? "new"}:${eventEditing.date}`} event={data.calendarEvents.find(item => item.id === eventEditing.id)} date={eventEditing.date} calendars={activeCalendars} onClose={() => setEventEditing(null)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setEventEditing(null); }} onDelete={id => { const stamp = new Date().toISOString(); mutate(value => ({ ...value, calendarEvents: value.calendarEvents.map(event => event.id === id ? { ...event, deletedAt: stamp, updatedAt: stamp, revision: event.revision + 1 } : event) })); setEventEditing(null); }} />}
+    {scheduleEditing && <ScheduleEditor key={`${scheduleEditing.taskId}:${scheduleEditing.blockId ?? "new"}:${scheduleEditing.date}`} task={data.tasks.find(task => task.id === scheduleEditing.taskId)} block={data.blocks.find(item => item.id === scheduleEditing.blockId)} initialDate={scheduleEditing.date} onClose={() => setScheduleEditing(null)} onSave={block => { setScheduleUndo(data.blocks); mutate(value => saveScheduledBlock(value, block)); setScheduleEditing(null); }} />}
   </main>;
 }
 
@@ -512,6 +519,38 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onDelete
     {frequency === "weekly" && <fieldset><legend>Repeat on</legend>{calendarWeekdays.map((name, day) => <label className="checkLabel" key={name}><input type="checkbox" checked={weekdays.includes(day)} onChange={e => setWeekdays(e.target.checked ? [...weekdays, day] : weekdays.filter(value => value !== day))} /> {name}</label>)}</fieldset>}
     {frequency && <div className="fieldPair"><label>Repeat until<input type="date" min={startDate} value={until} onChange={e => setUntil(e.target.value)} /></label><label>End after occurrences<input type="number" min="1" value={count} onChange={e => setCount(e.target.value)} placeholder="No limit" /></label></div>}
     <div className="editorActions">{event && <button type="button" className="danger" onClick={() => { if (confirm("Delete this event series?")) onDelete(event.id); }}>Delete event series</button>}<button type="button" onClick={onClose}>Cancel</button><button className="add" disabled={invalid}>Save event</button></div>
+  </form></div>;
+}
+
+function ScheduleEditor({ task, block, initialDate, onClose, onSave }: {
+  task?: Task; block?: ScheduledBlock; initialDate: string; onClose: () => void; onSave: (block: ScheduledBlock) => void;
+}) {
+  const timeZone = block?.timeZone ?? zone();
+  const parts = (instant?: string) => {
+    if (!instant) return { date: initialDate, time: "09:00" };
+    const value = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(instant)).map(part => [part.type, part.value]));
+    return { date: `${value.year}-${value.month}-${value.day}`, time: `${value.hour}:${value.minute}` };
+  };
+  const start = parts(block?.startInstant);
+  const end = parts(block?.endInstant);
+  const [startDate, setStartDate] = useState(start.date);
+  const [endDate, setEndDate] = useState(end.date);
+  const [startTime, setStartTime] = useState(start.time);
+  const [endTime, setEndTime] = useState(block ? end.time : "10:00");
+  const startInstant = zonedDateTimeToInstant(startDate, startTime, timeZone);
+  const endInstant = zonedDateTimeToInstant(endDate, endTime, timeZone);
+  const invalid = !task || Boolean(task.completedAt || task.deletedAt) || !startInstant || !endInstant || endInstant <= startInstant;
+  return <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><form className="editor" onSubmit={e => {
+    e.preventDefault(); if (invalid || !task || !startInstant || !endInstant) return;
+    onSave({ ...(block ?? newEntity()), taskId: task.id, startInstant, endInstant, timeZone,
+      updatedAt: new Date().toISOString(), revision: block ? block.revision + 1 : 1 });
+  }}>
+    <div className="editorHead"><h2>{block ? "Edit planned work" : "Schedule work"}</h2><button type="button" onClick={onClose} aria-label="Close schedule editor">×</button></div>
+    <p className="hint"><strong>{task?.title ?? "Task unavailable"}</strong> · Scheduling work does not change its due date.</p>
+    <div className="fieldPair"><label>Starts<input type="date" required value={startDate} onChange={e => setStartDate(e.target.value)} /></label><label>Ends<input type="date" required value={endDate} onChange={e => setEndDate(e.target.value)} /></label></div>
+    <div className="fieldPair"><label>Start time<input type="time" required value={startTime} onChange={e => setStartTime(e.target.value)} /></label><label>End time<input type="time" required value={endTime} onChange={e => setEndTime(e.target.value)} /></label></div>
+    <p className="hint">Time zone: {timeZone}. Overlapping work blocks remain visible as separate planned items.</p>
+    <div className="editorActions"><button type="button" onClick={onClose}>Cancel</button><button className="add" disabled={invalid}>Save planned work</button></div>
   </form></div>;
 }
 

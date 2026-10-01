@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, calendarGridDates, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveTask, undoCompletion } from "../lib/domain.ts";
+import { addDays, calendarGridDates, bulkCompleteTasks, completeTask, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
@@ -144,6 +144,24 @@ test("task edits without work-time fields preserve existing scheduled data", () 
   const edited = saveTask(data, { ...existing, title: "Edited title", revision: existing.revision + 1 });
   assert.deepEqual(edited.blocks, [block]);
   assert.equal(edited.tasks[0].title, "Edited title");
+});
+test("scheduling, moving, unscheduling, and undo leave task due fields unchanged", () => {
+  const due = { dueDate: "2026-10-14", dueTime: "17:30", dueTimeZone: "America/Edmonton" };
+  const data = { ...emptyData(), tasks: [task("schedule-me", due.dueDate, due)] };
+  const block = { id: "block-1", taskId: "schedule-me", startInstant: "2026-10-14T15:00:00Z", endInstant: "2026-10-14T16:00:00Z", timeZone: "America/Edmonton", createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", revision: 1 };
+  const scheduled = saveScheduledBlock(data, block);
+  assert.equal(scheduled.tasks[0].dueDate, due.dueDate);
+  assert.equal(scheduled.tasks[0].dueTime, due.dueTime);
+  const moved = saveScheduledBlock(scheduled, { ...block, startInstant: "2026-10-15T15:00:00Z", endInstant: "2026-10-15T16:30:00Z" });
+  assert.equal(moved.tasks[0].dueDate, due.dueDate);
+  assert.equal(moved.tasks[0].dueTime, due.dueTime);
+  const unscheduled = deleteScheduledBlock(moved, block.id);
+  assert.ok(unscheduled.blocks[0].deletedAt);
+  const undone = restoreScheduledBlock(unscheduled, moved.blocks[0]);
+  assert.equal(undone.blocks[0].deletedAt, undefined);
+  assert.equal(undone.blocks[0].startInstant, "2026-10-15T15:00:00Z");
+  assert.equal(undone.tasks[0].dueDate, due.dueDate);
+  assert.equal(saveScheduledBlock(data, { ...block, timeZone: "Not/AZone" }), data);
 });
 test("84-day Dashboard date windows stay bounded and large local lists remain responsive", () => {
   const data = emptyData();
