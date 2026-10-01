@@ -16,7 +16,7 @@ This document tracks the v1 scope in Phases 1–6. The permanent `v0.xx` branche
 ## Remaining Implementation
 
 - No in-scope Phase 1–6 implementation gaps were identified in the v1.00 readiness audit.
-- No v1.00 branch exists until the release-status update merges into `v0.08` and that destination branch's CI passes. Create the permanent `v1.00` branch from that validated `v0.08` checkpoint.
+- The permanent `v1.00` branch was created on 2026-10-01 from the validated `v0.08` commit `e01d8c34039e3a1aa7f039c0131c637bd0aeb802`.
 - Promoting `v1.00` to `main` is a separate release action and must use a version-to-main pull request. Cloudflare Workers Builds deploys production from `main`.
 
 ## Scope boundaries
@@ -27,11 +27,11 @@ This document tracks the v1 scope in Phases 1–6. The permanent `v0.xx` branche
 ## v1.00 release gate
 
 1. Audit Phases 1–6 and resolve any actionable in-scope implementation gaps. **Passed** in the readiness audit.
-2. Merge this status update into the validated `v0.08` checkpoint and wait for all four required CI jobs to pass. **In progress.**
+2. Merge this status update into the validated `v0.08` checkpoint and wait for all four required CI jobs to pass. **Passed** (PR #73; run `36914999243`).
 3. Verify production Web Push setup and delivery on real devices. **User verified.**
 4. Complete the Phase 6 iPhone/iPad manual checklist. **User verified.**
 5. Require `swift-core`, `apple`, `web`, and `docs` checks in the `main` ruleset. **Verified.**
-6. Create the permanent `v1.00` branch from the final validated `v0.08` checkpoint. **After step 2 passes.**
+6. Create the permanent `v1.00` branch from the final validated `v0.08` checkpoint. **Passed** on 2026-10-01 from commit `e01d8c34039e3a1aa7f039c0131c637bd0aeb802`.
 7. When production promotion is requested, merge `v1.00` into `main` via a pull request and verify deployment.
 
 ## Validation record (2026-10-01)
