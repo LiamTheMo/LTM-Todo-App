@@ -1,41 +1,33 @@
-# Domain Data Model
+# Web Domain Data Model
 
-## Task
-id UUID; title; notes; status; priority; projectId?; sectionId?; parentTaskId?; dueDate?; dueTime?; dueTimeZone?; createdAt; updatedAt; completedAt?; sortKey; recurrenceRuleId?; deletedAt?; revision.
+This describes the current local web schema (`schemaVersion: 3`) in `apps/web/lib/domain.ts`. It is an IndexedDB document, not a server schema. Future sync records and protocol fields are proposals until Phase 10/11.
 
-A due date/time is a deadline, not a work reservation.
+## Shared entity fields
 
-## ScheduledBlock
-id UUID; taskId; startInstant; endInstant; timeZone; createdAt; updatedAt; deletedAt?; revision.
-A task may eventually support more than one work block. Completing a block does not necessarily complete its task.
+Most persistent entities have `id` (UUID), `createdAt`, `updatedAt`, `revision`, and optional `deletedAt`. The top-level document has `generation` for cross-tab write detection. There is no owner ID, change journal, sync state, or account identity today.
 
-## CalendarEvent
-id UUID; calendarId; title; notes; allDay; start/end representation; timeZone; recurrenceRuleId?; createdAt; updatedAt; deletedAt?; revision.
+## Entities
 
-## Project
-id UUID; name; icon?; colorToken?; archivedAt?; sortKey; createdAt; updatedAt; deletedAt?; revision.
+- **Task:** title, notes, priority, optional project/section/parent IDs, tag IDs, sort key, optional date-only due date, optional local due time and time zone, completion timestamp, and optional structured recurrence.
+- **Project / Section / Tag:** named organization records; projects and sections carry sort keys, tags have colors, and projects may be archived.
+- **ScheduledBlock:** task ID, start/end instants, and time zone. Scheduling is separate from a task's due date. The current editor supports a scheduled block per scheduling operation; multiple simultaneous work blocks per task and drag/drop scheduling are not shipped.
+- **LocalCalendar:** name, one of six semantic colors (orange, blue, green, purple, red, teal), visibility, and sort key. A default Personal calendar is created locally.
+- **CalendarEvent:** calendar ID, title, notes, optional recurrence, and either all-day start/end dates (end exclusive) or timed start/end instants with a time zone.
+- **Reminder:** task ID, minutes-before trigger, and enabled state. Event reminders are not in the current web schema.
+- **Completion:** task ID, optional recurrence occurrence date, completion instant, and IDs of scheduled blocks cleared on completion.
+- **SavedView:** query and optional project, priority, tag, date-scope, and completion filters.
+- **TaskTemplate / EventTemplate / Routine:** local templates and routine records used to create new task/event identities or recurring tasks.
 
-## Section
-id UUID; projectId; name; sortKey; createdAt; updatedAt; deletedAt?; revision.
+## Top-level document
 
-## Tag / TaskTag
-Tags are many-to-many. Tag identity must survive renames.
+The `Data` document contains `schemaVersion`, `generation`, and arrays for tasks, projects, sections, tags, scheduled blocks, calendars, calendar events, templates, routines, reminders, completions, and saved views. Persistence and normalization live in `apps/web/lib/storage.ts`.
 
-## Reminder
-id UUID; targetType; targetId; trigger model; enabled; createdAt; updatedAt; deletedAt?; revision.
-Triggers may be absolute or relative to due/scheduled/event time.
+## Time and deletion
 
-## RecurrenceRule
-Structured rule containing frequency, interval, selected weekdays/month rules, end condition, recurrence time zone, and advancement semantics. Do not store only an RRULE string unless an ADR establishes it as the canonical representation.
+Date-only task deadlines remain `YYYY-MM-DD` values and are not converted to UTC midnight. Timed values retain local time-zone context. Timed calendar events store instants; all-day events use date values. Recurrence stores frequency, interval, optional weekdays/until/count, and for tasks anchor date/occurrence count.
 
-## CompletionOccurrence
-Record recurring completion history separately enough to answer what happened on a particular occurrence without corrupting the recurrence template.
+Entity `deletedAt` fields support local deletion semantics. The web client prunes expired Dashboard history to Today plus the previous six local calendar dates, including old due tasks, completions, and scheduled blocks/events according to their date rules.
 
-## ChangeJournal (v3)
-localChangeId; entityType; entityId; operation; baseRevision; payload/version; occurredAt; syncState.
+## Future synchronization model
 
-## Ordering
-Use stable sortable keys suitable for local reorder without rewriting an entire list. Define deterministic tie-breaking.
-
-## Deletion
-User-initiated deletion is soft/tombstoned while a record remains in the retained local data window. The v1 local clients physically compact expired history: retain Today and the preceding six local calendar dates; remove tasks after their due date leaves that window, remove undated completed tasks after their local completion date leaves it, and remove completion occurrences after their occurrence date leaves it. Remove scheduled blocks after their start date in the block's saved time zone leaves the window, and clear expired schedules on otherwise-retained tasks. Remove dependent records when a task expires and detach its subtasks. Future sync/server retention must apply the same user-visible seven-day history policy while preserving tombstones for records that have not expired.
+A server-side change journal, ownership model, cursor, conflict policy, and protocol do not exist yet. Phase 10 must define them; Phase 11 implements device convergence while local writes remain available offline. Preserve stable IDs and revisions, and do not treat the proposed sync model as part of schema v3 currently stored in IndexedDB.

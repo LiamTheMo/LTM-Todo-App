@@ -1,30 +1,27 @@
 # Roadmap
 
-## Version strategy
-`v0.xx` branches are permanent development checkpoints toward v1.00. `v0.01` contains the initial runnable foundation. `v0.02` is the next organization and reliability checkpoint. Further `v0.xx` checkpoints will advance the remaining v1 phases; create `v1.00` from the final validated checkpoint only after all v1 release criteria and required manual checks pass. Every implementation takes place on a temporary branch from its originating permanent version branch.
+## Version and branch strategy
 
-See [V1_STATUS.md](V1_STATUS.md) for the v1 release record and [V2_STATUS.md](V2_STATUS.md) for the v2 phase checkpoint plan.
+The permanent v1/v2 checkpoints are cumulative: `v1.00` is the tasks-and-dashboard release; `v1.01`, `v1.02`, and `v1.03` are the phase checkpoints for v2 work; `v2.00` is the completed v2 release candidate. Development happens on temporary branches from the active checkpoint. Merge to that checkpoint after review and CI, then promote a release to `main` by pull request. Cloudflare production deploys from `main` only.
+
+See [V1_STATUS.md](V1_STATUS.md), [V2_STATUS.md](V2_STATUS.md), and [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 
 ## v1.00 — Tasks & Dashboard
-1. Phase 1 — Engineering foundation and design system.
-2. Phase 2 — Task domain, local persistence and Inbox.
-3. Phase 3 — Chronological Dashboard.
-4. Phase 4 — Projects, subtasks, tags and organization.
-5. Phase 5 — Recurrence, reminders and notifications.
-6. Phase 6 — Search, filters, Dashboard completion timeline and v1 hardening.
 
-Exit: a polished offline-first task manager usable daily on iPhone/iPad, with web/domain groundwork and no server dependency.
+Phases 1–6 delivered local task management, projects, recurrence, reminders, search/filters, Dashboard history, and web notifications. The responsive web app is the supported iPhone/iPad/desktop client. Task data stays local to each browser; the experimental Apple source is not built or distributed by CI.
 
 ## v2.00 — Calendar & Planning
-7. Phase 7 — First-party calendar/events.
-8. Phase 8 — Scheduling, time blocking and calendar interaction.
-9. Phase 9 — Kanban, routines, templates, smart views and planning polish.
 
-Exit: tasks, scheduled work and events form one coherent planning system while remaining distinct domain concepts.
+- Phase 7 — Local first-party calendars, events, and the month grid with selected-day agenda/timeline.
+- Phase 8 — Planned-work scheduling and calendar interaction.
+- Phase 9 — Kanban, routines, templates, saved views, and planning polish.
+
+The deployed calendar has no Month/Week/Day/Agenda mode tabs. It uses month navigation and selected-day interaction. v2.00 implementation is on `main`; responsive web manual release validation remains listed in [V2_STATUS.md](V2_STATUS.md).
 
 ## v3.00 — Accounts & Sync
-10. Phase 10 — Backend/authentication/sync protocol.
-11. Phase 11 — Multi-device sync, conflict resolution and web production client.
-12. Phase 12 — Backup/export, attachments, sharing/collaboration and release hardening.
 
-Each phase file contains scope, implementation guidance, tests, acceptance criteria and an AI execution prompt.
+- Phase 10 — Choose backend/authentication and define/test the synchronization protocol.
+- Phase 11 — Implement multi-device synchronization and conflict resolution for supported clients while preserving offline use.
+- Phase 12 — Backup/export, attachments, optional sharing/collaboration, and release hardening.
+
+Cross-device task sync starts after the v2.00 release gate is complete. Begin with Phase 10's threat model, backend/auth ADR, data ownership, migrations, and protocol tests; implement client sync in Phase 11 only after the contract is tested. Web Push is not task synchronization.

@@ -32,13 +32,12 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 
 ## Calendar surface
 
-The Calendar view is a task-planning surface over the existing local task and scheduled-work data. Standalone calendar events are not part of this surface; first-party event management remains Phase 7 scope.
+The Calendar view is a local planning surface over tasks, planned-work blocks, and first-party calendar events. The currently shipped client is the responsive web app; the native Apple project is experimental and not built or distributed by CI.
 
-- Web and Apple clients show a six-week month grid with event/task previews in each date cell, a selected-day agenda, Previous/Next month controls, and a Today action.
-- The selected-day agenda separates planned work, due tasks, and retained completions. Add task starts with the selected date.
-- Selecting a date opens its chronological day timeline. Timed events and planned work appear as blocks; deadlines remain distinct, and a live current-time line is shown for Today.
-- Apple data, date, and time selectors use LTM-styled popovers rather than default iOS Picker/DatePicker controls. Date and time trigger rows share the same width and visual treatment as option selectors.
-- Opening the Apple task editor must not focus the title field or raise the keyboard; tapping the field opens the keyboard normally.
+- The month view is a six-week grid with event/task previews in each date cell, Previous/Next month controls, and a Today action.
+- Selecting a date shows its agenda and chronological timeline. Timed events and planned-work blocks appear in the timeline; deadlines remain distinct. The current-time marker on Today refreshes every 15 seconds.
+- The calendar has no separate Month/Week/Day/Agenda mode selector. Month navigation plus selecting a date are the available controls.
+- Calendar creation is an in-app form with a six-choice color wheel. Task and event date/time/option fields use app-styled web controls; opening New Task does not focus the title field.
 - Both clients use Dashboard date-only semantics and the same rolling history boundary. Displaying planned work never changes a task deadline.
 - Navigation order is Dashboard, Tasks, Projects, Calendar, Settings. Inbox remains available as a task filter and is not a separate navigation destination; Settings is shown as a gear icon.
 
@@ -57,3 +56,7 @@ Use virtualized/lazy rendering. Keep a bounded window around the visible date an
 - The earliest retained date is six calendar days before Today. Older tasks and scheduled events are deleted automatically, and users cannot assign a new due date before that boundary.
 - A date-only deadline remains on the same local calendar date across DST/zone changes according to defined semantics.
 - Past date sections retain Add controls, and scrolling the date stream does not move the app navigation or Overdue section.
+
+
+## Supported-client note (2026-10-02)
+This specification describes intended Dashboard behavior for the current responsive web client. The retained SwiftUI project is experimental source and is not built or distributed by GitHub Actions. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for what is currently shipped and [V2_STATUS.md](V2_STATUS.md) for remaining manual checks.

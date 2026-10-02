@@ -4,7 +4,7 @@
 Many task applications gate useful behavior behind subscriptions, impose arbitrary limits, or monetize attention with ads. LTM Todo should provide a capable personal task/planning system without designing basic productivity around monetization restrictions.
 
 ## Users
-Initial product focus is a single owner using iPhone, iPad and web. The architecture must not assume only one device. Collaboration is deliberately later.
+The current supported product is a single owner using the responsive web app on desktop, iPhone, and iPad. Task data is local to each browser. The architecture should support later multi-device accounts and synchronization; collaboration is later still. The native SwiftUI project is experimental source, not a released client.
 
 ## Core concepts
 **Task:** actionable work. May have a due date/time without being scheduled.
@@ -27,10 +27,10 @@ Unlimited local tasks/projects/sections/tags/subtasks/reminders/recurrence rules
 The web client exposes the branded site icon in browser/search surfaces and supports adding the site to an iPhone Home Screen as a standalone web app.
 
 ## v2 requirements
-First-party calendar; day/week/month/agenda; event CRUD; all-day/timed events; multiple local calendars/colors; drag/drop scheduling; time blocking; routines; templates; Kanban; advanced smart views; bulk editing beyond safe task completion; advanced planning.
+First-party local calendars; timed/all-day events and recurring event series; a six-week month grid with previews and a selected-day agenda/timeline; multiple local calendars/colors with an in-app color wheel; planned-work blocks; routines; templates; Kanban; saved views; bulk actions. Separate week/day/agenda mode tabs and drag-and-drop scheduling are not part of the shipped interface.
 
 ## v3 requirements
-Authentication; cross-device sync; conflict handling; tombstones; incremental sync; backup/export; attachments; web production client; optional sharing/collaboration.
+Authentication; cross-device task-data sync; conflict handling; tombstones; incremental sync; backup/export; attachments; optional sharing/collaboration. The web production client already exists in v1/v2; v3 expands it with accounts and synchronization.
 
 ## Explicit non-goals through v3
 Advertising, paid feature gates, Google Calendar as a core dependency, AI-generated planning, enterprise administration, public social feeds.
