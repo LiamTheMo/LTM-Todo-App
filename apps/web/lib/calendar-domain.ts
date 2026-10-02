@@ -10,7 +10,8 @@ const legacyCalendarColors: Record<string, CalendarColor> = {
 };
 export function normalizeCalendarColor(value: unknown): CalendarColor | undefined {
   if (typeof value !== "string") return;
-  const legacy = legacyCalendarColors[value.toLowerCase()];
+  const key = value.toLowerCase();
+  const legacy = Object.prototype.hasOwnProperty.call(legacyCalendarColors, key) ? legacyCalendarColors[key] : undefined;
   if (legacy) return legacy;
   return /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() as CalendarColor : undefined;
 }
