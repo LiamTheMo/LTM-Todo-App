@@ -1,31 +1,34 @@
 # LTM Todo App
 
-LTM Todo is an ad-free, limitation-free personal productivity application for iPhone, iPad, and web. It combines task management with a first-party planning/calendar system rather than depending on Google Calendar or another external calendar provider. 
+LTM Todo is an ad-free personal productivity web app with a first-party task and calendar model. The supported experience works in desktop browsers and on iPhone/iPad, where it can be added to the Home Screen. It does not depend on Google Calendar.
 
 ## Product pillars
-- Fast capture with minimal friction.
-- A chronological Dashboard that scrolls through days and shows scheduled work and due work together.
-- Clear distinction between a task's due date and its scheduled work time.
-- Offline-first interaction; synchronization must never be required to check off or edit local work.
-- A first-class responsive web app for desktop, iPhone, and iPad, installable to the Home Screen.
-- No advertisements or artificial limits on tasks, projects, reminders, tags, subtasks, recurrence, or calendars.
-- First-party calendar and planning model.
+
+- Fast capture and a chronological Dashboard for scheduled work and due tasks.
+- Due dates stay separate from planned-work blocks.
+- Offline-first local data; common task and calendar changes work without a server.
+- A responsive, installable web app with local browser storage.
+- No ads or artificial limits on tasks, projects, reminders, tags, subtasks, recurrence, or calendars.
+- First-party calendars and events.
+
+## Current implementation
+
+See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for the audited feature list, limitations, storage and delivery status.
 
 ## Roadmap
-- **v1.00 — Tasks & Dashboard:** excellent task management, Inbox, chronological Dashboard, projects, recurrence, reminders, search, filters, offline local storage, notifications.
-- **v2.00 — Calendar & Planning:** first-party day/week/month/agenda calendar, events, scheduling, time blocking, Kanban, routines, templates and advanced planning.
-- **v3.00 — Accounts & Sync:** accounts, cross-device synchronization, conflict resolution, backup/export, attachments and optional collaboration.
 
-See `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, and `docs/phases/` for implementation-ready specifications.
-Current implementation and release blockers are tracked in `docs/V1_STATUS.md`.
+- **v1.00 — Tasks & Dashboard:** local task management, projects, recurrence, reminders, search, filters, offline storage and notifications.
+- **v2.00 — Calendar & Planning:** first-party calendars and events, a month grid with day timeline, planned-work blocks, Kanban, routines, templates and planning polish.
+- **v3.00 — Accounts & Sync:** accounts, cross-device task-data synchronization, conflict handling, backup/export and later ecosystem features.
+
+The calendar offers month navigation and a selected-day timeline; it does not have separate Month/Week/Day/Agenda mode tabs. See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/V2_STATUS.md](docs/V2_STATUS.md).
 
 ## Development
-All development follows `AGENTS.md`. Major branches are `main` and permanent `vX.XX` checkpoints. Implementation occurs only on temporary branches created from the intended version branch and is merged back after validation. Deployment is only from `main`.
 
-### Run locally
+Follow [AGENTS.md](AGENTS.md). Permanent checkpoints are `main` and `vX.XX` version branches. Develop on temporary branches from the intended checkpoint, merge after validation, and deploy only from `main`.
 
-- Web: `cd apps/web && npm ci && npm run dev`; validate with `npm test && npm run typecheck && npm run lint`. Use `npm run build:vinext` for the Cloudflare production build; `npm run build` runs the Next.js fallback build.
-- Apple source: `apps/apple` is retained as an experimental native client, but GitHub Actions does not build or sign it. GitHub simulator builds are not installable on a physical iPhone/iPad; use the responsive web app and add it to the Home Screen.
+- Web: `cd apps/web && npm ci && npm run dev`; checks: `npm test && npm run typecheck && npm run lint`. Use `npm run build:vinext` for the Cloudflare production build; `npm run build` is the Next.js fallback build.
 - Swift core: `swift test` from the repository root.
+- `apps/apple` remains experimental source. GitHub Actions does not build, sign, or distribute it; use the responsive web app on iPhone/iPad.
 
-The deployed web app stores tasks locally in each browser using IndexedDB. It has no account or cross-device synchronization in v1. iPhone/iPad Web Push requires a due time, Home Screen installation, and device permission.
+The deployed app stores user task data locally in each browser's IndexedDB. It has no accounts or cross-device task synchronization yet. Web Push reminders use a separate per-browser queue in Cloudflare D1 and do not sync task data.

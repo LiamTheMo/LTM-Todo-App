@@ -1,7 +1,7 @@
 # Architecture
 
 ## Decision summary
-Use a native SwiftUI application for iPhone/iPad and a React/Next.js web client. Keep domain semantics platform-neutral through documented schemas and fixtures. v1 is local-first. v3 adds a PostgreSQL-backed synchronization service.
+Ship the responsive React/Next.js web app as the supported client on desktop, iPhone, and iPad. The `apps/apple` SwiftUI project is experimental source and is not built or distributed by CI. Keep domain semantics platform-neutral through documented schemas and fixtures. Browser data is local-first; accounts and cross-device task synchronization are planned for v3. PostgreSQL is a candidate, not a selected or deployed backend.
 
 ## Layers
 1. **Presentation:** SwiftUI / React views and navigation.
@@ -15,14 +15,14 @@ Use a native SwiftUI application for iPhone/iPad and a React/Next.js web client.
 A user must be able to launch, browse, create, edit, schedule and complete locally available tasks without a server round trip. UI writes update local state transactionally. Future sync observes committed local changes and propagates them asynchronously.
 
 ## Suggested technology
-### Apple
-Swift, SwiftUI, SwiftData or SQLite-backed persistence selected after prototype benchmarking, XCTest/Swift Testing. Repository interfaces isolate persistence choice.
+### Experimental Apple source
+`apps/apple` contains SwiftUI code and a platform-neutral Swift core. Native builds and distribution are disabled in the current workflow. Any future decision to support that app requires an explicit product and validation decision.
 
 ### Web
-TypeScript, Next.js/React, IndexedDB for offline local state, a tested domain/application package, Playwright for critical UI flows.
+TypeScript, React/Next.js, IndexedDB for offline local state, a tested domain package, and Node-based UI/domain tests. Cloudflare Workers serves the production web app; the current CI production build uses Vinext.
 
-### Backend (v3)
-TypeScript or another deliberately selected server runtime; PostgreSQL; authenticated versioned API; incremental synchronization endpoint. The exact server framework requires an ADR before implementation.
+### Backend (planned v3)
+No task-data sync service is deployed. Phase 10 must select the backend/auth model through an ADR and specify a versioned incremental sync protocol before implementation; PostgreSQL is a proposal only.
 
 ## Time model
 Persist instants in UTC where an instant exists, plus time-zone identifiers where local calendar semantics matter. Date-only deadlines must remain date-only and must not be converted into arbitrary midnight instants. All-day events use calendar dates. Recurrence evaluation must specify calendar/time zone and DST behavior.

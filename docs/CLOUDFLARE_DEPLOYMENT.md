@@ -45,3 +45,7 @@ Web reminders use the same `ltm-todo-app` Worker. Before enabling them in produc
 4. Deploy only from `main`. The build command applies D1 migrations before publishing the Worker; Cron Triggers are configured for once per minute.
 
 The web app stores tasks locally. When push is enabled, it sends reminder titles and scheduled instants plus the browser push subscription to D1 so reminders can still be delivered after the site closes. Each device has a separate subscription and only syncs reminders from that device's local task data. In Settings, use **Send test notification** to verify the device push path. Delivery is minute-level and can be delayed by the browser push service. iPhone/iPad Web Push requires an installed Home Screen web app on iOS/iPadOS 16.4 or newer.
+
+
+## Data boundary
+The Worker also serves the Web Push API, but this is not a task-data backend. Task and calendar data remains in each browser's IndexedDB. D1 stores per-install push subscription and queued reminder-delivery data (including reminder title and scheduled instant); it does not synchronize user tasks between devices. Account-based task sync is planned for v3.
