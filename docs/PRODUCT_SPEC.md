@@ -13,7 +13,7 @@ The current supported product is a single owner using the responsive web app on 
 **Project:** organizational container for tasks.
 **Section:** ordering/grouping inside a project.
 **Tag:** cross-project classification.
-**Reminder:** notification rule attached to a task/event.
+**Reminder:** notification rule attached to a task. Event reminders are not currently shipped.
 **Recurrence:** rule that generates/advances occurrences deterministically.
 **Inbox:** captured work not yet organized.
 **Dashboard:** chronological day stream combining scheduled items and due items.

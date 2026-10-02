@@ -13,7 +13,7 @@ Events are commitments; tasks are completable work. An event does not become a t
 Event recurrence supports daily, weekly (selected weekdays), monthly, and yearly series with an interval and optional end date or occurrence count. Editing or deleting an event applies to its whole series; per-occurrence exceptions are outside this phase. Month summaries and agenda rows sort deterministically. A hidden calendar hides its events while leaving tasks and scheduled work visible.
 
 ## Layout
-Handle overlapping events deterministically. Month cells show concise event/task previews without becoming unreadable. Selecting a day opens a chronological 24-hour timeline with timed events and planned-work blocks, separate all-day/deadline sections, and a current-time line that updates continuously while Today is selected. Keep text-based agenda alternatives for VoiceOver and small screens.
+Handle overlapping events deterministically. Month cells show concise event/task previews without becoming unreadable. Selecting a day opens a chronological 24-hour timeline with timed events and planned-work blocks, separate all-day/deadline sections, and a current-time line that refreshes every 15 seconds while Today is selected. Keep text-based agenda alternatives for VoiceOver and small screens.
 
 The supported web client uses app-styled calendar/date/time controls and leaves New Task's title unfocused until tapped. Native iOS Picker/DatePicker behavior is not part of the shipped client because the Apple app is experimental and not built or distributed by CI.
 
