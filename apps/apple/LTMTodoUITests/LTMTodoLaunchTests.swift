@@ -22,13 +22,22 @@ final class LTMTodoLaunchTests: XCTestCase {
         app.tabBars.buttons["Tasks"].tap()
         XCTAssertTrue(app.navigationBars["Tasks"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.textFields["Add a task…"].exists)
+        app.buttons["Add task"].tap()
+        let taskTitle = app.textFields["task-title"]
+        XCTAssertTrue(taskTitle.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "Opening the task editor should not open the keyboard.")
+        taskTitle.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
 
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
 
         app.tabBars.buttons["Calendar"].tap()
         XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 5))
-        app.buttons["Add"].tap()
+        XCTAssertTrue(app.staticTexts["TIMELINE"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["calendar-day-timeline"].exists)
+        app.buttons["calendar-add-menu"].tap()
         XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 5))
     }
 }

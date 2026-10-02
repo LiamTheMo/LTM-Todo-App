@@ -24,9 +24,8 @@ struct CalendarEventEditorView: View {
                 Section("Event") {
                     TextField("Title", text: $event.title)
                     TextField("Notes", text: $event.notes, axis: .vertical).lineLimit(2...5)
-                    Picker("Calendar", selection: $event.calendarID) {
-                        ForEach(store.visibleCalendars) { calendar in Text(calendar.name).tag(calendar.id) }
-                    }
+                    CustomDropdownSelector(title: "Calendar", selection: $event.calendarID,
+                        options: store.visibleCalendars.map { DropdownOption(value: $0.id, title: $0.name) })
                     Toggle("All day", isOn: $event.allDay)
                 }
                 Section("When") {
@@ -35,15 +34,11 @@ struct CalendarEventEditorView: View {
                     if !event.allDay { Text("Times use \(TimeZone.current.identifier). Repeating events keep this local time across daylight saving changes.").font(.caption).foregroundStyle(.secondary) }
                 }
                 Section("Repeat") {
-                    Picker("Frequency", selection: Binding(get: { event.recurrence?.frequency ?? .never }, set: { frequency in
+                    CustomDropdownSelector(title: "Frequency", selection: Binding(get: { event.recurrence?.frequency ?? .never }, set: { frequency in
                         event.recurrence = frequency == .never ? nil : TodoEventRecurrence(frequency: frequency)
-                    })) {
-                        Text("Never").tag(RepeatFrequency.never)
-                        Text("Daily").tag(RepeatFrequency.daily)
-                        Text("Weekly").tag(RepeatFrequency.weekly)
-                        Text("Monthly").tag(RepeatFrequency.monthly)
-                        Text("Yearly").tag(RepeatFrequency.yearly)
-                    }
+                    }), options: RepeatFrequency.allCases.map {
+                        DropdownOption(value: $0, title: $0.rawValue.capitalized)
+                    })
                     if event.recurrence != nil {
                         Stepper("Every \(event.recurrence?.interval ?? 1)", value: Binding(get: { event.recurrence?.interval ?? 1 }, set: { event.recurrence?.interval = $0 }), in: 1...365)
                         DatePicker("Repeat until", selection: Binding(get: { DayMath.date(event.recurrence?.until ?? "") ?? startDate }, set: { event.recurrence?.until = DayMath.day($0) }), in: startDate..., displayedComponents: .date)

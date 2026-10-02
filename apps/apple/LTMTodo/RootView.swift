@@ -85,9 +85,16 @@ struct RootView: View {
     }
 }
 
+private struct CalendarMonthPreview: Identifiable {
+    let id: String
+    let title: String
+    let color: Color
+}
+
 struct CalendarView: View {
     @EnvironmentObject private var store: TodoStore
-    @State private var selectedDate = Date()
+    @State private var selectedDate = Calendar.current.startOfDay(for: Date())
+    @State private var displayedMonth = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
     @State private var editing: TodoTask?
     @State private var editingEvent: TodoCalendarEvent?
     @State private var showingNewCalendar = false
@@ -97,66 +104,163 @@ struct CalendarView: View {
 
     private var selectedDay: String { DayMath.day(selectedDate) }
     private var earliestDate: Date { DayMath.date(DashboardRetention.earliestDay()) ?? Calendar.current.startOfDay(for: Date()) }
-
-    private var visibleTasks: [TodoTask] {
-        store.activeTasks.filter { task in
-            task.dueDay == selectedDay || task.scheduledStart.map { Calendar.current.isDate($0, inSameDayAs: selectedDate) } == true
-        }.sorted { left, right in
-            let leftStart = left.scheduledStart ?? .distantFuture
-            let rightStart = right.scheduledStart ?? .distantFuture
-            if leftStart != rightStart { return leftStart < rightStart }
-            if left.dueTime != right.dueTime { return (left.dueTime ?? "") < (right.dueTime ?? "") }
-            return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
+    private var calendar: Calendar { Calendar.current }
+    private var monthDates: [Date] {
+        guard let monthStart = calendar.dateInterval(of: .month, for: displayedMonth)?.start else { return [] }
+        let weekdayOffset = (calendar.component(.weekday, from: monthStart) - calendar.firstWeekday + 7) % 7
+        guard let gridStart = calendar.date(byAdding: .day, value: -weekdayOffset, to: monthStart) else { return [] }
+        return (0..<42).compactMap { calendar.date(byAdding: .day, value: $0, to: gridStart) }
+    }
+    private var allDayEvents: [TodoCalendarEvent] { store.calendarEvents(on: selectedDay).filter(\.allDay) }
+    private var dueTasks: [TodoTask] { store.activeTasks.filter { $0.dueDay == selectedDay } }
+    private var timedItems: [CalendarTimedItem] {
+        let events = store.calendarEvents(on: selectedDay).compactMap { event -> CalendarTimedItem? in
+            guard let (start, end) = timedInterval(for: event) else { return nil }
+            return CalendarTimedItem(id: "event-\(event.id)", title: event.title,
+                caption: "Event · \(start.formatted(date: .omitted, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))",
+                start: start, end: end, color: color(for: store.visibleCalendars.first { $0.id == event.calendarID }?.color ?? .orange))
         }
+        let scheduled = store.activeTasks.compactMap { task -> CalendarTimedItem? in
+            guard let start = task.scheduledStart, calendar.isDate(start, inSameDayAs: selectedDate) else { return nil }
+            let end = task.scheduledEnd ?? start.addingTimeInterval(3600)
+            let dueLabel = task.dueDay == selectedDay ? task.dueTime.map { " · Due \(dueTimeCaption($0))" } ?? " · Due today" : ""
+            return CalendarTimedItem(id: "task-\(task.id)", title: task.title,
+                caption: "Planned work\(dueLabel)", start: start, end: end, color: .blue)
+        }
+        let timedDeadlines = dueTasks.compactMap { task -> CalendarTimedItem? in
+            guard task.scheduledStart == nil, let dueTime = task.dueTime else { return nil }
+            let parts = dueTime.split(separator: ":").compactMap { Int($0) }
+            guard parts.count == 2, let start = calendar.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: selectedDate) else { return nil }
+            return CalendarTimedItem(id: "deadline-\(task.id)", title: task.title,
+                caption: "Task deadline", start: start, end: start.addingTimeInterval(30 * 60), color: .orange)
+        }
+        return (events + scheduled + timedDeadlines).sorted { $0.start < $1.start }
+    }
+
+    private func timedInterval(for event: TodoCalendarEvent) -> (Date, Date)? {
+        guard !event.allDay, let start = event.startInstant, let end = event.endInstant, end > start else { return nil }
+        let duration = end.timeIntervalSince(start)
+        if event.recurrence != nil {
+            var eventCalendar = Calendar(identifier: .gregorian)
+            eventCalendar.timeZone = TimeZone(identifier: event.timeZoneID ?? "") ?? .current
+            guard let eventDay = DayMath.date(selectedDay, calendar: eventCalendar) else { return nil }
+            let startParts = eventCalendar.dateComponents([.hour, .minute, .second], from: start)
+            guard let occurrenceStart = eventCalendar.date(bySettingHour: startParts.hour ?? 0, minute: startParts.minute ?? 0,
+                second: startParts.second ?? 0, of: eventDay) else { return nil }
+            return (occurrenceStart, occurrenceStart.addingTimeInterval(duration))
+        }
+        let dayStart = calendar.startOfDay(for: selectedDate)
+        guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else { return nil }
+        let clippedStart = max(start, dayStart)
+        let clippedEnd = min(end, dayEnd)
+        return clippedEnd > clippedStart ? (clippedStart, clippedEnd) : nil
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Calendars") {
-                    ForEach(store.visibleCalendars) { calendar in
-                        Toggle(isOn: Binding(get: { calendar.visible }, set: { store.setCalendarVisible(calendar.id, visible: $0) })) {
-                            Label(calendar.name, systemImage: "circle.fill").tint(color(for: calendar.color))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack {
+                        Button { shiftMonth(-1) } label: { Image(systemName: "chevron.left") }
+                            .accessibilityLabel("Previous month")
+                        Spacer()
+                        Text(displayedMonth.formatted(.dateTime.month(.wide).year())).font(.headline)
+                            .accessibilityIdentifier("calendar-month-title")
+                        Spacer()
+                        Button { shiftMonth(1) } label: { Image(systemName: "chevron.right") }
+                            .accessibilityLabel("Next month")
+                        Button("Today") {
+                            selectedDate = calendar.startOfDay(for: Date())
+                            displayedMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
                         }
                     }
-                    Button("Add calendar") { showingNewCalendar = true }
-                }
-                Section {
-                    DatePicker("Date", selection: $selectedDate, in: earliestDate..., displayedComponents: .date)
-                        .datePickerStyle(.graphical)
-                    Button("Go to Today") { selectedDate = Date() }
-                }
-                Section(selectedDate.formatted(date: .complete, time: .omitted)) {
-                    if visibleTasks.isEmpty && store.calendarEvents(on: selectedDay).isEmpty {
-                        ContentUnavailableView("Nothing planned", systemImage: "calendar", description: Text("Events and tasks due or scheduled for this day will appear here."))
+                    .buttonStyle(.borderless)
+                    .padding(.horizontal)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 5) {
+                        ForEach(weekdaySymbols, id: \.self) { symbol in
+                            Text(symbol).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity).accessibilityHidden(true)
+                        }
+                        ForEach(monthDates, id: \.self) { date in
+                            calendarCell(for: date)
+                        }
                     }
-                    ForEach(store.calendarEvents(on: selectedDay)) { event in
-                        Button { editingEvent = event } label: {
-                            HStack(spacing: 10) {
-                                Circle().fill(color(for: store.visibleCalendars.first(where: { $0.id == event.calendarID })?.color ?? .orange)).frame(width: 9, height: 9)
-                                VStack(alignment: .leading) {
-                                    Text(event.title).foregroundStyle(.primary)
-                                    Text(event.allDay ? "All day event" : "Event · \(event.startInstant?.formatted(date: .omitted, time: .shortened) ?? "")")
-                                        .font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(store.visibleCalendars) { item in
+                                Toggle(isOn: Binding(get: { item.visible }, set: { store.setCalendarVisible(item.id, visible: $0) })) {
+                                    Label(item.name, systemImage: "circle.fill").labelStyle(.titleAndIcon)
+                                        .foregroundStyle(color(for: item.color))
                                 }
+                                .toggleStyle(.button)
+                                .font(.caption)
                             }
+                            Button { showingNewCalendar = true } label: { Label("Add calendar", systemImage: "plus") }
+                                .font(.caption)
                         }
+                        .padding(.horizontal)
                     }
-                    if !visibleTasks.isEmpty {
-                        ForEach(visibleTasks) { task in
-                            TaskRow(task: task, subtitle: subtitle(for: task), schedule: { scheduleTask = task }) { editing = task }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(selectedDate.formatted(date: .complete, time: .omitted))
+                            .font(.title3.weight(.semibold))
+                            .padding(.horizontal)
+                        if !allDayEvents.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("ALL DAY").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                ForEach(allDayEvents) { event in
+                                    Button { editingEvent = event } label: {
+                                        HStack(spacing: 8) {
+                                            Circle().fill(color(for: store.visibleCalendars.first { $0.id == event.calendarID }?.color ?? .orange)).frame(width: 9, height: 9)
+                                            Text(event.title).foregroundStyle(.primary)
+                                            Spacer()
+                                            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary)
+                                        }.padding(9).background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                                    }.buttonStyle(.plain)
+                                }
+                            }.padding(.horizontal)
+                        }
+
+                        HStack {
+                            Text("TIMELINE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            Spacer()
+                            if calendar.isDate(selectedDate, inSameDayAs: Date()) {
+                                Text("Now · \(Date.now.formatted(date: .omitted, time: .shortened))")
+                                    .font(.caption2.weight(.medium)).foregroundStyle(.red)
+                            }
+                        }.padding(.horizontal)
+                        CalendarDayTimeline(day: selectedDate, items: timedItems)
+                            .padding(.horizontal, 8)
+
+                        if !dueTasks.isEmpty {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("DUE THAT DAY").font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal)
+                                ForEach(dueTasks) { task in
+                                    TaskRow(task: task, subtitle: task.dueTime.map { "Due \(dueTimeCaption($0))" } ?? "Due today") { editing = task }
+                                }
+                            }.padding(.horizontal)
+                        }
+                        if allDayEvents.isEmpty && timedItems.isEmpty && dueTasks.isEmpty {
+                            ContentUnavailableView("Nothing planned", systemImage: "calendar", description: Text("Events, planned work, and task deadlines for this day will appear here."))
+                                .padding(.top, 16)
                         }
                     }
                 }
+                .padding(.vertical, 12)
             }
             .navigationTitle("Calendar")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Add task", systemImage: "checkmark.circle") { editing = TodoTask(title: "", dueDay: selectedDay) }
-                        Button("Add event", systemImage: "calendar.badge.plus") { editingEvent = TodoCalendarEvent(calendarID: store.visibleCalendars.first?.id ?? UUID(), title: "", allDay: true, startDay: selectedDay, endDay: DayMath.add(1, to: selectedDay)) }
-                        Button("Schedule task", systemImage: "clock") { showingSchedulePicker = true }
-                    } label: { Label("Add", systemImage: "plus") }
+                    CustomDropdownMenu(label: "Add", actions: [
+                        DropdownMenuAction(id: "task", title: "Add task", systemImage: "checkmark.circle") { editing = TodoTask(title: "", dueDay: selectedDay) },
+                        DropdownMenuAction(id: "event", title: "Add event", systemImage: "calendar.badge.plus") {
+                            editingEvent = TodoCalendarEvent(calendarID: store.visibleCalendars.first?.id ?? UUID(), title: "", allDay: true, startDay: selectedDay, endDay: DayMath.add(1, to: selectedDay))
+                        },
+                        DropdownMenuAction(id: "schedule", title: "Schedule task", systemImage: "clock") { showingSchedulePicker = true }
+                    ])
                 }
             }
             .sheet(item: $editing) { task in TaskEditorView(task: task) }
@@ -179,6 +283,70 @@ struct CalendarView: View {
         }
     }
 
+    private var weekdaySymbols: [String] {
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        let start = max(0, calendar.firstWeekday - 1)
+        return Array(symbols[start...] + symbols[..<start])
+    }
+
+    private func shiftMonth(_ amount: Int) {
+        guard let next = calendar.date(byAdding: .month, value: amount, to: displayedMonth),
+              let start = calendar.dateInterval(of: .month, for: next)?.start else { return }
+        displayedMonth = start
+        if calendar.component(.month, from: selectedDate) != calendar.component(.month, from: start) ||
+            calendar.component(.year, from: selectedDate) != calendar.component(.year, from: start) {
+            selectedDate = start
+        }
+    }
+
+    @ViewBuilder
+    private func calendarCell(for date: Date) -> some View {
+        let day = DayMath.day(date)
+        let inMonth = calendar.isDate(date, equalTo: displayedMonth, toGranularity: .month)
+        let disabled = calendar.startOfDay(for: date) < calendar.startOfDay(for: earliestDate)
+        let dayEvents = store.calendarEvents(on: day)
+        let eventCalendars = Dictionary(uniqueKeysWithValues: store.visibleCalendars.map { ($0.id, $0.color) })
+        let dayTasks = store.activeTasks.filter { task in
+            task.dueDay == day || task.scheduledStart.map { calendar.isDate($0, inSameDayAs: date) } == true
+        }
+        let previews = dayEvents.map { event in
+            CalendarMonthPreview(id: "event-\(event.id)", title: event.title,
+                color: color(for: eventCalendars[event.calendarID] ?? .orange))
+        } + dayTasks.map { task in
+            CalendarMonthPreview(id: "task-\(task.id)", title: task.title,
+                color: task.scheduledStart.map { calendar.isDate($0, inSameDayAs: date) } == true ? .blue : .orange)
+        }
+        Button { selectedDate = calendar.startOfDay(for: date) } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(date.formatted(.dateTime.day()))
+                    .font(.caption.weight(calendar.isDateInToday(date) ? .bold : .medium))
+                    .foregroundStyle(calendar.isDateInToday(date) ? Color.white : inMonth ? Color.primary : Color.secondary)
+                    .frame(width: 23, height: 23)
+                    .background(calendar.isDateInToday(date) ? LTMTheme.accent : .clear, in: Circle())
+                ForEach(Array(previews.prefix(2))) { preview in
+                    HStack(spacing: 3) {
+                        Circle().fill(preview.color).frame(width: 4, height: 4)
+                        Text(preview.title).font(.system(size: 8, weight: .medium)).lineLimit(1).truncationMode(.tail)
+                            .foregroundStyle(.primary)
+                    }.accessibilityHidden(true)
+                }
+                if previews.count > 2 {
+                    Text("+\(previews.count - 2) more").font(.system(size: 7)).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 62, maxHeight: 62, alignment: .topLeading)
+            .padding(4)
+            .background(calendar.isDate(date, inSameDayAs: selectedDate) ? LTMTheme.accent.opacity(0.14) : Color.secondary.opacity(0.045),
+                        in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(calendar.isDate(date, inSameDayAs: selectedDate) ? LTMTheme.accent : .clear, lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.38 : 1)
+        .accessibilityLabel(date.formatted(date: .complete, time: .omitted) + (previews.isEmpty ? ", no calendar items" : ", \(previews.count) calendar items"))
+        .accessibilityAddTraits(calendar.isDate(date, inSameDayAs: selectedDate) ? .isSelected : [])
+    }
+
     private func color(for color: TodoCalendarColor) -> Color {
         switch color {
         case .orange: .orange
@@ -190,15 +358,6 @@ struct CalendarView: View {
         }
     }
 
-    private func subtitle(for task: TodoTask) -> String? {
-        var details: [String] = []
-        if let start = task.scheduledStart, Calendar.current.isDate(start, inSameDayAs: selectedDate) {
-            let end = task.scheduledEnd.map { " – \($0.formatted(date: .omitted, time: .shortened))" } ?? ""
-            details.append("Planned \(start.formatted(date: .omitted, time: .shortened))\(end)")
-        }
-        if task.dueDay == selectedDay { details.append(task.dueTime.map { "Due \(dueTimeCaption($0))" } ?? "Due today") }
-        return details.isEmpty ? nil : details.joined(separator: " · ")
-    }
 }
 
 struct TaskListView: View {
@@ -255,36 +414,30 @@ struct TaskListView: View {
                         Button("Add", action: add).disabled(quickTitle.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
-                    Picker("Priority", selection: $priorityFilter) {
-                        Text("All").tag(-1)
-                        Text("None").tag(0)
-                        Text("Low").tag(1)
-                        Text("Medium").tag(2)
-                        Text("High").tag(3)
-                    }
+                    CustomDropdownSelector(title: "Priority", selection: $priorityFilter, options: [
+                        DropdownOption(value: -1, title: "All"), DropdownOption(value: 0, title: "None"),
+                        DropdownOption(value: 1, title: "Low"), DropdownOption(value: 2, title: "Medium"),
+                        DropdownOption(value: 3, title: "High")
+                    ])
                     if isMaster {
-                        Picker("Status", selection: $statusFilter) {
-                            Text("Open").tag(0)
-                            Text("Completed").tag(1)
-                            Text("All statuses").tag(2)
-                        }
-                        Picker("Project", selection: $projectFilter) {
-                            Text("All projects").tag("all")
-                            Text("Inbox").tag("inbox")
-                            ForEach(store.projects) { project in Text(project.name).tag(project.id.uuidString) }
-                        }
+                        CustomDropdownSelector(title: "Status", selection: $statusFilter, options: [
+                            DropdownOption(value: 0, title: "Open"), DropdownOption(value: 1, title: "Completed"),
+                            DropdownOption(value: 2, title: "All statuses")
+                        ])
+                        CustomDropdownSelector(title: "Project", selection: $projectFilter,
+                            options: [DropdownOption(value: "all", title: "All projects"), DropdownOption(value: "inbox", title: "Inbox")] + store.projects.map {
+                                DropdownOption(value: $0.id.uuidString, title: $0.name)
+                            })
                     }
-                    Picker("Tag", selection: $tagFilter) {
-                        Text("All tags").tag("all")
-                        ForEach(store.data.tags.filter { $0.deletedAt == nil }) { tag in Text(tag.name).tag(tag.id.uuidString) }
-                    }
-                    Picker("Due date", selection: $dateFilter) {
-                        Text("Any due date").tag("all")
-                        Text("Overdue").tag("overdue")
-                        Text("Due today").tag("today")
-                        Text("Upcoming").tag("upcoming")
-                        Text("No due date").tag("undated")
-                    }
+                    CustomDropdownSelector(title: "Tag", selection: $tagFilter,
+                        options: [DropdownOption(value: "all", title: "All tags")] + store.data.tags.filter { $0.deletedAt == nil }.map {
+                            DropdownOption(value: $0.id.uuidString, title: $0.name)
+                        })
+                    CustomDropdownSelector(title: "Due date", selection: $dateFilter, options: [
+                        DropdownOption(value: "all", title: "Any due date"), DropdownOption(value: "overdue", title: "Overdue"),
+                        DropdownOption(value: "today", title: "Due today"), DropdownOption(value: "upcoming", title: "Upcoming"),
+                        DropdownOption(value: "undated", title: "No due date")
+                    ])
                 Text("\(visible.count) results · \(filterDescription)")
                     .font(.caption).foregroundStyle(.secondary)
                 if let projectID {
@@ -460,12 +613,12 @@ struct SettingsView: View {
                 }
                 Section("Routines") {
                     TextField("Routine name", text: $routineName)
-                    Picker("Template", selection: $routineTemplateID) {
-                        Text("Choose template").tag(Optional<UUID>.none)
-                        ForEach(store.data.taskTemplates.filter { $0.deletedAt == nil }) { template in Text(template.name).tag(Optional(template.id)) }
-                    }
+                    CustomDropdownSelector(title: "Template", selection: $routineTemplateID,
+                        options: [DropdownOption(value: Optional<UUID>.none, title: "Choose template")] + store.data.taskTemplates
+                            .filter { $0.deletedAt == nil }.map { DropdownOption(value: Optional($0.id), title: $0.name) })
                     DatePicker("First due date", selection: $routineStart, in: (DayMath.date(DashboardRetention.earliestDay()) ?? Date())..., displayedComponents: .date)
-                    Picker("Repeat", selection: $routineFrequency) { Text("Daily").tag(RepeatFrequency.daily); Text("Weekly").tag(RepeatFrequency.weekly); Text("Monthly").tag(RepeatFrequency.monthly); Text("Yearly").tag(RepeatFrequency.yearly) }
+                    CustomDropdownSelector(title: "Repeat", selection: $routineFrequency,
+                        options: RepeatFrequency.allCases.filter { $0 != .never }.map { DropdownOption(value: $0, title: $0.rawValue.capitalized) })
                     Stepper("Every \(routineInterval)", value: $routineInterval, in: 1...365)
                     Button("Create routine") {
                         guard let templateID = routineTemplateID else { return }
