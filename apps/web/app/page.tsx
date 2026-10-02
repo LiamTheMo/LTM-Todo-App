@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 18967)
+Total output lines: 672
+
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
@@ -296,227 +299,7 @@ export default function Home() {
       const visibleDays = days.filter(element => {
         const rect = element.getBoundingClientRect();
         return rect.bottom > bounds.top && rect.top < bounds.bottom;
-      });
-      const anchor = direction < 0 ? visibleDays[0] : visibleDays.at(-1);
-      if (anchor?.dataset.day) pendingAnchor.current = { day: anchor.dataset.day, top: anchor.getBoundingClientRect().top - bounds.top };
-    }
-    windowShiftLock.current = true;
-    setDayStart(boundedStart);
-  };
-  const handleDayScroll = (event: UIEvent<HTMLDivElement>) => {
-    const scroller = event.currentTarget;
-    if (windowShiftLock.current) return;
-    if (scroller.scrollTop < 180) shiftDays(-1);
-    else if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 180) shiftDays(1);
-  };
-  const goToday = () => {
-    const today = localDate(new Date());
-    const start = earliestDay;
-    const scroller = dayScrollRef.current;
-    const element = todayRef.current;
-    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-    if (visibleDayStart !== start) {
-      pendingAnchor.current = { day: today, top: 0 };
-      windowShiftLock.current = true;
-      setDayStart(start);
-    } else if (scroller && element) {
-      scroller.scrollTo({ top: scroller.scrollTop + element.getBoundingClientRect().top - scroller.getBoundingClientRect().top, behavior });
-    }
-  };
-
-  const calendarMonthStart = `${calendarMonth}-01`;
-  const calendarMonthDate = parseLocalDate(calendarMonthStart);
-  const calendarGridStart = calendarGridDates(calendarMonth)[0] ?? calendarMonthStart;
-  const calendarDays = dashboardDays(data, calendarGridStart, 42, today);
-  const calendarAgenda = calendarDays.find(day => day.date === calendarSelectedDate) ?? {
-    date: calendarSelectedDate, due: [], scheduled: [], completed: []
-  };
-  const activeCalendars = data.calendars.filter(calendar => !calendar.deletedAt).sort((a, b) => a.sortKey - b.sortKey);
-  const calendarEvents = calendarEventsForDay(data, calendarSelectedDate);
-  const monthEventsByDay = new Map<string, ReturnType<typeof calendarEventsForDay>>();
-  for (const item of calendarEventOccurrences(data, calendarGridStart, addDays(calendarGridStart, 42))) {
-    const end = item.allDay ? item.endDate! : addDays(item.occurrenceDate, 1);
-    for (let day = item.occurrenceDate; day < end; day = addDays(day, 1)) {
-      monthEventsByDay.set(day, [...(monthEventsByDay.get(day) ?? []), item]);
-    }
-  }
-  const timelineItems: CalendarTimelineItem[] = [
-    ...calendarEvents.flatMap(item => {
-      if (item.allDay || item.event.allDay || !item.startInstant || !item.endInstant) return [];
-      const event = item.event;
-      const color = activeCalendars.find(calendar => calendar.id === event.calendarId)?.color ?? "orange";
-      const start = localDate(new Date(item.startInstant)) < calendarSelectedDate
-        ? zonedDateTimeToInstant(calendarSelectedDate, "00:00", event.timeZone) ?? item.startInstant
-        : item.startInstant;
-      const lastEventDay = localDate(new Date(Date.parse(item.endInstant) - 1));
-      const end = lastEventDay > calendarSelectedDate
-        ? zonedDateTimeToInstant(addDays(calendarSelectedDate, 1), "00:00", event.timeZone) ?? item.endInstant
-        : item.endInstant;
-      return [{ id: `event:${event.id}:${item.occurrenceDate}`, title: event.title,
-        caption: `${timeLabel(start)} – ${timeLabel(end)} · Event`, start, end, color }];
-    }),
-    ...calendarAgenda.scheduled.map(({ block, task }) => ({
-      id: `block:${block.id}`, title: task.title,
-      caption: `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Planned work`,
-      start: block.startInstant, end: block.endInstant, color: "blue"
-    })),
-    ...calendarAgenda.due.filter(task => task.dueTime && !calendarAgenda.scheduled.some(item => item.task.id === task.id)).flatMap(task => {
-      const start = zonedDateTimeToInstant(calendarSelectedDate, task.dueTime!, task.dueTimeZone ?? zone());
-      if (!start) return [];
-      const end = new Date(Date.parse(start) + 30 * 60_000).toISOString();
-      return [{ id: `deadline:${task.id}`, title: task.title, caption: "Task deadline", start, end, color: "orange" }];
-    })
-  ];
-  const calendarMonthLabel = calendarMonthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  const shiftCalendarMonth = (offset: number) => {
-    const next = new Date(calendarMonthDate);
-    next.setMonth(next.getMonth() + offset);
-    const month = localDate(next).slice(0, 7);
-    setCalendarMonth(month);
-    setCalendarSelectedDate(`${month}-01`);
-  };
-  const goCalendarToday = () => {
-    const date = localDate(new Date());
-    setCalendarMonth(date.slice(0, 7));
-    setCalendarSelectedDate(date);
-  };
-  const dashboard = dashboardDays(data, visibleDayStart, dashboardWindow, today);
-  return <main className="shell">
-    <aside className="sidebar"><h1><span className="brandMark" aria-hidden="true" /> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} aria-current={view === item ? "page" : undefined} aria-label={item === "Settings" ? "Settings" : undefined} title={item === "Settings" ? "Settings" : undefined} onClick={() => {
-      setProjectId("");
-      if (item === "Dashboard" && view !== "Dashboard") {
-        initialScrollPending.current = true;
-        setDayStart(historyStart(today));
-      } else if (item === "Dashboard") goToday();
-      setView(item);
-    }}><span className="navigationIcon"><TabIcon section={item} /></span>{item === "Settings" ? null : ` ${item}`}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
-    <section className={`dashboard ${view === "Dashboard" ? "dashboardHome" : ""}`}>{error && <div className="error" role="alert">{error}</div>}
-      {!ready ? <p>Opening your local tasks…</p> : <>
-        <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : ""}</p></div><button className="add" onClick={() => setEditing(view === "Calendar" ? `new:${calendarSelectedDate}` : "new")}>+ Add task</button></header>
-        {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
-          <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today))) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
-          <div className="stream dayScroller" ref={dayScrollRef} onScroll={handleDayScroll} role="region" aria-label="Days">
-            <button className="loadMore" onClick={() => shiftDays(-1)} disabled={visibleDayStart <= earliestDay}>Earlier days ↑</button>
-            {dashboard.map(day => {
-            const past = day.date < today;
-            const empty = !day.scheduled.length && !day.due.length && !day.completed.length;
-            const label = day.date === today ? "TODAY" : day.date === addDays(today, 1) ? "TOMORROW" : dateLabel(day.date);
-            return <article className={`day ${past ? "dayPast" : ""} ${empty ? "emptyDaySection" : ""}`} data-day={day.date} key={day.date} ref={day.date === today ? todayRef : undefined}>
-            <div className="dayHeader"><h3 aria-label={`${label} ${day.date}`}>{label}</h3><time dateTime={day.date}>{day.date}</time></div>
-            {!!day.scheduled.length && <div className="group"><h4>SCHEDULED</h4>{day.scheduled.map(({ block, task, completionId }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === day.date ? " · Also due today" : ""}`, completionId, `block:${block.id}`))}</div>}
-            {!!day.due.length && <div className="group"><h4>DUE</h4>{day.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : "Due today"))}</div>}
-            {!!day.completed.length && <div className="group"><h4>COMPLETED</h4>{day.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
-            {empty ? <div className={`emptyDay ${past ? "pastEmpty" : ""}`}><span>{past ? "No completed items" : "Nothing planned"}</span><button onClick={() => setEditing(`new:${day.date}`)}>+ Add</button></div> :
-              <button className="dayAdd" onClick={() => setEditing(`new:${day.date}`)}>+ Add task for this day</button>}
-          </article>})}
-            <button className="loadMore" onClick={() => shiftDays(1)}>Later days ↓</button>
-          </div>
-        </>}
-        {view === "Calendar" && <section className="calendarCard" aria-label="Calendar">
-          <div className="calendarToolbar">
-            <div className="calendarMonthControl"><button type="button" aria-label="Previous period" onClick={() => { if (calendarMode === "month") shiftCalendarMonth(-1); else setCalendarSelectedDate(addDays(calendarSelectedDate, calendarMode === "week" ? -7 : -1)); }}>‹</button><h3>{calendarMode === "month" ? calendarMonthLabel : dateLabel(calendarSelectedDate)}</h3><button type="button" aria-label="Next period" onClick={() => { if (calendarMode === "month") shiftCalendarMonth(1); else setCalendarSelectedDate(addDays(calendarSelectedDate, calendarMode === "week" ? 7 : 1)); }}>›</button></div>
-            <div className="calendarActions"><select aria-label="Calendar view" value={calendarMode} onChange={e => setCalendarMode(e.target.value as typeof calendarMode)}><option value="month">Month</option><option value="week">Week</option><option value="day">Day</option><option value="agenda">Agenda</option></select><button type="button" className="calendarToday" onClick={goCalendarToday}>Today</button><button type="button" className="calendarToday" onClick={() => setEventEditing({ date: calendarSelectedDate })}>+ Event</button></div>
-          </div>
-          {scheduleUndo && <div className="scheduleUndo" role="status"><span>Planning change saved.</span><button type="button" onClick={() => { const blocks = scheduleUndo; mutate(value => ({ ...value, blocks })); setScheduleUndo(null); }}>Undo</button></div>}
-          <div className="calendarManagement"><div className="calendarToggles" aria-label="Visible calendars">{activeCalendars.map(calendar => <label key={calendar.id}><input type="checkbox" checked={calendar.visible} onChange={e => mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: e.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }))} /><span className={`calendarColor calendarColor-${calendar.color}`} />{calendar.name}</label>)}</div><button type="button" onClick={() => { const name = prompt("Calendar name")?.trim(); if (!name) return; const color = calendarColors[activeCalendars.length % calendarColors.length]; const calendar = createCalendar(name, color); if (calendar) mutate(value => ({ ...value, calendars: [...value.calendars, calendar] })); }}>+ Calendar</button></div>
-          <div className="calendarLayout">
-            <div>
-              <div className="calendarWeekdays" aria-hidden="true">{calendarWeekdays.map(day => <span key={day}>{day}</span>)}</div>
-              <div className={`calendarGrid ${calendarMode !== "month" ? "calendarCompactGrid" : ""}`} role="group" aria-label={`Dates in ${calendarMonthLabel}`}>
-                {(calendarMode === "month" ? calendarDays : calendarMode === "week" ? Array.from({ length: 7 }, (_, i) => ({ date: addDays(calendarSelectedDate, i - parseLocalDate(calendarSelectedDate).getDay()) })) : calendarMode === "agenda" ? Array.from({ length: 14 }, (_, i) => ({ date: addDays(calendarSelectedDate, i) })) : [{ date: calendarSelectedDate }]).map(day => {
-                  const taskDay = calendarDays.find(item => item.date === day.date);
-                  const dayEvents = monthEventsByDay.get(day.date) ?? [];
-                  const eventCount = dayEvents.length;
-                  const itemCount = (taskDay?.scheduled.length ?? 0) + (taskDay?.due.length ?? 0) + (taskDay?.completed.length ?? 0) + eventCount;
-                  const previews = [
-                    ...dayEvents.map(item => ({ id: `event:${item.event.id}:${item.occurrenceDate}`, title: item.event.title,
-                      color: activeCalendars.find(calendar => calendar.id === item.event.calendarId)?.color ?? "orange" })),
-                    ...(taskDay?.scheduled ?? []).map(item => ({ id: `block:${item.block.id}`, title: item.task.title, color: "blue" })),
-                    ...(taskDay?.due ?? []).map(task => ({ id: `due:${task.id}`, title: task.title, color: "orange" }))
-                  ].slice(0, 2);
-                  return <button key={day.date} type="button" className={"calendarDay" + (day.date.slice(0, 7) !== calendarMonth ? " calendarDayOutsideMonth" : "") + (day.date === calendarSelectedDate ? " calendarDaySelected" : "") + (day.date === today ? " calendarDayToday" : "")}
-                    aria-label={dateLabel(day.date) + (itemCount ? `, ${itemCount} calendar item${itemCount === 1 ? "" : "s"}` : ", no calendar items")}
-                    aria-current={day.date === today ? "date" : undefined} aria-pressed={day.date === calendarSelectedDate}
-                    onClick={() => { setCalendarSelectedDate(day.date); if (day.date.slice(0, 7) !== calendarMonth) setCalendarMonth(day.date.slice(0, 7)); }}
-                    onDragOver={e => { if (e.dataTransfer.types.includes("application/x-ltm-task")) e.preventDefault(); }}
-                    onDrop={e => { e.preventDefault(); const taskId = e.dataTransfer.getData("application/x-ltm-task"); if (!taskId || !data.tasks.some(task => task.id === taskId && !task.completedAt && !task.deletedAt)) return; setCalendarSelectedDate(day.date); setScheduleEditing({ taskId, date: day.date }); }}>
-                    <span>{calendarMode === "agenda" ? dateLabel(day.date) : parseLocalDate(day.date).getDate()}</span>
-                    <div className="calendarDayPreviews" aria-hidden="true">{previews.map(item => <span key={item.id} className="calendarDayPreview"><i className={`calendarColor calendarColor-${item.color}`} />{item.title}</span>)}</div>
-                    {itemCount > previews.length && <small aria-hidden="true">+{itemCount - previews.length} more</small>}
-                  </button>;
-                })}
-              </div>
-            </div>
-            <div className="calendarAgenda" aria-live="polite">
-              <div className="calendarAgendaHeader"><div><span className="eyebrow">SELECTED DAY</span><h3>{dateLabel(calendarSelectedDate)}</h3></div></div>
-              <h4 className="calendarTimelineHeading">TIMELINE {calendarSelectedDate === today && <span>Now · {timeLabel(calendarNow.toISOString())}</span>}</h4>
-              <CalendarTimeline day={calendarSelectedDate} items={timelineItems} now={calendarNow} />
-              {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => <div className="plannedRow" key={`calendar-block:${block.id}`}>{taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block-task:${block.id}`)}<button type="button" className="scheduleAction" aria-label={`Edit scheduled block for ${task.title}`} onClick={() => setScheduleEditing({ taskId: task.id, blockId: block.id, date: calendarSelectedDate })}>Edit time</button><button type="button" className="scheduleAction" aria-label={`Unschedule ${task.title}`} onClick={() => { setScheduleUndo(data.blocks); mutate(value => deleteScheduledBlock(value, block.id)); }}>Remove</button></div>)}</div>}
-              {!!calendarAgenda.due.length && <div className="group"><h4>DUE</h4>{calendarAgenda.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : "Due today"))}</div>}
-              {!!calendarAgenda.completed.length && <div className="group"><h4>COMPLETED</h4>{calendarAgenda.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `calendar-completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
-              {!!calendarEvents.length && <div className="group"><h4>EVENTS</h4>{calendarEvents.map(item => <div className="eventRow" key={`${item.event.id}:${item.occurrenceDate}`}><span className={`calendarColor calendarColor-${activeCalendars.find(c => c.id === item.event.calendarId)?.color ?? "orange"}`} /><button type="button" className="eventTitle" onClick={() => setEventEditing({ id: item.event.id, date: item.occurrenceDate })}><strong>{item.event.title}</strong><small>{item.allDay ? "All day" : `${timeLabel(item.startInstant!)} – ${timeLabel(item.endInstant!)}`} · {activeCalendars.find(c => c.id === item.event.calendarId)?.name ?? "Calendar"}</small></button></div>)}</div>}
-              {!calendarAgenda.scheduled.length && !calendarAgenda.due.length && !calendarAgenda.completed.length && !calendarEvents.length && <p className="calendarEmpty">Nothing planned for this day.</p>}
-              <button className="linkButton" type="button" onClick={() => setEditing(`new:${calendarSelectedDate}`)}>+ Add task for this day</button>
-            </div>
-          </div>
-        </section>}
-        {view === "Tasks" && <>
-          <form className="quickAdd" onSubmit={e => { e.preventDefault(); addTask(quickTitle); }}><span aria-hidden>＋</span><input aria-label="Quick add task" placeholder="Add a task…" value={quickTitle} onChange={e => setQuickTitle(e.target.value)} /><button disabled={!quickTitle.trim()}>Add</button></form>
-          {view === "Tasks" && <><div className="filters"><input aria-label="Search tasks" placeholder="Search titles and notes…" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Filter status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="open">Open</option><option value="completed">Completed</option><option value="all">All statuses</option></select><select aria-label="Filter project" value={taskProjectFilter} onChange={e => setTaskProjectFilter(e.target.value)}><option value="all">All projects</option><option value="inbox">Inbox</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select><select aria-label="Filter priority" value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as Priority | "all")}><option value="all">All priorities</option>{priorities.map(p => <option key={p} value={p}>{priorityLabel(p)}</option>)}</select><select aria-label="Filter tag" value={tagFilter} onChange={e => setTagFilter(e.target.value)}><option value="">All tags</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select><select aria-label="Filter due date" value={dateFilter} onChange={e => setDateFilter(e.target.value as DateScope | "all")}><option value="all">Any due date</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="upcoming">Upcoming</option><option value="undated">No due date</option></select></div><p className="filterSummary" aria-live="polite">{visible.length} results · {activeFilters || "No filters"}</p><div className="bulkActions"><button type="button" aria-pressed={kanbanMode} onClick={() => setKanbanMode(false)}>List</button><button type="button" aria-pressed={kanbanMode} onClick={() => setKanbanMode(true)}>Kanban</button>{kanbanMode && <label>Group by <select aria-label="Kanban grouping" value={kanbanGrouping} onChange={e => setKanbanGrouping(e.target.value as typeof kanbanGrouping)}><option value="status">Status</option><option value="priority">Priority</option></select></label>}<button onClick={() => { const name = prompt("Name this saved view")?.trim(); if (!name) return; mutate(value => ({ ...value, savedViews: [...value.savedViews, { ...newEntity(), name, query, projectId: taskProjectFilter === "all" ? undefined : taskProjectFilter === "inbox" ? null : taskProjectFilter, priority: priorityFilter, tagId: tagFilter || undefined, dateScope: dateFilter, completed: statusFilter === "all" ? "all" : statusFilter === "completed" }] })); }}>Save current filters</button><select aria-label="Saved views" value={savedViewId} onChange={e => { const id = e.target.value; setSavedViewId(id); const saved = data.savedViews.find(item => item.id === id); if (!saved) return; setQuery(saved.query); setTaskProjectFilter(saved.projectId === undefined ? "all" : saved.projectId === null ? "inbox" : saved.projectId); setPriorityFilter(saved.priority ?? "all"); setTagFilter(saved.tagId ?? ""); setDateFilter(saved.dateScope ?? "all"); setStatusFilter(saved.completed === "all" ? "all" : saved.completed ? "completed" : "open"); }}><option value="">Saved views…</option>{data.savedViews.filter(item => !item.deletedAt).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button disabled={!savedViewId} aria-label="Delete selected saved view" onClick={() => { const id = savedViewId; mutate(value => ({ ...value, savedViews: value.savedViews.map(item => item.id === id ? { ...item, deletedAt: new Date().toISOString(), revision: item.revision + 1 } : item) })); setSavedViewId(""); }}>Delete view</button><label>Priority <select aria-label="Bulk priority" value={bulkPriority} onChange={e => setBulkPriority(e.target.value as Priority)}>{priorities.map(priority => <option value={priority} key={priority}>{priorityLabel(priority)}</option>)}</select></label><button disabled={!selectedTaskIds.length} onClick={() => { mutate(value => bulkSetPriority(value, selectedTaskIds, bulkPriority)); setSelectedTaskIds([]); }}>Set selected priority</button><button disabled={!selectedTaskIds.length} onClick={() => { const templates = data.tasks.filter(task => selectedTaskIds.includes(task.id)).map(task => ({ ...newEntity(), name: task.title, title: task.title, notes: task.notes, priority: task.priority, projectId: task.projectId, sectionId: task.sectionId, tagIds: [...task.tagIds] })); mutate(value => templates.reduce((next, template) => saveTaskTemplate(next, template), value)); setSelectedTaskIds([]); }}>Save selected as templates</button><button disabled={!selectedTaskIds.length} onClick={() => { mutate(value => bulkCompleteTasks(value, selectedTaskIds)); setSelectedTaskIds([]); }}>Complete selected ({selectedTaskIds.length})</button><button disabled={!selectedTaskIds.length} onClick={() => setSelectedTaskIds([])}>Clear selection</button></div></>}
-          {!kanbanMode ? <div className="listPanel">{visible.map(t => <div className="bulkTaskRow" key={t.id}><input type="checkbox" aria-label={`Select ${t.title}`} checked={selectedTaskIds.includes(t.id)} onChange={e => setSelectedTaskIds(currentIds => e.target.checked ? [...currentIds, t.id] : currentIds.filter(id => id !== t.id))} />{taskRow(t)}</div>)}{!visible.length && <div className="empty">All clear here. Add a task whenever you&apos;re ready.</div>}</div>
-            : <div className="kanbanBoard" aria-label={`Tasks grouped by ${kanbanGrouping}`}>{kanbanGroups.map(group => <section className="kanbanColumn" key={group.key} aria-label={`${group.label}, ${group.tasks.length} tasks`}><h3>{group.label}<small>{group.tasks.length}</small></h3>{group.tasks.map(task => <article className="kanbanCard" key={task.id}>{taskRow(task)}{kanbanGrouping === "priority" && <label>Priority<select aria-label={`Priority for ${task.title}`} value={task.priority} onChange={e => mutate(value => bulkSetPriority(value, [task.id], e.target.value as Priority))}>{priorities.map(priority => <option key={priority} value={priority}>{priorityLabel(priority)}</option>)}</select></label>}</article>)}</section>)}</div>}
-        </>}
-        {view === "Projects" && <><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("project") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, projects: [...value.projects, { ...newEntity(), name: input.value.trim(), color: "#c86b24", sortKey: Date.now() }] })); input.value = ""; }}><input name="project" aria-label="New project name" placeholder="New project name…" /><button>Create project</button></form>
-          {!projectId ? <div className="projectGrid">{projects.map(p => <div className="projectCard" key={p.id}><button className="projectOpen" onClick={() => setProjectId(p.id)}><span className="projectDot" style={{ background: p.color }} /><strong>{p.name}</strong><small>{data.tasks.filter(t => t.projectId === p.id && !t.deletedAt && !t.completedAt).length} open tasks →</small></button><div className="orderControls"><button aria-label={`Move project ${p.name} up`} onClick={() => mutate(value => reorderProject(value, p.id, -1))}>↑</button><button aria-label={`Move project ${p.name} down`} onClick={() => mutate(value => reorderProject(value, p.id, 1))}>↓</button></div></div>)}</div> : <>
-            <button className="linkButton" onClick={() => setProjectId("")}>← All projects</button>
-            {[undefined, ...data.sections.filter(s => s.projectId === projectId && !s.deletedAt).sort((a, b) => a.sortKey - b.sortKey)].map(section => <div className="projectGroup" key={section?.id ?? "root"}>
-              <div className="projectGroupHead"><h3>{section?.name ?? "Project tasks"}</h3>{section && <div className="orderControls"><button aria-label={`Move section ${section.name} up`} onClick={() => mutate(value => reorderSection(value, section.id, -1))}>↑</button><button aria-label={`Move section ${section.name} down`} onClick={() => mutate(value => reorderSection(value, section.id, 1))}>↓</button><button onClick={() => { if (confirm("Delete this section? Its tasks will move to the project root.")) mutate(value => deleteSection(value, section.id)); }}>Delete section</button></div>}</div>
-              <div className="listPanel">{filterTasks(data, { projectId, completed: false }).filter(t => t.sectionId === section?.id).map(t => <div className="orderedTask" key={t.id}>{taskRow(t)}<div><button aria-label={`Move ${t.title} up`} onClick={() => mutate(value => reorderTask(value, t.id, -1))}>↑</button><button aria-label={`Move ${t.title} down`} onClick={() => mutate(value => reorderTask(value, t.id, 1))}>↓</button></div></div>)}</div>
-            </div>)}
-            <form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("section") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, sections: [...value.sections, { ...newEntity(), projectId, name: input.value.trim(), sortKey: Date.now() }] })); input.value = ""; }}><input name="section" aria-label="New section" placeholder="New section…" /><button>Add section</button></form>
-            <button className="linkButton" onClick={() => { if (!confirm("Archive this project? Its tasks will leave active views until restored in Settings.")) return; mutate(value => { const stamp = new Date().toISOString(); return { ...value, projects: value.projects.map(p => p.id === projectId ? { ...p, archivedAt: stamp, updatedAt: stamp, revision: p.revision + 1 } : p) }; }); setProjectId(""); }}>Archive project</button>
-          </>}
-        </>}
-        {view === "Settings" && <div className="settingsPanel"><h3>Local and private</h3><p>Your tasks are stored on this device. To deliver reminders while the app is closed, reminder titles and scheduled times are sent to LTM Todo&apos;s Cloudflare reminder service. Each device has its own notification subscription.</p><button onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = `ltm-todo-${today}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Download backup JSON</button>
-          <h3>Task templates</h3><p>Templates create fresh tasks with their own IDs and completion history.</p>{data.taskTemplates.filter(template => !template.deletedAt).map(template => <div className="tagLine" key={template.id}><span><strong>{template.name}</strong><small> · {template.title}</small></span><button type="button" onClick={() => mutate(value => instantiateTaskTemplate(value, template.id))}>Create task</button></div>)}{!data.taskTemplates.some(template => !template.deletedAt) && <p>No templates yet. Select tasks in Tasks and choose “Save selected as templates.”</p>}
-          <h3>Event templates</h3><p>Start a new calendar event from a saved event pattern.</p>{data.eventTemplates.filter(template => !template.deletedAt).map(template => <div className="tagLine" key={template.id}><span><strong>{template.name}</strong><small> · {template.title}</small></span><button type="button" onClick={() => mutate(value => instantiateEventTemplate(value, template.id, calendarSelectedDate))}>Create event on {calendarSelectedDate}</button></div>)}{!data.eventTemplates.some(template => !template.deletedAt) && <p>No event templates yet. Save an existing event as a template in its editor.</p>}
-           <h3>Routines</h3><p>A routine starts a recurring task from a template. Completing that task advances its next due date.</p><form className="routineForm" onSubmit={e => { e.preventDefault(); if (!routineTemplateId) return; const form = e.currentTarget; const name = (form.elements.namedItem("routineName") as HTMLInputElement).value.trim(); if (!name) return; mutate(value => createRoutine(value, routineTemplateId, name, routineStartDate, { frequency: routineFrequency, interval: Math.max(1, routineInterval) })); (form.elements.namedItem("routineName") as HTMLInputElement).value = ""; }}><label>Routine name<input name="routineName" required placeholder="Weekly review" /></label><label>Template<select aria-label="Routine template" value={routineTemplateId} onChange={e => setRoutineTemplateId(e.target.value)}><option value="">Choose template…</option>{data.taskTemplates.filter(template => !template.deletedAt).map(template => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label><div className="fieldPair"><label>First due date<input type="date" min={historyStart(today)} value={routineStartDate} onChange={e => setRoutineStartDate(e.target.value)} /></label><label>Repeat<select value={routineFrequency} onChange={e => setRoutineFrequency(e.target.value as typeof routineFrequency)}>{["daily", "weekly", "monthly", "yearly"].map(frequency => <option key={frequency} value={frequency}>{frequency}</option>)}</select></label></div><label>Every<input type="number" min="1" max="365" value={routineInterval} onChange={e => setRoutineInterval(Number(e.target.value))} /></label><button disabled={!routineTemplateId}>Create routine</button></form>{data.routines.filter(routine => !routine.deletedAt).map(routine => <div className="tagLine" key={routine.id}><span>{routine.name} · {routine.recurrence.frequency}</span><button type="button" onClick={() => mutate(value => setRoutineEnabled(value, routine.id, !routine.enabled))}>{routine.enabled ? "Pause" : "Resume"}</button></div>)}
-          <h3>Push reminders</h3><p>Enable push for notifications when LTM Todo is in the background or closed. On iPhone or iPad, open the Home Screen app copy to enable push. Push scheduling checks once per minute, so delivery can be slightly after the selected time.</p>
-          <p>Browser permission: {pushPermission === "granted" ? "Allowed" : pushPermission === "denied" ? "Blocked in browser settings" : pushPermission === "unsupported" ? "Not supported" : "Not granted"}. Push subscription: {pushActive ? "Set up on this device" : "Not set up"}.</p>
-          <p role="status" aria-live="polite">{pushStatus}</p>
-          {!pushSupported ? <p>Push notifications are not available in this browser context.</p> : <div className="settingsActions">{!pushActive && <button disabled={pushBusy} onClick={() => { void (async () => {
-            setPushBusy(true);
-            try {
-              const token = await registerPushDevice(await pushConfig(), true);
-              setPushPermission(Notification.permission); setPushToken(token); setPushActive(true); setPushStatus("Push notifications are set up on this device.");
-            } catch (cause) { setPushPermission(Notification.permission); setPushStatus(cause instanceof Error ? cause.message : "Push notifications could not be enabled."); }
-            finally { setPushBusy(false); }
-          })(); }}>{pushBusy ? "Setting up…" : pushPermission === "granted" ? "Retry push setup" : "Enable push notifications"}</button>}
-            {pushActive && <button disabled={pushBusy} onClick={() => setPushSyncRevision(value => value + 1)}>Sync reminders now</button>}
-            <button disabled={pushBusy} onClick={() => { void (async () => {
-              setPushBusy(true);
-              try {
-                let token = pushToken;
-                if (!pushActive || !token) {
-                  token = await registerPushDevice(await pushConfig(), true);
-                  setPushPermission(Notification.permission); setPushToken(token); setPushActive(true);
-                }
-                const response = await fetch("/api/notifications/test", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-                if (!response.ok) throw new Error("The test notification could not be sent. Re-enable notifications if this device subscription expired.");
-                setPushStatus("Test push sent. Check this device’s notification center.");
-              } catch (cause) { setPushPermission(Notification.permission); setPushStatus(cause instanceof Error ? cause.message : "The test notification could not be sent."); }
-              finally { setPushBusy(false); }
-            })(); }}>Send test notification</button>
-            {pushActive && <button disabled={pushBusy} onClick={() => { void (async () => {
-              setPushBusy(true);
-              try {
-                await removePushDevice(pushToken);
-                setPushToken(""); setPushActive(false); setPushStatus("Push notifications are disabled on this device.");
-              } catch { setPushStatus("Push notifications could not be disabled right now. Please retry."); }
-              finally { setPushBusy(false); }
-            })(); }}>Disable on this device</button>}
-          </div>}
-          <h3>Tags</h3><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("tag") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, tags: [...value.tags, { ...newEntity(), name: input.value.trim(), color: "#c86b24" }] })); input.value = ""; }}><input name="tag" aria-label="New tag name" placeholder="New tag name…" /><button>Add tag</button></form>{tags.map(t => <div className="tagLine" key={t.id}><span>#{t.name}</span><div><button onClick={() => { const name = prompt("Rename tag", t.name)?.trim(); if (name) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, name, revision: item.revision + 1, updatedAt: new Date().toISOString() } : item) })); }}>Rename</button><button onClick={() => { if (confirm(`Delete tag ${t.name}?`)) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, deletedAt: new Date().toISOString(), revision: item.revision + 1 } : item), tasks: value.tasks.map(item => item.tagIds.includes(t.id) ? { ...item, tagIds: item.tagIds.filter(id => id !== t.id), revision: item.revision + 1 } : item) })); }}>Delete</button></div></div>)}
+  …8967 tokens truncated…= t.id ? { ...item, deletedAt: new Date().toISOString(), revision: item.revision + 1 } : item), tasks: value.tasks.map(item => item.tagIds.includes(t.id) ? { ...item, tagIds: item.tagIds.filter(id => id !== t.id), revision: item.revision + 1 } : item) })); }}>Delete</button></div></div>)}
           <h3>Archived projects</h3>{data.projects.filter(p => p.archivedAt && !p.deletedAt).map(p => <div className="tagLine" key={p.id}><span>{p.name}</span><button onClick={() => mutate(value => { const stamp = new Date().toISOString(); return { ...value, projects: value.projects.map(item => item.id === p.id ? { ...item, archivedAt: undefined, updatedAt: stamp, revision: item.revision + 1 } : item) }; })}>Restore</button></div>)}
         </div>}
       </>}
@@ -569,7 +352,7 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTe
     onSave(allDay ? { ...common, allDay: true, startDate, endDate: addDays(endDate, 1) } : { ...common, allDay: false, startInstant: startInstant!, endInstant: endInstant!, timeZone });
   }}>
     <div className="editorHead"><h2>{event ? "Edit event" : "New event"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
-    <label>Title<input autoFocus required value={title} onChange={e => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
+    <label>Title<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
     <label>Calendar<select value={calendarId} onChange={e => setCalendarId(e.target.value)}>{calendars.map(calendar => <option key={calendar.id} value={calendar.id}>{calendar.name}</option>)}</select></label>
     <label className="checkLabel"><input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} /> All day</label>
@@ -654,7 +437,7 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
     }, reminderMinutes);
   }}>
     <div className="editorHead"><h2>{task ? "Edit task" : "New task"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
-    <label>Title<input autoFocus required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
+    <label>Title<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
     <div className="fieldPair"><label>Date<input type="date" min={earliestDate} value={dueDate} onChange={e => setDueDate(e.target.value)} /></label><label>Time<input type="time" disabled={!dueDate} value={dueTime} onChange={e => setDueTime(e.target.value)} /></label></div>
     {expiredDueDate && <p className="hint">Choose a date within the seven-day history window.</p>}
