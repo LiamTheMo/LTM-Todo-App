@@ -16,7 +16,7 @@ Never develop directly on permanent branches. Never delete permanent version bra
 7. Revalidate.
 8. Repeat until clean or manually blocked.
 
-GitHub App CI and documentation checks run only after pushes to `vX.XX` version branches; pushes to `main`, pull requests and temporary-branch pushes do not start GitHub Actions CI. After merging a temporary PR into its version branch, wait for the version-branch CI run to pass before promoting that version to `main`. The `main` ruleset must require a PR and all four successful CI job checks from the latest version-branch commit. Cloudflare Workers Builds deploys from `main` only, with preview builds disabled.
+GitHub App CI and documentation checks run only after pushes to `vX.XX` version branches; pushes to `main`, pull requests and temporary-branch pushes do not start GitHub Actions CI. After merging a temporary PR into its version branch, wait for the version-branch CI run to pass before promoting that version to `main`. The `main` ruleset must require a PR and all four successful CI job checks from the latest version-branch commit (`swift-core`, `apple`, `web`, and `docs`). The `apple` check confirms the intentional no-native-build policy; it does not compile or test the experimental SwiftUI client. Cloudflare Workers Builds deploys from `main` only, with preview builds disabled.
 
 ## Pull requests
 Temporary -> originating version branch. PR body states scope, acceptance criteria, local validation, manual validation and known limitations. After merge, wait for the version-branch CI result. When a version is ready for deployed/manual testing, merge version -> main through a PR. The `main` ruleset blocks merges until all required checks pass. Cloudflare Workers Builds deploys the resulting `main` commit.

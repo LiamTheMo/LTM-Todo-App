@@ -35,24 +35,66 @@ export type Project = Entity & { name: string; color: string; sortKey: number; a
 export type ProjectSection = Entity & { projectId: string; name: string; sortKey: number };
 export type Tag = Entity & { name: string; color: string };
 export type ScheduledBlock = Entity & { taskId: string; startInstant: string; endInstant: string; timeZone: string };
+export type CalendarColor = "orange" | "blue" | "green" | "purple" | "red" | "teal";
+export type LocalCalendar = Entity & { name: string; color: CalendarColor; visible: boolean; sortKey: number };
+export type EventRecurrence = {
+  frequency: Frequency;
+  interval: number;
+  weekdays?: number[];
+  until?: string;
+  count?: number;
+};
+type CalendarEventBase = Entity & {
+  calendarId: string;
+  title: string;
+  notes: string;
+  recurrence?: EventRecurrence;
+};
+export type CalendarEvent = CalendarEventBase & (
+  | { allDay: true; startDate: string; endDate: string }
+  | { allDay: false; startInstant: string; endInstant: string; timeZone: string }
+);
+export type CalendarEventOccurrence = {
+  event: CalendarEvent;
+  occurrenceDate: string;
+  startDate?: string;
+  endDate?: string; // Exclusive end date for an all-day span.
+  startInstant?: string;
+  endInstant?: string;
+  allDay: boolean;
+};
 export type Reminder = Entity & { taskId: string; minutesBefore: number; enabled: boolean };
 export type SavedView = Entity & { name: string; query: string; projectId?: string | null; priority?: Priority | "all"; tagId?: string; dateScope?: DateScope | "all"; completed?: boolean | "all" };
+export type TaskTemplate = Entity & { name: string; title: string; notes: string; priority: Priority; projectId?: string; sectionId?: string; tagIds: string[] };
+export type EventTemplate = Entity & { name: string; calendarId: string; title: string; notes: string; allDay: boolean; duration: number; timeZone?: string; startTime?: string };
+export type Routine = Entity & { name: string; templateId: string; taskId: string; enabled: boolean; startDate: string; recurrence: Recurrence };
 const reminderFormatters = new Map<string, Intl.DateTimeFormat>();
 export type Completion = { id: string; taskId: string; occurrenceDate?: string; completedAt: string; clearedBlockIds?: string[] };
 export type Data = {
-  schemaVersion: 1;
+  schemaVersion: 3;
   generation: number; // Monotonic document revision for cross-tab write detection.
   tasks: Task[];
   projects: Project[];
   sections: ProjectSection[];
   tags: Tag[];
   blocks: ScheduledBlock[];
+  calendars: LocalCalendar[];
+  calendarEvents: CalendarEvent[];
+  taskTemplates: TaskTemplate[];
+  eventTemplates: EventTemplate[];
+  routines: Routine[];
   reminders: Reminder[];
   completions: Completion[];
   savedViews: SavedView[];
 };
+const defaultCalendarID = "00000000-0000-4000-8000-000000000001";
+export const defaultCalendar = (now = new Date()): LocalCalendar => ({
+  id: defaultCalendarID, name: "Personal", color: "orange", visible: true, sortKey: 0,
+  createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1
+});
 export const emptyData = (): Data => ({
-  schemaVersion: 1, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [], reminders: [], completions: [], savedViews: []
+  schemaVersion: 3, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [],
+  calendars: [defaultCalendar()], calendarEvents: [], taskTemplates: [], eventTemplates: [], routines: [], reminders: [], completions: [], savedViews: []
 });
 export const newEntity = (now = new Date()): Entity => ({
   id: crypto.randomUUID(), createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1
@@ -182,6 +224,88 @@ export function saveTask(data: Data, task: Task, reminderMinutes = "", today = l
       ...(nextReminder && !currentReminder ? [nextReminder] : [])
     ]
   };
+}
+export function saveScheduledBlock(data: Data, block: ScheduledBlock): Data {
+  const task = data.tasks.find(item => item.id === block.taskId && !item.deletedAt && !item.completedAt);
+  const start = Date.parse(block.startInstant);
+  const end = Date.parse(block.endInstant);
+  if (!task || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return data;
+  try { new Intl.DateTimeFormat("en", { timeZone: block.timeZone }); } catch { return data; }
+  const existing = data.blocks.find(item => item.id === block.id);
+  const stamp = new Date().toISOString();
+  const saved = { ...block, createdAt: existing?.createdAt ?? block.createdAt, updatedAt: stamp,
+    revision: existing ? existing.revision + 1 : 1, deletedAt: undefined };
+  return { ...data, blocks: existing
+    ? data.blocks.map(item => item.id === block.id ? saved : item)
+    : [...data.blocks, saved] };
+}
+export function deleteScheduledBlock(data: Data, id: string): Data {
+  const existing = data.blocks.find(item => item.id === id && !item.deletedAt);
+  if (!existing) return data;
+  const stamp = new Date().toISOString();
+  return { ...data, blocks: data.blocks.map(item => item.id === id
+    ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item) };
+}
+export function restoreScheduledBlock(data: Data, block: ScheduledBlock): Data {
+  const task = data.tasks.find(item => item.id === block.taskId && !item.deletedAt);
+  if (!task) return data;
+  const stamp = new Date().toISOString();
+  return { ...data, blocks: data.blocks.map(item => item.id === block.id
+    ? { ...block, deletedAt: undefined, updatedAt: stamp, revision: item.revision + 1 } : item) };
+}
+export function saveTaskTemplate(data: Data, template: TaskTemplate): Data {
+  const title = template.title.trim();
+  if (!title || !template.name.trim() || !Array.isArray(template.tagIds) ||
+      (template.projectId && !data.projects.some(item => item.id === template.projectId && !item.deletedAt)) ||
+      (template.sectionId && !data.sections.some(item => item.id === template.sectionId && !item.deletedAt && item.projectId === template.projectId)) ||
+      template.tagIds.some(id => !data.tags.some(item => item.id === id && !item.deletedAt))) return data;
+  const existing = data.taskTemplates.find(item => item.id === template.id);
+  const stamp = new Date().toISOString();
+  const saved = { ...template, name: template.name.trim(), title, createdAt: existing?.createdAt ?? template.createdAt,
+    updatedAt: stamp, revision: existing ? existing.revision + 1 : 1 };
+  return { ...data, taskTemplates: existing
+    ? data.taskTemplates.map(item => item.id === saved.id ? saved : item)
+    : [...data.taskTemplates, saved] };
+}
+export function instantiateTaskTemplate(data: Data, templateId: string, dueDate?: string, recurrence?: Recurrence): Data {
+  const template = data.taskTemplates.find(item => item.id === templateId && !item.deletedAt);
+  if (!template || (dueDate && !isInRetainedHistory(dueDate, localDate(new Date())))) return data;
+  const task: Task = { ...newEntity(), title: template.title, notes: template.notes, priority: template.priority,
+    projectId: template.projectId, sectionId: template.sectionId, tagIds: [...template.tagIds], sortKey: Date.now(), dueDate,
+    recurrence: dueDate && recurrence ? { ...recurrence, anchorDate: dueDate, occurrences: 0 } : undefined };
+  return saveTask(data, task);
+}
+export function createRoutine(data: Data, templateId: string, name: string, startDate: string, rule: Omit<Recurrence, "anchorDate" | "occurrences">): Data {
+  const template = data.taskTemplates.find(item => item.id === templateId && !item.deletedAt);
+  const clean = name.trim();
+  if (!template || !clean || !isInRetainedHistory(startDate, localDate(new Date()))) return data;
+  const taskId = crypto.randomUUID();
+  const recurrence: Recurrence = { ...rule, anchorDate: startDate, occurrences: 0 };
+  const task: Task = { ...newEntity(), id: taskId, title: template.title, notes: template.notes, priority: template.priority,
+    projectId: template.projectId, sectionId: template.sectionId, tagIds: [...template.tagIds], sortKey: Date.now(), dueDate: startDate,
+    recurrence };
+  const withTask = saveTask(data, task);
+  if (withTask === data) return data;
+  const routine: Routine = { ...newEntity(), name: clean, templateId, taskId, enabled: true, startDate, recurrence };
+  return { ...withTask, routines: [...withTask.routines, routine] };
+}
+export function setRoutineEnabled(data: Data, id: string, enabled: boolean): Data {
+  const routine = data.routines.find(item => item.id === id && !item.deletedAt);
+  if (!routine) return data;
+  const stamp = new Date().toISOString();
+  const task = data.tasks.find(item => item.id === routine.taskId);
+  const recurrence = !enabled ? task?.recurrence ?? routine.recurrence : routine.recurrence;
+  return { ...data, routines: data.routines.map(item => item.id === id
+    ? { ...item, enabled, recurrence, updatedAt: stamp, revision: item.revision + 1 } : item),
+    tasks: data.tasks.map(task => task.id === routine.taskId
+      ? { ...task, recurrence: enabled ? { ...recurrence, occurrences: task.recurrence?.occurrences ?? recurrence.occurrences } : undefined, updatedAt: stamp, revision: task.revision + 1 } : task) };
+}
+export function bulkSetPriority(data: Data, ids: string[], priority: Priority): Data {
+  const selected = new Set(ids);
+  if (!(["none", "low", "medium", "high"] as Priority[]).includes(priority)) return data;
+  const stamp = new Date().toISOString();
+  return { ...data, tasks: data.tasks.map(task => selected.has(task.id) && !task.deletedAt && !task.completedAt
+    ? { ...task, priority, updatedAt: stamp, revision: task.revision + 1 } : task) };
 }
 export function bulkCompleteTasks(data: Data, ids: string[], now = new Date()): Data {
   const selected = new Set(ids);

@@ -16,18 +16,22 @@ final class TodoStore: ObservableObject {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let isUITesting = ProcessInfo.processInfo.arguments.contains("--uitesting")
         url = folder.appendingPathComponent(isUITesting ? "LTM-Todo-uitesting.json" : "LTM-Todo-v1.json")
+        var needsMigration = false
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             if isUITesting { try? FileManager.default.removeItem(at: url) }
             if FileManager.default.fileExists(atPath: url.path) {
-                let decoded = try TodoDataFile.load(from: url)
+                let bytes = try Data(contentsOf: url)
+                let sourceVersion = (try? JSONSerialization.jsonObject(with: bytes) as? [String: Any])?["schemaVersion"] as? Int ?? 1
+                needsMigration = sourceVersion < 3
+                let decoded = try TodoDataFile.decode(bytes)
                 data = decoded
                 savedData = decoded
             }
         } catch {
             errorMessage = "Saved tasks could not be opened: \(error.localizedDescription)"
         }
-        if errorMessage == nil && pruneExpiredHistory() { persist() }
+        if errorMessage == nil && (pruneExpiredHistory() || needsMigration) { persist() }
         refreshNotifications()
     }
 
@@ -43,6 +47,172 @@ final class TodoStore: ObservableObject {
             .sorted { $0.sortKey == $1.sortKey ? $0.id.uuidString < $1.id.uuidString : $0.sortKey < $1.sortKey }
     }
     var backupURL: URL? { FileManager.default.fileExists(atPath: url.path) ? url : nil }
+    var visibleCalendars: [TodoCalendar] {
+        data.calendars.filter { $0.deletedAt == nil }.sorted { $0.sortKey < $1.sortKey }
+    }
+
+    func addCalendar(name: String, color: TodoCalendarColor) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard errorMessage == nil, !clean.isEmpty else { return }
+        data.calendars.append(TodoCalendar(name: clean, color: color))
+        persist()
+    }
+
+    func setCalendarVisible(_ id: UUID, visible: Bool) {
+        guard let index = data.calendars.firstIndex(where: { $0.id == id && $0.deletedAt == nil }) else { return }
+        data.calendars[index].visible = visible
+        data.calendars[index].updatedAt = Date()
+        data.calendars[index].revision += 1
+        persist()
+    }
+
+    func save(_ event: TodoCalendarEvent) {
+        guard errorMessage == nil,
+              data.calendars.contains(where: { $0.id == event.calendarID && $0.deletedAt == nil }),
+              !event.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        var updated = event
+        updated.title = updated.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard updated.allDay ? (updated.startDay != nil && updated.endDay != nil && updated.endDay! > updated.startDay!) :
+            (updated.startInstant != nil && updated.endInstant != nil && updated.endInstant! > updated.startInstant! && TimeZone(identifier: updated.timeZoneID ?? "") != nil) else { return }
+        if let index = data.calendarEvents.firstIndex(where: { $0.id == event.id }) {
+            updated.createdAt = data.calendarEvents[index].createdAt
+            updated.revision = data.calendarEvents[index].revision + 1
+            updated.updatedAt = Date()
+            data.calendarEvents[index] = updated
+        } else { data.calendarEvents.append(updated) }
+        persist()
+    }
+
+    func deleteCalendarEvent(_ id: UUID) {
+        guard let index = data.calendarEvents.firstIndex(where: { $0.id == id && $0.deletedAt == nil }) else { return }
+        data.calendarEvents[index].deletedAt = Date()
+        data.calendarEvents[index].updatedAt = Date()
+        data.calendarEvents[index].revision += 1
+        persist()
+    }
+
+    func calendarEvents(on day: String) -> [TodoCalendarEvent] {
+        let visible = Set(visibleCalendars.filter(\.visible).map(\.id))
+        return data.calendarEvents.filter { event in
+            guard event.deletedAt == nil, visible.contains(event.calendarID) else { return false }
+            let zone = TimeZone(identifier: event.timeZoneID ?? "") ?? .current
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = zone
+            let baseDay = event.startDay ?? event.startInstant.map { DayMath.day($0, calendar: calendar) } ?? ""
+            guard !baseDay.isEmpty, let baseDate = DayMath.date(baseDay, calendar: calendar), let target = DayMath.date(day, calendar: calendar) else { return false }
+            let eventStart = event.startInstant ?? baseDate
+            let eventEnd = event.endInstant ?? eventStart.addingTimeInterval(3600)
+            let duration = event.allDay
+                ? max(1, calendar.dateComponents([.day], from: baseDate, to: DayMath.date(event.endDay ?? baseDay, calendar: calendar) ?? baseDate).day ?? 1)
+                : max(1, (calendar.dateComponents([.day], from: calendar.startOfDay(for: eventStart), to: calendar.startOfDay(for: eventEnd.addingTimeInterval(-1))).day ?? 0) + 1)
+            let possibleStarts = (0..<duration).compactMap { DayMath.add(-$0, to: day, calendar: calendar) }
+            guard let occurrenceDay = possibleStarts.first(where: { eventRecurs(event, anchor: baseDay, on: $0, calendar: calendar) }) else { return false }
+            if event.allDay {
+                let exclusiveEnd = DayMath.add(duration, to: occurrenceDay, calendar: calendar) ?? occurrenceDay
+                return occurrenceDay <= day && exclusiveEnd > day
+            }
+            guard let start = event.startInstant, let end = event.endInstant else { return false }
+            let targetStart = calendar.startOfDay(for: target)
+            let targetEnd = calendar.date(byAdding: .day, value: 1, to: targetStart) ?? targetStart.addingTimeInterval(86400)
+            let elapsed = calendar.dateComponents([.day], from: baseDate, to: DayMath.date(occurrenceDay, calendar: calendar) ?? baseDate).day ?? 0
+            let occurrenceStart = calendar.date(byAdding: .day, value: elapsed, to: start) ?? start
+            let occurrenceEnd = occurrenceStart.addingTimeInterval(end.timeIntervalSince(start))
+            return occurrenceStart < targetEnd && occurrenceEnd > targetStart
+        }.sorted { ($0.allDay ? Date.distantPast : $0.startInstant ?? .distantFuture) < ($1.allDay ? Date.distantPast : $1.startInstant ?? .distantFuture) }
+    }
+
+    func saveTemplate(name: String, from task: TodoTask) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard errorMessage == nil, !clean.isEmpty, !task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        data.taskTemplates.append(TodoTaskTemplate(name: clean, title: task.title, notes: task.notes, priority: task.priority,
+            projectID: task.projectID, sectionID: task.sectionID, tagIDs: task.tagIDs))
+        persist()
+    }
+
+    func createFromTemplate(_ id: UUID, dueDay: String? = nil) {
+        guard let template = data.taskTemplates.first(where: { $0.id == id && $0.deletedAt == nil }) else { return }
+        var task = TodoTask(title: template.title)
+        task.notes = template.notes
+        task.priority = template.priority
+        task.projectID = template.projectID
+        task.sectionID = template.sectionID
+        task.tagIDs = template.tagIDs
+        task.dueDay = dueDay
+        save(task)
+    }
+
+    func startRoutine(templateID: UUID, name: String, startDay: String, frequency: RepeatFrequency, interval: Int) {
+        guard errorMessage == nil, frequency != .never,
+              let template = data.taskTemplates.first(where: { $0.id == templateID && $0.deletedAt == nil }),
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              DayMath.date(startDay) != nil, startDay >= DashboardRetention.earliestDay() else { return }
+        var task = TodoTask(title: template.title)
+        task.notes = template.notes
+        task.priority = template.priority
+        task.projectID = template.projectID
+        task.sectionID = template.sectionID
+        task.tagIDs = template.tagIDs
+        task.dueDay = startDay
+        task.frequency = frequency
+        task.interval = max(1, interval)
+        task.repeatAnchor = startDay
+        save(task)
+        guard data.tasks.contains(where: { $0.id == task.id }) else { return }
+        data.routines.append(TodoRoutine(name: name.trimmingCharacters(in: .whitespacesAndNewlines), templateID: templateID,
+            taskID: task.id, startDay: startDay, frequency: frequency, interval: max(1, interval)))
+        persist()
+    }
+
+    func setRoutineEnabled(_ id: UUID, enabled: Bool) {
+        guard let index = data.routines.firstIndex(where: { $0.id == id && $0.deletedAt == nil }) else { return }
+        data.routines[index].enabled = enabled
+        data.routines[index].updatedAt = Date()
+        data.routines[index].revision += 1
+        if let taskIndex = data.tasks.firstIndex(where: { $0.id == data.routines[index].taskID && $0.deletedAt == nil }) {
+            if !enabled { data.routines[index].occurrences = data.tasks[taskIndex].occurrenceCount }
+            let routine = data.routines[index]
+            data.tasks[taskIndex].frequency = enabled ? routine.frequency : .never
+            data.tasks[taskIndex].interval = routine.interval
+            data.tasks[taskIndex].repeatAnchor = enabled ? (data.tasks[taskIndex].dueDay ?? routine.startDay) : nil
+            data.tasks[taskIndex].repeatWeekdays = enabled ? routine.weekdays : nil
+            data.tasks[taskIndex].repeatUntil = enabled ? routine.until : nil
+            data.tasks[taskIndex].repeatCount = enabled ? routine.count : nil
+            data.tasks[taskIndex].occurrenceCount = enabled ? (routine.occurrences ?? data.tasks[taskIndex].occurrenceCount) : data.tasks[taskIndex].occurrenceCount
+            data.tasks[taskIndex].updatedAt = Date()
+            data.tasks[taskIndex].revision += 1
+        }
+        persist()
+    }
+
+    private func eventRecurs(_ event: TodoCalendarEvent, anchor: String, on day: String, calendar: Calendar) -> Bool {
+        guard day >= anchor else { return false }
+        guard let rule = event.recurrence else { return day == anchor }
+        if let until = rule.until, day > until { return false }
+        let interval = max(1, rule.interval)
+        guard let anchorDate = DayMath.date(anchor, calendar: calendar), let date = DayMath.date(day, calendar: calendar) else { return false }
+        switch rule.frequency {
+        case .never: return day == anchor
+        case .daily:
+            let n = calendar.dateComponents([.day], from: anchorDate, to: date).day ?? -1
+            return n >= 0 && n % interval == 0 && (rule.count.map { n / interval < $0 } ?? true)
+        case .weekly:
+            let days = rule.weekdays ?? [calendar.component(.weekday, from: anchorDate) - 1]
+            let weeks = (calendar.dateComponents([.weekOfYear], from: anchorDate, to: date).weekOfYear ?? -1)
+            let prior = max(0, calendar.dateComponents([.day], from: anchorDate, to: date).day ?? 0)
+            return weeks >= 0 && weeks % interval == 0 && days.contains(calendar.component(.weekday, from: date) - 1) && (rule.count.map { prior / interval < $0 } ?? true)
+        case .monthly, .yearly:
+            let components = calendar.dateComponents([.year, .month], from: anchorDate)
+            let target = calendar.dateComponents([.year, .month], from: date)
+            let months = (target.year! - components.year!) * 12 + target.month! - components.month!
+            let step = interval * (rule.frequency == .yearly ? 12 : 1)
+            guard months >= 0 && months % step == 0 else { return false }
+            let anchorDay = calendar.component(.day, from: anchorDate)
+            let monthStart = calendar.date(from: DateComponents(year: target.year, month: target.month, day: 1))!
+            let last = calendar.range(of: .day, in: .month, for: monthStart)!.count
+            let expected = calendar.date(byAdding: .day, value: min(anchorDay, last) - 1, to: monthStart)!
+            return calendar.isDate(expected, inSameDayAs: date) && (rule.count.map { months / step < $0 } ?? true)
+        }
+    }
 
     func save(_ task: TodoTask) {
         guard errorMessage == nil else { return }
@@ -81,6 +251,26 @@ final class TodoStore: ObservableObject {
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         save(TodoTask(title: clean, projectID: projectID))
+    }
+
+    func schedule(_ taskID: UUID, from start: Date, to end: Date) {
+        guard errorMessage == nil, end > start,
+              let index = data.tasks.firstIndex(where: { $0.id == taskID && $0.deletedAt == nil && $0.completedAt == nil }) else { return }
+        data.tasks[index].scheduledStart = start
+        data.tasks[index].scheduledEnd = end
+        data.tasks[index].updatedAt = Date()
+        data.tasks[index].revision += 1
+        persist()
+    }
+
+    func unschedule(_ taskID: UUID) {
+        guard errorMessage == nil,
+              let index = data.tasks.firstIndex(where: { $0.id == taskID && $0.deletedAt == nil }) else { return }
+        data.tasks[index].scheduledStart = nil
+        data.tasks[index].scheduledEnd = nil
+        data.tasks[index].updatedAt = Date()
+        data.tasks[index].revision += 1
+        persist()
     }
 
     func moveTask(_ id: UUID, by direction: Int) {

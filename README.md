@@ -7,7 +7,7 @@ LTM Todo is an ad-free, limitation-free personal productivity application for iP
 - A chronological Dashboard that scrolls through days and shows scheduled work and due work together.
 - Clear distinction between a task's due date and its scheduled work time.
 - Offline-first interaction; synchronization must never be required to check off or edit local work.
-- Native-quality iPhone/iPad experience plus a first-class web client.
+- A first-class responsive web app for desktop, iPhone, and iPad, installable to the Home Screen.
 - No advertisements or artificial limits on tasks, projects, reminders, tags, subtasks, recurrence, or calendars.
 - First-party calendar and planning model.
 
@@ -25,7 +25,7 @@ All development follows `AGENTS.md`. Major branches are `main` and permanent `vX
 ### Run locally
 
 - Web: `cd apps/web && npm ci && npm run dev`; validate with `npm test && npm run typecheck && npm run lint`. Use `npm run build:vinext` for the Cloudflare production build; `npm run build` runs the Next.js fallback build.
-- Apple: install Xcode and XcodeGen, run `xcodegen generate` in `apps/apple`, then open `LTMTodo.xcodeproj` or run the simulator build from App CI.
+- Apple source: `apps/apple` is retained as an experimental native client, but GitHub Actions does not build or sign it. GitHub simulator builds are not installable on a physical iPhone/iPad; use the responsive web app and add it to the Home Screen.
 - Swift core: `swift test` from the repository root.
 
-The deployed web app stores tasks locally in each browser using IndexedDB. It has no account or cross-device synchronization in v1. Native iPhone/iPad notifications require a due time and device permission.
+The deployed web app stores tasks locally in each browser using IndexedDB. It has no account or cross-device synchronization in v1. iPhone/iPad Web Push requires a due time, Home Screen installation, and device permission.

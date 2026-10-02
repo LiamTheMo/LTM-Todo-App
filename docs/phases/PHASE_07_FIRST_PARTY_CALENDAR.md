@@ -10,11 +10,15 @@ Calendar and CalendarEvent domain entities; multiple local calendars with semant
 ## Rules
 Events are commitments; tasks are completable work. An event does not become a task merely because it appears near one. All-day values are dates, not midnight UTC instants. Timed events retain time-zone semantics. Calendar views consume the same scheduling domain used by Dashboard.
 
+Event recurrence supports daily, weekly (selected weekdays), monthly, and yearly series with an interval and optional end date or occurrence count. Editing or deleting an event applies to its whole series; per-occurrence exceptions are outside this phase. Month summaries and agenda rows sort deterministically. A hidden calendar hides its events while leaving tasks and scheduled work visible.
+
 ## Layout
-Handle overlapping events deterministically. Month cells summarize without becoming unreadable. Day/week views support current-time indicator and accessible alternatives to visual geometry.
+Handle overlapping events deterministically. Month cells show concise event/task previews without becoming unreadable. Selecting a day opens a chronological 24-hour timeline with timed events and planned-work blocks, separate all-day/deadline sections, and a current-time line that updates continuously while Today is selected. Keep text-based agenda alternatives for VoiceOver and small screens.
+
+Calendar, date, and time selection use the app's custom selector surfaces instead of default iOS Picker/DatePicker controls. Date/time trigger rows match option-selector sizing. Opening a new task editor must leave the title field unfocused until the user taps it.
 
 ## Tests
-All-day multi-day; overlap layout; DST; event recurrence; calendar visibility; month boundary; time-zone changes; Dashboard/calendar consistency.
+All-day multi-day; overlap layout; DST; event recurrence; calendar visibility; month boundary; time-zone changes; Dashboard/calendar consistency; event previews in month cells; live now-line movement; task-editor keyboard remains hidden on open; custom selector accessibility; no native date/time pickers; date/time field widths match option fields.
 
 ## Acceptance criteria
 Users can manage an entirely first-party calendar offline. No Google Calendar dependency is required. Event/task distinctions remain clear. Calendar and Dashboard agree on scheduled data.

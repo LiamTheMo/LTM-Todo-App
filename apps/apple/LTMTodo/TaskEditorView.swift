@@ -3,6 +3,7 @@ import SwiftUI
 struct TaskEditorView: View {
     @EnvironmentObject private var store: TodoStore
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var titleFocused: Bool
     @State private var task: TodoTask
     @State private var hasDue: Bool
     @State private var dueDate: Date
@@ -39,34 +40,27 @@ struct TaskEditorView: View {
                 Section("Task") {
                     TextField("Title", text: $task.title)
                         .accessibilityIdentifier("task-title")
+                        .focused($titleFocused)
                     TextField("Notes", text: $task.notes, axis: .vertical)
                         .lineLimit(2...6)
-                    Picker("Priority", selection: $task.priority) {
-                        Text("None").tag(0)
-                        Text("Low").tag(1)
-                        Text("Medium").tag(2)
-                        Text("High").tag(3)
-                    }
-                    Picker("Project", selection: $task.projectID) {
-                        Text("Inbox").tag(Optional<UUID>.none)
-                        ForEach(store.projects) { project in
-                            Text(project.name).tag(Optional(project.id))
-                        }
-                    }
+                    CustomDropdownSelector(title: "Priority", selection: $task.priority, options: [
+                        DropdownOption(value: 0, title: "None"), DropdownOption(value: 1, title: "Low"),
+                        DropdownOption(value: 2, title: "Medium"), DropdownOption(value: 3, title: "High")
+                    ])
+                    CustomDropdownSelector(title: "Project", selection: $task.projectID,
+                        options: [DropdownOption(value: Optional<UUID>.none, title: "Inbox")] + store.projects.map {
+                            DropdownOption(value: Optional($0.id), title: $0.name)
+                        })
                     if let projectID = task.projectID {
-                        Picker("Section", selection: $task.sectionID) {
-                            Text("Project root").tag(Optional<UUID>.none)
-                            ForEach(store.data.sections.filter { $0.projectID == projectID && $0.deletedAt == nil }) { section in
-                                Text(section.name).tag(Optional(section.id))
-                            }
-                        }
+                        CustomDropdownSelector(title: "Section", selection: $task.sectionID,
+                            options: [DropdownOption(value: Optional<UUID>.none, title: "Project root")] + store.data.sections
+                                .filter { $0.projectID == projectID && $0.deletedAt == nil }
+                                .map { DropdownOption(value: Optional($0.id), title: $0.name) })
                     }
-                    Picker("Subtask of", selection: $task.parentTaskID) {
-                        Text("No parent").tag(Optional<UUID>.none)
-                        ForEach(store.activeTasks.filter { $0.id != task.id && $0.parentTaskID == nil && $0.projectID == task.projectID }) { parent in
-                            Text(parent.title).tag(Optional(parent.id))
-                        }
-                    }
+                    CustomDropdownSelector(title: "Subtask of", selection: $task.parentTaskID,
+                        options: [DropdownOption(value: Optional<UUID>.none, title: "No parent")] + store.activeTasks
+                            .filter { $0.id != task.id && $0.parentTaskID == nil && $0.projectID == task.projectID }
+                            .map { DropdownOption(value: Optional($0.id), title: $0.title) })
                     .onChange(of: task.projectID) { _, _ in
                         task.sectionID = nil
                         task.parentTaskID = nil
@@ -86,21 +80,19 @@ struct TaskEditorView: View {
                     }
                 }
                 Section("Deadline") {
-                    Toggle("Date", isOn: $hasDue)
+                    Toggle("Date", isOn: $hasDue).accessibilityIdentifier("task-has-due-date")
                     if hasDue {
-                        DatePicker("Date", selection: $dueDate, in: earliestDueDate..., displayedComponents: .date)
-                        Toggle("Time", isOn: $hasTime)
+                        CustomDateSelector(title: "Date", selection: $dueDate, minimumDate: earliestDueDate,
+                            accessibilityID: "task-due-date")
+                        Toggle("Time", isOn: $hasTime).accessibilityIdentifier("task-has-due-time")
                         if hasTime {
-                            DatePicker("Time", selection: $dueTime, displayedComponents: .hourAndMinute)
+                            CustomTimeSelector(title: "Time", selection: $dueTime, accessibilityID: "task-due-time")
                         }
                     }
                 }
                 Section("Repeat and remind") {
-                    Picker("Repeat", selection: $task.frequency) {
-                        ForEach(RepeatFrequency.allCases) { frequency in
-                            Text(frequency.rawValue.capitalized).tag(frequency)
-                        }
-                    }
+                    CustomDropdownSelector(title: "Repeat", selection: $task.frequency,
+                        options: RepeatFrequency.allCases.map { DropdownOption(value: $0, title: $0.rawValue.capitalized) })
                     if task.frequency != .never {
                         Stepper("Every \(task.interval)", value: $task.interval, in: 1...365)
                         if task.frequency == .weekly {
@@ -119,22 +111,20 @@ struct TaskEditorView: View {
                             Text("With no days selected, repeat on the original weekday.").font(.caption).foregroundStyle(.secondary)
                         }
                         Toggle("End on date", isOn: $hasRepeatUntil)
-                        if hasRepeatUntil { DatePicker("Last date", selection: $repeatUntil, in: dueDate..., displayedComponents: .date) }
+                        if hasRepeatUntil {
+                            CustomDateSelector(title: "Last date", selection: $repeatUntil, minimumDate: dueDate,
+                                accessibilityID: "task-repeat-until")
+                        }
                         Toggle("End after occurrences", isOn: $hasRepeatCount)
                         if hasRepeatCount { Stepper("\(repeatCount) occurrences", value: $repeatCount, in: 1...999) }
                     }
-                    Picker("Reminder", selection: $reminder) {
-                        Text("None").tag(-1)
-                        Text("At due time").tag(0)
-                        Text("5 minutes before").tag(5)
-                        Text("10 minutes before").tag(10)
-                        Text("15 minutes before").tag(15)
-                        Text("30 minutes before").tag(30)
-                        Text("45 minutes before").tag(45)
-                        Text("1 hour before").tag(60)
-                        Text("2 hours before").tag(120)
-                        Text("1 day before").tag(1440)
-                    }
+                    CustomDropdownSelector(title: "Reminder", selection: $reminder, options: [
+                        DropdownOption(value: -1, title: "None"), DropdownOption(value: 0, title: "At due time"),
+                        DropdownOption(value: 5, title: "5 minutes before"), DropdownOption(value: 10, title: "10 minutes before"),
+                        DropdownOption(value: 15, title: "15 minutes before"), DropdownOption(value: 30, title: "30 minutes before"),
+                        DropdownOption(value: 45, title: "45 minutes before"), DropdownOption(value: 60, title: "1 hour before"),
+                        DropdownOption(value: 120, title: "2 hours before"), DropdownOption(value: 1440, title: "1 day before")
+                    ])
                     if reminder >= 0 && !(hasDue && hasTime) {
                         Text("Choose a due date and time for a reminder.").font(.caption).foregroundStyle(.secondary)
                     }
@@ -148,6 +138,11 @@ struct TaskEditorView: View {
                     }
                 }
             }
+            .onChange(of: dueDate) { _, newDueDate in
+                if DayMath.day(repeatUntil) < DayMath.day(newDueDate) { repeatUntil = newDueDate }
+            }
+            .onAppear { titleFocused = false }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Task")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
