@@ -26,8 +26,14 @@ final class LTMTodoLaunchTests: XCTestCase {
         let taskTitle = app.textFields["task-title"]
         XCTAssertTrue(taskTitle.waitForExistence(timeout: 5))
         XCTAssertFalse(app.keyboards.firstMatch.exists, "Opening the task editor should not open the keyboard.")
-        app.switches["task-has-due-date"].tap()
+        let dueDateToggle = app.switches["task-has-due-date"]
+        XCTAssertTrue(dueDateToggle.waitForExistence(timeout: 5))
+        if (dueDateToggle.value as? String) != "1" {
+            dueDateToggle.tap()
+        }
+        XCTAssertEqual(dueDateToggle.value as? String, "1", "Enabling a deadline should reveal its date control.")
         let dueDate = app.buttons["task-due-date"]
+        if !dueDate.isHittable { app.swipeUp() }
         XCTAssertTrue(dueDate.waitForExistence(timeout: 5))
         let repeatSelector = app.buttons["selector-repeat"]
         XCTAssertTrue(repeatSelector.exists)
