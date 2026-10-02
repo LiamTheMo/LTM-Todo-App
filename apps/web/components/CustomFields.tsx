@@ -52,6 +52,7 @@ export function CustomSelect({ children, value, onChange, disabled, className, "
     };
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") { event.stopPropagation(); setOpen(false); root.current?.querySelector("button")?.focus(); }
+      if (event.key === "Tab") setOpen(false);
     };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", keydown);
@@ -142,7 +143,7 @@ export function DateField({ value, min, disabled, onChange, "aria-label": ariaLa
         show(330);
       } else setOpen(false);
     }}><span>{label}</span><span aria-hidden="true">▦</span></button>
-    {open && typeof document !== "undefined" && createPortal(<div id="custom-field-picker" className="datePickerPanel" role="dialog" aria-label="Choose date" style={{ top: placement.top, left: placement.left, width: Math.max(280, placement.width), maxHeight: placement.maxHeight }}>
+    {open && typeof document !== "undefined" && createPortal(<div id="custom-field-picker" className="datePickerPanel" role="dialog" aria-label="Choose date" style={{ top: placement.top, left: placement.left, width: placement.width, maxHeight: placement.maxHeight }}>
       <div className="datePickerHeader"><button type="button" aria-label="Previous month" onClick={() => setMonth(date => new Date(date.getFullYear(), date.getMonth() - 1, 1))}>‹</button><strong>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong><button type="button" aria-label="Next month" onClick={() => setMonth(date => new Date(date.getFullYear(), date.getMonth() + 1, 1))}>›</button></div>
       <div className="datePickerGrid" role="grid">{["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(day => <span role="columnheader" key={day}>{day}</span>)}{cells.map((day, index) => day ? <button type="button" role="gridcell" key={day} aria-label={new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} aria-selected={day === value} disabled={Boolean(min && day < min)} className={day === value ? "selected" : ""} onClick={() => { onChange(day); setOpen(false); }}>{Number(day.slice(-2))}</button> : <span aria-hidden="true" key={`blank-${index}`} />)}</div>
     </div>, document.body)}
@@ -174,7 +175,7 @@ export function TimeField({ value, disabled, onChange, "aria-label": ariaLabel }
 
   return <div className="customField" ref={root}>
     <button type="button" className="customFieldTrigger" disabled={disabled} aria-label={ariaLabel ?? display} aria-haspopup="dialog" aria-expanded={open} onClick={() => open ? setOpen(false) : show(280)}><span>{display}</span><span aria-hidden="true">◷</span></button>
-    {open && typeof document !== "undefined" && createPortal(<div id="custom-field-picker" className="timePickerPanel" role="dialog" aria-label="Choose time" style={{ top: placement.top, left: placement.left, width: Math.max(280, placement.width), maxHeight: placement.maxHeight }}>
+    {open && typeof document !== "undefined" && createPortal(<div id="custom-field-picker" className="timePickerPanel" role="dialog" aria-label="Choose time" style={{ top: placement.top, left: placement.left, width: placement.width, maxHeight: placement.maxHeight }}>
       <div className="timePickerColumn" role="group" aria-label="Hour">{Array.from({ length: 12 }, (_, i) => i + 1).map(hour => <button type="button" key={hour} aria-pressed={parts.hour === hour} className={parts.hour === hour ? "selected" : ""} onClick={() => update(hour, parts.minute, parts.period)}>{hour}</button>)}</div>
       <div className="timePickerColumn" role="group" aria-label="Minute">{Array.from({ length: 60 }, (_, minute) => minute).map(minute => <button type="button" key={minute} aria-pressed={parts.minute === minute} className={parts.minute === minute ? "selected" : ""} onClick={() => update(parts.hour, minute, parts.period)}>{String(minute).padStart(2, "0")}</button>)}</div>
       <div className="timePickerColumn" role="group" aria-label="AM or PM">{["AM", "PM"].map(period => <button type="button" key={period} aria-pressed={parts.period === period} className={parts.period === period ? "selected" : ""} onClick={() => update(parts.hour, parts.minute, period)}>{period}</button>)}</div>
