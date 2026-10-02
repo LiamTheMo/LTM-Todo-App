@@ -1,6 +1,6 @@
 # Web Domain Data Model
 
-This describes the current local web schema (`schemaVersion: 3`) in `apps/web/lib/domain.ts`. It is an IndexedDB document, not a server schema. Future sync records and protocol fields are proposals until Phase 10/11.
+This describes the current local web schema (`schemaVersion: 4`) in `apps/web/lib/domain.ts`. It is an IndexedDB document, not a server schema. Future sync records and protocol fields are proposals until Phase 10/11.
 
 ## Shared entity fields
 
@@ -11,7 +11,7 @@ Most persistent entities have `id` (UUID), `createdAt`, `updatedAt`, `revision`,
 - **Task:** title, notes, priority, optional project/section/parent IDs, tag IDs, sort key, optional date-only due date, optional local due time and time zone, completion timestamp, and optional structured recurrence.
 - **Project / Section / Tag:** named organization records; projects and sections carry sort keys, tags have colors, and projects may be archived.
 - **ScheduledBlock:** task ID, start/end instants, and time zone. Scheduling is separate from a task's due date. The current editor supports a scheduled block per scheduling operation; multiple simultaneous work blocks per task and drag/drop scheduling are not shipped.
-- **LocalCalendar:** name, one of six semantic colors (orange, blue, green, purple, red, teal), visibility, and sort key. A default Personal calendar is created locally.
+- **LocalCalendar:** name, canonical `#RRGGBB` sRGB color (each 8-bit channel ranges from 0 to 255), visibility, and sort key. A default Personal calendar is created locally.
 - **CalendarEvent:** calendar ID, title, notes, optional recurrence, and either all-day start/end dates (end exclusive) or timed start/end instants with a time zone.
 - **Reminder:** task ID, minutes-before trigger, and enabled state. Event reminders are not in the current web schema.
 - **Completion:** task ID, optional recurrence occurrence date, completion instant, and IDs of scheduled blocks cleared on completion.
@@ -30,4 +30,4 @@ Entity `deletedAt` fields support local deletion semantics. The web client prune
 
 ## Future synchronization model
 
-A server-side change journal, ownership model, cursor, conflict policy, and protocol do not exist yet. Phase 10 must define them; Phase 11 implements device convergence while local writes remain available offline. Preserve stable IDs and revisions, and do not treat the proposed sync model as part of schema v3 currently stored in IndexedDB.
+A server-side change journal, ownership model, cursor, conflict policy, and protocol do not exist yet. Phase 10 must define them; Phase 11 implements device convergence while local writes remain available offline. Preserve stable IDs and revisions, and do not treat the proposed sync model as part of schema v4 currently stored in IndexedDB.

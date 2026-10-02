@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calendarEventsForDay, calendarEventOccurrences, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, validEvent, zonedDateTimeToInstant } from "../lib/calendar-domain.ts";
+import { createCalendar, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, validEvent, zonedDateTimeToInstant } from "../lib/calendar-domain.ts";
 import { emptyData, newEntity } from "../lib/domain.ts";
 
 const eventBase = (data, fields) => ({
@@ -96,4 +96,13 @@ test("event templates preserve local start time and duration while creating fres
   assert.equal(created.calendarEvents[0].startInstant, "2026-10-02T15:30:00.000Z");
   assert.equal(created.calendarEvents[0].endInstant, "2026-10-02T16:15:00.000Z");
   assert.notEqual(created.calendarEvents[0].id, event.id);
+});
+
+test("calendar colors accept the full RGB spectrum and normalize legacy presets", () => {
+  assert.equal(normalizeCalendarColor("#01aBcD"), "#01ABCD");
+  assert.equal(normalizeCalendarColor("orange"), "#CF6D27");
+  assert.equal(normalizeCalendarColor("#FFF"), undefined);
+  const custom = createCalendar("Custom", "#123456");
+  assert.equal(custom.color, "#123456");
+  assert.equal(createCalendar("Bad", "rgb(1,2,3)"), undefined);
 });
