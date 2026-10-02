@@ -10,9 +10,9 @@ permissions:
 
 jobs:
   swift-core:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: swift-actions/setup-swift@v2
         with:
           swift-version: "6.0"
@@ -23,19 +23,19 @@ jobs:
   # the no-native-build policy explicit. An unsigned simulator app cannot be
   # installed on a physical iPhone/iPad from a GitHub artifact.
   apple:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Confirm native iOS builds are disabled
         run: echo "Native iOS app builds and simulator UI tests are disabled; use the deployed web app on iPhone/iPad."
 
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - run: npm ci --no-audit --no-fund
@@ -46,9 +46,9 @@ jobs:
       - run: npm run build:vinext
 
   docs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check required foundation files
         shell: bash
         run: |
