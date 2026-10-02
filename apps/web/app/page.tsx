@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
-import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, undoCompletion, type CalendarEvent, type Data, type DateScope, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
+import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, undoCompletion, type CalendarColor, type CalendarEvent, type Data, type DateScope, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
 import { calendarColors, calendarEventsForDay, calendarEventOccurrences, createCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
 import { readData, writeData } from "../lib/storage";
 import { dueTimeCaption, overdueDueCaption } from "../lib/date-labels";
@@ -96,9 +96,11 @@ export default function Home() {
   const [view, setView] = useState<View>("Dashboard");
   const [calendarMonth, setCalendarMonth] = useState(() => localDate(new Date()).slice(0, 7));
   const [calendarSelectedDate, setCalendarSelectedDate] = useState(() => localDate(new Date()));
-  const [calendarMode, setCalendarMode] = useState<"month" | "week" | "day" | "agenda">("month");
   const [calendarNow, setCalendarNow] = useState(() => new Date());
   const [eventEditing, setEventEditing] = useState<{ id?: string; date: string } | null>(null);
+  const [calendarCreating, setCalendarCreating] = useState(false);
+  const [calendarName, setCalendarName] = useState("");
+  const [calendarColor, setCalendarColor] = useState<CalendarColor>("orange");
   const [scheduleEditing, setScheduleEditing] = useState<{ taskId: string; blockId?: string; date: string } | null>(null);
   const [scheduleUndo, setScheduleUndo] = useState<ScheduledBlock[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -415,16 +417,21 @@ export default function Home() {
         </>}
         {view === "Calendar" && <section className="calendarCard" aria-label="Calendar">
           <div className="calendarToolbar">
-            <div className="calendarMonthControl"><button type="button" aria-label="Previous period" onClick={() => { if (calendarMode === "month") shiftCalendarMonth(-1); else setCalendarSelectedDate(addDays(calendarSelectedDate, calendarMode === "week" ? -7 : -1)); }}>‹</button><h3>{calendarMode === "month" ? calendarMonthLabel : dateLabel(calendarSelectedDate)}</h3><button type="button" aria-label="Next period" onClick={() => { if (calendarMode === "month") shiftCalendarMonth(1); else setCalendarSelectedDate(addDays(calendarSelectedDate, calendarMode === "week" ? 7 : 1)); }}>›</button></div>
-            <div className="calendarActions"><CustomSelect aria-label="Calendar view" value={calendarMode} onChange={e => setCalendarMode(e.target.value as typeof calendarMode)}><option value="month">Month</option><option value="week">Week</option><option value="day">Day</option><option value="agenda">Agenda</option></CustomSelect><button type="button" className="calendarToday" onClick={goCalendarToday}>Today</button><button type="button" className="calendarToday" onClick={() => setEventEditing({ date: calendarSelectedDate })}>+ Event</button></div>
+            <div className="calendarMonthControl"><button type="button" aria-label="Previous month" onClick={() => shiftCalendarMonth(-1)}>‹</button><h3>{calendarMonthLabel}</h3><button type="button" aria-label="Next month" onClick={() => shiftCalendarMonth(1)}>›</button></div>
+            <div className="calendarActions"><button type="button" className="calendarToday" onClick={goCalendarToday}>Today</button><button type="button" className="calendarToday" onClick={() => setEventEditing({ date: calendarSelectedDate })}>+ Event</button></div>
           </div>
           {scheduleUndo && <div className="scheduleUndo" role="status"><span>Planning change saved.</span><button type="button" onClick={() => { const blocks = scheduleUndo; mutate(value => ({ ...value, blocks })); setScheduleUndo(null); }}>Undo</button></div>}
-          <div className="calendarManagement"><div className="calendarToggles" aria-label="Visible calendars">{activeCalendars.map(calendar => <label key={calendar.id}><input type="checkbox" checked={calendar.visible} onChange={e => mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: e.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }))} /><span className={`calendarColor calendarColor-${calendar.color}`} />{calendar.name}</label>)}</div><button type="button" onClick={() => { const name = prompt("Calendar name")?.trim(); if (!name) return; const color = calendarColors[activeCalendars.length % calendarColors.length]; const calendar = createCalendar(name, color); if (calendar) mutate(value => ({ ...value, calendars: [...value.calendars, calendar] })); }}>+ Calendar</button></div>
+          <div className="calendarManagement"><div className="calendarToggles" aria-label="Visible calendars">{activeCalendars.map(calendar => <label key={calendar.id}><input type="checkbox" checked={calendar.visible} onChange={e => mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: e.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }))} /><span className={`calendarColor calendarColor-${calendar.color}`} />{calendar.name}</label>)}</div><button type="button" onClick={() => { setCalendarName(""); setCalendarColor(calendarColors[activeCalendars.length % calendarColors.length] ?? "orange"); setCalendarCreating(true); }}>+ Calendar</button></div>
+          {calendarCreating && <form className="calendarCreateForm" onSubmit={event => { event.preventDefault(); const calendar = createCalendar(calendarName, calendarColor); if (!calendar) return; mutate(value => ({ ...value, calendars: [...value.calendars, calendar] })); setCalendarCreating(false); setCalendarName(""); }}>
+            <label>Calendar name<input aria-label="Calendar name" value={calendarName} onChange={event => setCalendarName(event.target.value)} maxLength={60} required placeholder="e.g. School" /></label>
+            <fieldset><legend>Color</legend><div className="calendarColorChoices">{calendarColors.map(color => <button type="button" key={color} className="calendarColorChoice" aria-pressed={calendarColor === color} onClick={() => setCalendarColor(color)}><span className={`calendarColor calendarColor-${color}`} />{color[0].toUpperCase() + color.slice(1)}</button>)}</div></fieldset>
+            <div className="calendarCreateActions"><button type="button" onClick={() => setCalendarCreating(false)}>Cancel</button><button className="add" disabled={!calendarName.trim()}>Create calendar</button></div>
+          </form>}
           <div className="calendarLayout">
             <div>
               <div className="calendarWeekdays" aria-hidden="true">{calendarWeekdays.map(day => <span key={day}>{day}</span>)}</div>
-              <div className={`calendarGrid ${calendarMode !== "month" ? "calendarCompactGrid" : ""}`} role="group" aria-label={`Dates in ${calendarMonthLabel}`}>
-                {(calendarMode === "month" ? calendarDays : calendarMode === "week" ? Array.from({ length: 7 }, (_, i) => ({ date: addDays(calendarSelectedDate, i - parseLocalDate(calendarSelectedDate).getDay()) })) : calendarMode === "agenda" ? Array.from({ length: 14 }, (_, i) => ({ date: addDays(calendarSelectedDate, i) })) : [{ date: calendarSelectedDate }]).map(day => {
+              <div className="calendarGrid" role="group" aria-label={`Dates in ${calendarMonthLabel}`}>
+                {calendarDays.map(day => {
                   const taskDay = calendarDays.find(item => item.date === day.date);
                   const dayEvents = monthEventsByDay.get(day.date) ?? [];
                   const eventCount = dayEvents.length;
@@ -441,7 +448,7 @@ export default function Home() {
                     onClick={() => { setCalendarSelectedDate(day.date); if (day.date.slice(0, 7) !== calendarMonth) setCalendarMonth(day.date.slice(0, 7)); }}
                     onDragOver={e => { if (e.dataTransfer.types.includes("application/x-ltm-task")) e.preventDefault(); }}
                     onDrop={e => { e.preventDefault(); const taskId = e.dataTransfer.getData("application/x-ltm-task"); if (!taskId || !data.tasks.some(task => task.id === taskId && !task.completedAt && !task.deletedAt)) return; setCalendarSelectedDate(day.date); setScheduleEditing({ taskId, date: day.date }); }}>
-                    <span>{calendarMode === "agenda" ? dateLabel(day.date) : parseLocalDate(day.date).getDate()}</span>
+                    <span>{parseLocalDate(day.date).getDate()}</span>
                     <div className="calendarDayPreviews" aria-hidden="true">{previews.map(item => <span key={item.id} className="calendarDayPreview"><i className={`calendarColor calendarColor-${item.color}`} />{item.title}</span>)}</div>
                     {itemCount > previews.length && <small aria-hidden="true">+{itemCount - previews.length} more</small>}
                   </button>;
