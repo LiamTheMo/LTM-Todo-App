@@ -26,6 +26,26 @@ final class LTMTodoLaunchTests: XCTestCase {
         let taskTitle = app.textFields["task-title"]
         XCTAssertTrue(taskTitle.waitForExistence(timeout: 5))
         XCTAssertFalse(app.keyboards.firstMatch.exists, "Opening the task editor should not open the keyboard.")
+        app.switches["task-has-due-date"].tap()
+        let dueDate = app.buttons["task-due-date"]
+        XCTAssertTrue(dueDate.waitForExistence(timeout: 5))
+        let repeatSelector = app.buttons["selector-repeat"]
+        XCTAssertTrue(repeatSelector.exists)
+        XCTAssertLessThan(abs(dueDate.frame.width - repeatSelector.frame.width), 2,
+            "Date and dropdown fields should share the same row width.")
+        dueDate.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5), "Date should open the app calendar, not an Apple DatePicker.")
+        XCTAssertEqual(app.datePickers.count, 0)
+        app.buttons["Done"].tap()
+        app.switches["task-has-due-time"].tap()
+        let dueTime = app.buttons["task-due-time"]
+        XCTAssertTrue(dueTime.waitForExistence(timeout: 5))
+        XCTAssertLessThan(abs(dueTime.frame.width - repeatSelector.frame.width), 2,
+            "Time and dropdown fields should share the same row width.")
+        dueTime.tap()
+        XCTAssertTrue(app.staticTexts["Hour"].waitForExistence(timeout: 5), "Time should open the custom time selector.")
+        XCTAssertEqual(app.datePickers.count, 0)
+        app.buttons["Done"].tap()
         taskTitle.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         app.buttons["Cancel"].tap()

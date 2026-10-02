@@ -29,8 +29,16 @@ struct CalendarEventEditorView: View {
                     Toggle("All day", isOn: $event.allDay)
                 }
                 Section("When") {
-                    DatePicker("Starts", selection: $startDate, displayedComponents: event.allDay ? .date : [.date, .hourAndMinute])
-                    DatePicker("Ends", selection: $endDate, in: startDate..., displayedComponents: event.allDay ? .date : [.date, .hourAndMinute])
+                    CustomDateSelector(title: "Starts", selection: $startDate, accessibilityID: "event-start-date")
+                    if !event.allDay {
+                        CustomTimeSelector(title: "Start time", selection: $startDate, accessibilityID: "event-start-time")
+                    }
+                    CustomDateSelector(title: "Ends", selection: $endDate, minimumDate: startDate,
+                        accessibilityID: "event-end-date")
+                    if !event.allDay {
+                        CustomTimeSelector(title: "End time", selection: $endDate, minimumDate: startDate,
+                            accessibilityID: "event-end-time")
+                    }
                     if !event.allDay { Text("Times use \(TimeZone.current.identifier). Repeating events keep this local time across daylight saving changes.").font(.caption).foregroundStyle(.secondary) }
                 }
                 Section("Repeat") {
@@ -41,9 +49,15 @@ struct CalendarEventEditorView: View {
                     })
                     if event.recurrence != nil {
                         Stepper("Every \(event.recurrence?.interval ?? 1)", value: Binding(get: { event.recurrence?.interval ?? 1 }, set: { event.recurrence?.interval = $0 }), in: 1...365)
-                        DatePicker("Repeat until", selection: Binding(get: { DayMath.date(event.recurrence?.until ?? "") ?? startDate }, set: { event.recurrence?.until = DayMath.day($0) }), in: startDate..., displayedComponents: .date)
+                        CustomDateSelector(title: "Repeat until",
+                            selection: Binding(get: { DayMath.date(event.recurrence?.until ?? "") ?? startDate },
+                                set: { event.recurrence?.until = DayMath.day($0) }),
+                            minimumDate: startDate, accessibilityID: "event-repeat-until")
                     }
                 }
+            }
+            .onChange(of: startDate) { _, newStart in
+                if endDate < newStart { endDate = newStart }
             }
             .navigationTitle(event.title.isEmpty ? "New event" : "Edit event")
             .navigationBarTitleDisplayMode(.inline)
