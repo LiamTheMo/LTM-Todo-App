@@ -138,7 +138,7 @@ export function DateField({ value, min, disabled, onChange, "aria-label": ariaLa
   return <div className="customField" ref={root}>
     <button type="button" className="customFieldTrigger" disabled={disabled} aria-label={ariaLabel ?? label} aria-haspopup="dialog" aria-expanded={open} onClick={() => {
       if (!open) {
-        const date = value ? new Date(`${value}T12:00:00`) : min ? new Date(`${min}T12:00:00`) : new Date();
+        const date = value ? new Date(`${value}T12:00:00`) : new Date();
         setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
         show(330);
       } else setOpen(false);
