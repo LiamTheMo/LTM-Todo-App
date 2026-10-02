@@ -569,7 +569,7 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTe
     onSave(allDay ? { ...common, allDay: true, startDate, endDate: addDays(endDate, 1) } : { ...common, allDay: false, startInstant: startInstant!, endInstant: endInstant!, timeZone });
   }}>
     <div className="editorHead"><h2>{event ? "Edit event" : "New event"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
-    <label>Title<input autoFocus required value={title} onChange={e => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
+    <label>Title<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
     <label>Calendar<select value={calendarId} onChange={e => setCalendarId(e.target.value)}>{calendars.map(calendar => <option key={calendar.id} value={calendar.id}>{calendar.name}</option>)}</select></label>
     <label className="checkLabel"><input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} /> All day</label>
@@ -654,7 +654,7 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
     }, reminderMinutes);
   }}>
     <div className="editorHead"><h2>{task ? "Edit task" : "New task"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
-    <label>Title<input autoFocus required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
+    <label>Title<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
     <div className="fieldPair"><label>Date<input type="date" min={earliestDate} value={dueDate} onChange={e => setDueDate(e.target.value)} /></label><label>Time<input type="time" disabled={!dueDate} value={dueTime} onChange={e => setDueTime(e.target.value)} /></label></div>
     {expiredDueDate && <p className="hint">Choose a date within the seven-day history window.</p>}
