@@ -10,31 +10,23 @@ permissions:
 
 jobs:
   swift-core:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test Swift core
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.0"
+      - name: Test platform-neutral Swift core
         run: swift test
 
+  # Keep the established required-check name for the main ruleset while making
+  # the no-native-build policy explicit. An unsigned simulator app cannot be
+  # installed on a physical iPhone/iPad from a GitHub artifact.
   apple:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install XcodeGen
-        run: brew install xcodegen
-      - name: Generate project
-        working-directory: apps/apple
-        run: xcodegen generate
-      - name: Build iOS app
-        working-directory: apps/apple
-        run: xcodebuild -project LTMTodo.xcodeproj -scheme LTMTodo -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
-      - name: Test Apple migration and UI smoke suites
-        working-directory: apps/apple
-        shell: bash
-        run: |
-          set -euo pipefail
-          destination_id="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for runtime in devices.values() for device in runtime if device["isAvailable"] and device["name"].startswith("iPhone")))')"
-          xcodebuild test -project LTMTodo.xcodeproj -scheme LTMTodo -destination "platform=iOS Simulator,id=${destination_id}" CODE_SIGNING_ALLOWED=NO
+      - name: Confirm native iOS builds are disabled
+        run: echo "Native iOS app builds and simulator UI tests are disabled; use the deployed web app on iPhone/iPad."
 
   web:
     runs-on: ubuntu-latest
