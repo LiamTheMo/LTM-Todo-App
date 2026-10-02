@@ -25,7 +25,7 @@ This file records shipped behavior. Product specs and phase documents describe i
 ## Delivery and validation
 
 - Permanent phase checkpoints through v2 are `v1.00`, `v1.01`, `v1.02`, `v1.03`, and `v2.00`. Work uses temporary branches, merges to the active checkpoint after review, waits for its checks, then promotes a release to `main`. Cloudflare deploys from `main` only.
-- The latest recorded v2.00 CI run (#138, commit `165ff2477dff5307f60a3349a9205042b1f9bedd`) passed `web`, `swift-core`, `docs`, and the `apple` policy check. The Apple check intentionally confirms native builds are disabled; it is not an iOS build or UI test.
+- The `v2.00` CI gate runs `web`, `swift-core`, `docs`, and the `apple` no-native-build policy check. Review current results and job logs in GitHub Actions; the Apple check confirms native builds are disabled and is not an iOS build or UI test.
 - The Swift job reports an upstream Node.js 20 deprecation warning from `swift-actions/setup-swift`. Its latest stable v2.4.0 and v3.0.0-beta.1 manifests both still target Node 20; changing to the beta would not clear the warning. The Swift job itself passes.
 
 ## Not shipped yet

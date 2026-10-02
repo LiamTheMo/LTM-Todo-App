@@ -44,7 +44,7 @@ export function CalendarColorPicker({ value, onChange }: { value: CalendarColor;
     top: `${50 + Math.sin(hsv.hue * Math.PI / 180) * hsv.saturation * 48}%` } as CSSProperties;
   const labels: Array<[keyof RGB, string]> = [["r", "R"], ["g", "G"], ["b", "B"]];
   return <div className="calendarColorPicker">
-    <div ref={wheelRef} className="calendarSpectrumWheel" role="slider" tabIndex={0} aria-label="Calendar color spectrum"
+    <div ref={wheelRef} className="calendarSpectrumWheel" role="slider" tabIndex={0} aria-label="Calendar color spectrum" aria-valuemin={0} aria-valuemax={359} aria-valuenow={Math.round(hsv.hue)}
       aria-valuetext={`${value}, RGB ${rgb.r} ${rgb.g} ${rgb.b}`} onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); wheelPointer(event); }}
       onPointerMove={event => { if (event.buttons) wheelPointer(event); }}
       onKeyDown={event => { if (event.key.startsWith("Arrow")) { event.preventDefault(); const h = (hsv.hue + (event.key === "ArrowRight" || event.key === "ArrowUp" ? 1 : 359)) % 360; onChange(toHex(fromHsv(h, hsv.saturation, hsv.value))); } }}>
