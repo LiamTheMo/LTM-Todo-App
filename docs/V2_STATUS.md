@@ -2,7 +2,7 @@
 
 ## Goal
 
-Complete the first-party calendar and advanced planning scope in Phases 7–9, validate it on iPhone, iPad, and web, and release the completed checkpoint as v2.00.
+Complete the first-party calendar and advanced planning scope in Phases 7–9, validate the responsive web app on iPhone, iPad, and desktop, and release the completed checkpoint as v2.00.
 
 Google Calendar is not a dependency. Tasks, scheduled work blocks, and calendar events remain distinct concepts. Scheduling work must never change a task's due date.
 
@@ -26,8 +26,10 @@ Implementation and fixes occur on temporary branches from the active phase check
 - Phase 9 merged into `v1.03` (PRs #79–#81): Kanban grouping, saved filters, bulk task actions, task and event templates, routines, schema v3 migration, and compact due-time captions. Web tests, typecheck, lint, production build, Swift core tests, Apple build, Apple migration tests, and the Apple UI smoke suite passed in the `v1.03` CI run.
 - Due-time captions use compact 12-hour labels such as `Due 9:15am` and `Due 5:30pm` in web and Apple calendar task views.
 - `v2.00` was created from the green `v1.03` checkpoint. Its required CI passed on `3312fd8` after the Apple UI smoke-test adjustment (run #36945870588).
-- The v2.00 interaction polish merged in PR #86: custom month grids/day timelines on Apple and web, app-styled option/date/time selectors, and a no-autofocus task editor. A follow-up replaces remaining native Apple date/time pickers and aligns their field widths. Required CI on the updated `v2.00` checkpoint must pass before promotion.
-- Physical iPhone/iPad validation and production deployment remain outstanding. Manual validation is to be performed against the production build after it is promoted to `main`.
+- The v2.00 interaction polish merged in PRs #86–#88: custom month grids/day timelines, app-styled option/date/time selectors, matched date/time widths, and no-autofocus task creation on Apple and web.
+- Native iOS builds and simulator UI tests are removed from GitHub Actions because the unsigned simulator product cannot be installed on physical devices from a GitHub download. `apps/apple` remains experimental source; the supported iPhone/iPad path for v2.00 is the responsive web app added to the Home Screen. The required `apple` check now documents this policy without compiling the app.
+- The latest Apple UI test exposed a deadline-selector visibility issue in the test sequence. The test now checks the switch state and scrolls the form to the date row before querying it; this change cannot be verified in Xcode in this environment, so native app behavior remains outside the v2.00 CI gate.
+- Production deployment and manual validation of the responsive web app on iPhone, iPad, and desktop remain outstanding. Native iOS installation/build validation is not part of this release.
 
 ## Release gate
 
@@ -37,6 +39,6 @@ Implementation and fixes occur on temporary branches from the active phase check
 - [ ] After deployment, Phase 8 manual checks pass for touch, pointer, keyboard, undo, offline persistence, and calendar/Dashboard consistency.
 - [x] Phase 9 implementation merged into `v1.03`; local web checks and version-branch CI pass.
 - [ ] After deployment, Phase 9 manual checks pass across supported clients, including accessibility and migration behavior.
-- [ ] Confirm required CI passes on `v2.00` and phase documentation matches the release candidate.
+- [ ] Confirm web, Swift core, docs, and Apple-build-policy checks pass on `v2.00` and phase documentation matches the release candidate.
 - [ ] Promote `v2.00` to `main` through a pull request and verify the production deployment.
-- [ ] Complete and record the supported-device manual checks against the deployed build.
+- [ ] Complete and record responsive-web manual checks on iPhone, iPad, and desktop against the deployed build, including Home Screen install, offline persistence, accessibility, layout, calendar behavior, and notifications.
