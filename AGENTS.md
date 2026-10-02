@@ -50,10 +50,11 @@ Classify audit results as:
 - Never put secrets in source control.
 
 ## 5. Target clients
-- iPhone/iPad: Swift + SwiftUI, native notifications/widgets/Shortcuts capabilities when their phase is reached.
-- Web: TypeScript + React/Next.js.
+- Supported iPhone/iPad and desktop client: the responsive TypeScript/React web app, installable to the Home Screen on supported mobile browsers.
+- Experimental source: `apps/apple` contains SwiftUI code, but CI does not build, sign, or distribute the native app. Do not describe it as a supported shipped client.
+- Web implementation: TypeScript + React/Next.js, deployed to Cloudflare Workers.
 - Shared contract: versioned API/domain schemas and deterministic recurrence/date semantics.
-- Backend in v3: API/sync service backed by PostgreSQL unless an ADR deliberately changes this.
+- Backend and accounts are planned for v3. Select and document the sync service and storage through an ADR before implementation; PostgreSQL remains a proposal, not a shipped dependency.
 
 Do not force UI code sharing between SwiftUI and React. Share behavior through specifications, schemas, fixtures and conformance tests.
 
