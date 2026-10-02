@@ -26,7 +26,7 @@ Implementation and fixes occur on temporary branches from the active phase check
 - Phase 9 merged into `v1.03` (PRs #79–#81): Kanban grouping, saved filters, bulk task actions, task and event templates, routines, schema v3 migration, and compact due-time captions. Web tests, typecheck, lint, production build, Swift core tests, Apple build, Apple migration tests, and the Apple UI smoke suite passed in the `v1.03` CI run.
 - Due-time captions use compact 12-hour labels such as `Due 9:15am` and `Due 5:30pm` in web and Apple calendar task views.
 - `v2.00` was created from the green `v1.03` checkpoint. Its required CI passed on `3312fd8` after the Apple UI smoke-test adjustment (run #36945870588).
-- The v2.00 interaction polish merged in PR #86: custom month grids/day timelines on Apple and web, app-styled option selectors, and a no-autofocus task editor. Required CI on the updated `v2.00` checkpoint must pass before promotion.
+- The v2.00 interaction polish merged in PR #86: custom month grids/day timelines on Apple and web, app-styled option/date/time selectors, and a no-autofocus task editor. A follow-up replaces remaining native Apple date/time pickers and aligns their field widths. Required CI on the updated `v2.00` checkpoint must pass before promotion.
 - Physical iPhone/iPad validation and production deployment remain outstanding. Manual validation is to be performed against the production build after it is promoted to `main`.
 
 ## Release gate

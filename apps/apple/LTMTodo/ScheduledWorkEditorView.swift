@@ -20,14 +20,21 @@ struct ScheduledWorkEditorView: View {
             Form {
                 Section("Planned work") {
                     Text(task.title).font(.headline)
-                    DatePicker("Starts", selection: $start)
-                    DatePicker("Ends", selection: $end, in: start...)
+                    CustomDateSelector(title: "Starts", selection: $start, accessibilityID: "planned-work-start-date")
+                    CustomTimeSelector(title: "Start time", selection: $start, accessibilityID: "planned-work-start-time")
+                    CustomDateSelector(title: "Ends", selection: $end, minimumDate: start,
+                        accessibilityID: "planned-work-end-date")
+                    CustomTimeSelector(title: "End time", selection: $end, minimumDate: start,
+                        accessibilityID: "planned-work-end-time")
                     if let dueDay = task.dueDay { LabeledContent("Task due", value: dueDay) }
                     Text("Planning work is separate from the task deadline.").font(.caption).foregroundStyle(.secondary)
                 }
                 if task.scheduledStart != nil {
                     Section { Button("Remove planned time", role: .destructive) { store.unschedule(task.id); dismiss() } }
                 }
+            }
+            .onChange(of: start) { _, newStart in
+                if end < newStart { end = newStart }
             }
             .navigationTitle(task.scheduledStart == nil ? "Schedule work" : "Edit planned work")
             .navigationBarTitleDisplayMode(.inline)

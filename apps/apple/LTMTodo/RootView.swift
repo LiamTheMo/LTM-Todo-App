@@ -616,7 +616,9 @@ struct SettingsView: View {
                     CustomDropdownSelector(title: "Template", selection: $routineTemplateID,
                         options: [DropdownOption(value: Optional<UUID>.none, title: "Choose template")] + store.data.taskTemplates
                             .filter { $0.deletedAt == nil }.map { DropdownOption(value: Optional($0.id), title: $0.name) })
-                    DatePicker("First due date", selection: $routineStart, in: (DayMath.date(DashboardRetention.earliestDay()) ?? Date())..., displayedComponents: .date)
+                    CustomDateSelector(title: "First due date", selection: $routineStart,
+                        minimumDate: DayMath.date(DashboardRetention.earliestDay()) ?? Date(),
+                        accessibilityID: "routine-first-due-date")
                     CustomDropdownSelector(title: "Repeat", selection: $routineFrequency,
                         options: RepeatFrequency.allCases.filter { $0 != .never }.map { DropdownOption(value: $0, title: $0.rawValue.capitalized) })
                     Stepper("Every \(routineInterval)", value: $routineInterval, in: 1...365)

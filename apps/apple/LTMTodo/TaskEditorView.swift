@@ -80,12 +80,13 @@ struct TaskEditorView: View {
                     }
                 }
                 Section("Deadline") {
-                    Toggle("Date", isOn: $hasDue)
+                    Toggle("Date", isOn: $hasDue).accessibilityIdentifier("task-has-due-date")
                     if hasDue {
-                        DatePicker("Date", selection: $dueDate, in: earliestDueDate..., displayedComponents: .date)
-                        Toggle("Time", isOn: $hasTime)
+                        CustomDateSelector(title: "Date", selection: $dueDate, minimumDate: earliestDueDate,
+                            accessibilityID: "task-due-date")
+                        Toggle("Time", isOn: $hasTime).accessibilityIdentifier("task-has-due-time")
                         if hasTime {
-                            DatePicker("Time", selection: $dueTime, displayedComponents: .hourAndMinute)
+                            CustomTimeSelector(title: "Time", selection: $dueTime, accessibilityID: "task-due-time")
                         }
                     }
                 }
@@ -110,7 +111,10 @@ struct TaskEditorView: View {
                             Text("With no days selected, repeat on the original weekday.").font(.caption).foregroundStyle(.secondary)
                         }
                         Toggle("End on date", isOn: $hasRepeatUntil)
-                        if hasRepeatUntil { DatePicker("Last date", selection: $repeatUntil, in: dueDate..., displayedComponents: .date) }
+                        if hasRepeatUntil {
+                            CustomDateSelector(title: "Last date", selection: $repeatUntil, minimumDate: dueDate,
+                                accessibilityID: "task-repeat-until")
+                        }
                         Toggle("End after occurrences", isOn: $hasRepeatCount)
                         if hasRepeatCount { Stepper("\(repeatCount) occurrences", value: $repeatCount, in: 1...999) }
                     }
@@ -133,6 +137,9 @@ struct TaskEditorView: View {
                         }
                     }
                 }
+            }
+            .onChange(of: dueDate) { _, newDueDate in
+                if DayMath.day(repeatUntil) < DayMath.day(newDueDate) { repeatUntil = newDueDate }
             }
             .onAppear { titleFocused = false }
             .scrollDismissesKeyboard(.interactively)
