@@ -13,7 +13,7 @@ The current supported product is a single owner using the responsive web app on 
 **Project:** organizational container for tasks.
 **Section:** ordering/grouping inside a project.
 **Tag:** cross-project classification.
-**Reminder:** notification rule attached to a task/event.
+**Reminder:** notification rule attached to a task. Event reminders are not currently shipped.
 **Recurrence:** rule that generates/advances occurrences deterministically.
 **Inbox:** captured work not yet organized.
 **Dashboard:** chronological day stream combining scheduled items and due items.
@@ -27,7 +27,7 @@ Unlimited local tasks/projects/sections/tags/subtasks/reminders/recurrence rules
 The web client exposes the branded site icon in browser/search surfaces and supports adding the site to an iPhone Home Screen as a standalone web app.
 
 ## v2 requirements
-First-party local calendars; timed/all-day events and recurring event series; a six-week month grid with previews and a selected-day agenda/timeline; multiple local calendars/colors with an in-app color wheel; planned-work blocks; routines; templates; Kanban; saved views; bulk actions. Separate week/day/agenda mode tabs and drag-and-drop scheduling are not part of the shipped interface.
+First-party local calendars; timed/all-day events and recurring event series; a six-week month grid with previews and a selected-day agenda/timeline; multiple local calendars with an in-app full-spectrum sRGB color wheel and 8-bit RGB selection (0–255 per channel); planned-work blocks; routines; templates; Kanban; saved views; bulk actions. Separate week/day/agenda mode tabs and drag-and-drop scheduling are not part of the shipped interface.
 
 ## v3 requirements
 Authentication; cross-device task-data sync; conflict handling; tombstones; incremental sync; backup/export; attachments; optional sharing/collaboration. The web production client already exists in v1/v2; v3 expands it with accounts and synchronization.

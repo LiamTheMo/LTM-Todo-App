@@ -37,8 +37,8 @@ The Calendar view is a local planning surface over tasks, planned-work blocks, a
 - The month view is a six-week grid with event/task previews in each date cell, Previous/Next month controls, and a Today action.
 - Selecting a date shows its agenda and chronological timeline. Timed events and planned-work blocks appear in the timeline; deadlines remain distinct. The current-time marker on Today refreshes every 15 seconds.
 - The calendar has no separate Month/Week/Day/Agenda mode selector. Month navigation plus selecting a date are the available controls.
-- Calendar creation is an in-app form with a six-choice color wheel. Task and event date/time/option fields use app-styled web controls; opening New Task does not focus the title field.
-- Both clients use Dashboard date-only semantics and the same rolling history boundary. Displaying planned work never changes a task deadline.
+- Calendar creation is an in-app form with a full-spectrum sRGB color wheel and exact 0–255 RGB channel inputs. Task and event date/time/option fields use app-styled web controls; opening New Task does not focus the title field.
+- The supported responsive web client uses Dashboard date-only semantics and the same rolling history boundary. Displaying planned work never changes a task deadline.
 - Navigation order is Dashboard, Tasks, Projects, Calendar, Settings. Inbox remains available as a task filter and is not a separate navigation destination; Settings is shown as a gear icon.
 
 ## Accessibility

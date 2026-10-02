@@ -1,4 +1,4 @@
-import { calendarColors, validEvent } from "./calendar-domain.ts";
+import { normalizeCalendarColor, validEvent } from "./calendar-domain.ts";
 import { emptyData, localDate, pruneExpiredHistory, type Data } from "./domain.ts";
 
 const DB_NAME = "ltm-todo";
@@ -8,7 +8,7 @@ export function normalizeData(value: unknown): Data {
   if (value == null) return emptyData();
   if (typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid local task data");
   const raw = value as Record<string, unknown>;
-  if (raw.schemaVersion !== 1 && raw.schemaVersion !== 2 && raw.schemaVersion !== 3) throw new Error("Unsupported local data version");
+  if (raw.schemaVersion !== 1 && raw.schemaVersion !== 2 && raw.schemaVersion !== 3 && raw.schemaVersion !== 4) throw new Error("Unsupported local data version");
   const migratingV1 = raw.schemaVersion === 1;
   const collections = ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews"] as const;
   for (const name of collections) {
@@ -21,7 +21,7 @@ export function normalizeData(value: unknown): Data {
   const normalized = { ...raw };
   for (const name of collections) normalized[name] ??= [];
   if (migratingV1 && !(normalized.calendars as unknown[]).length) normalized.calendars = emptyData().calendars;
-  const data = { ...emptyData(), ...normalized, schemaVersion: 3,
+  const data = { ...emptyData(), ...normalized, schemaVersion: 4,
     generation: (raw.generation as number | undefined) ?? 0 } as Data;
   for (const name of collections) {
     const ids = new Set<string>();
@@ -49,10 +49,12 @@ export function normalizeData(value: unknown): Data {
     }
   }
   for (const calendar of data.calendars) {
+    const color = normalizeCalendarColor(calendar.color);
     if (typeof calendar.name !== "string" || !calendar.name.trim() ||
-        !calendarColors.includes(calendar.color) || typeof calendar.visible !== "boolean" || !Number.isFinite(calendar.sortKey)) {
+        !color || typeof calendar.visible !== "boolean" || !Number.isFinite(calendar.sortKey)) {
       throw new Error("Invalid local calendar record");
     }
+    calendar.color = color;
   }
   const calendarIds = new Set(data.calendars.map(calendar => calendar.id));
   for (const template of data.taskTemplates) {
@@ -129,7 +131,7 @@ export async function readData(today = localDate(new Date())): Promise<Data> {
       const request = store.get(KEY);
       request.onsuccess = () => {
         try {
-          const legacy = request.result !== undefined && (request.result as { schemaVersion?: number }).schemaVersion !== 3;
+          const legacy = request.result !== undefined && (request.result as { schemaVersion?: number }).schemaVersion !== 4;
           const stored = normalizeData(request.result);
           const retained = pruneExpiredHistory(stored, today);
           if (legacy || retained !== stored) {

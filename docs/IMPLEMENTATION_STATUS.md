@@ -14,7 +14,7 @@ This file records shipped behavior. Product specs and phase documents describe i
 ## Shipped product behavior
 
 - Dashboard and task management include local persistence, projects/sections, tags, subtasks, recurrence, reminders, search and filters, saved views, routines, templates, bulk actions, and retained completion history.
-- The first-party Calendar has local calendars, a six-week month grid with event/task previews, calendar visibility, timed/all-day events and recurring series. Calendar creation uses the in-app six-color wheel (orange, blue, green, purple, red, teal).
+- The first-party Calendar has local calendars, a six-week month grid with event/task previews, calendar visibility, timed/all-day events and recurring series. Calendar creation uses the in-app full-spectrum calendar color wheel with 8-bit RGB channels (0–255 each); named legacy colors migrate to their previous hex values.
 - Selecting a date shows its agenda and chronological day timeline. Timed events and scheduled task blocks appear in the timeline; due dates remain separate from planned-work times.
 - The calendar has no Month/Week/Day/Agenda mode switch. Month navigation and selecting a date are the available calendar navigation controls.
 - Planned-work blocks can be created, edited, and removed from the task/calendar forms. Drag-and-drop scheduling and multiple blocks per task are not shipped.
@@ -25,7 +25,7 @@ This file records shipped behavior. Product specs and phase documents describe i
 ## Delivery and validation
 
 - Permanent phase checkpoints through v2 are `v1.00`, `v1.01`, `v1.02`, `v1.03`, and `v2.00`. Work uses temporary branches, merges to the active checkpoint after review, waits for its checks, then promotes a release to `main`. Cloudflare deploys from `main` only.
-- The latest recorded v2.00 CI run (#138, commit `165ff2477dff5307f60a3349a9205042b1f9bedd`) passed `web`, `swift-core`, `docs`, and the `apple` policy check. The Apple check intentionally confirms native builds are disabled; it is not an iOS build or UI test.
+- The `v2.00` CI gate runs `web`, `swift-core`, `docs`, and the `apple` no-native-build policy check. Review current results and job logs in GitHub Actions; the Apple check confirms native builds are disabled and is not an iOS build or UI test.
 - The Swift job reports an upstream Node.js 20 deprecation warning from `swift-actions/setup-swift`. Its latest stable v2.4.0 and v3.0.0-beta.1 manifests both still target Node 20; changing to the beta would not clear the warning. The Swift job itself passes.
 
 ## Not shipped yet

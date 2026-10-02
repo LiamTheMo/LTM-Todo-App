@@ -68,8 +68,8 @@ export function CalendarTimeline({ day, items, now }: { day: string; items: Cale
         const start = minuteOfDay(item.start);
         let end = minuteOfDay(item.end);
         if (end <= start) end = 24 * 60;
-        return <div className={`calendarTimelineItem calendarTimelineItem-${item.color}`} key={item.id}
-          style={{ top: start / 60 * hourHeight, height: Math.max(34, (end - start) / 60 * hourHeight),
+        return <div className="calendarTimelineItem" key={item.id}
+          style={{ backgroundColor: `color-mix(in srgb, ${item.color} 18%, white)`, borderColor: item.color, top: start / 60 * hourHeight, height: Math.max(34, (end - start) / 60 * hourHeight),
             left: `${item.column / item.columnCount * 100}%`, width: `${100 / item.columnCount}%` }}
           aria-label={`${item.title}, ${item.caption}`}>
           <strong>{item.title}</strong><small>{item.caption}</small>
