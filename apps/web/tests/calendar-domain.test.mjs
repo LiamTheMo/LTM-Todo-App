@@ -101,7 +101,8 @@ test("event templates preserve local start time and duration while creating fres
 test("calendar colors accept the full RGB spectrum and normalize legacy presets", () => {
   assert.equal(normalizeCalendarColor("#01aBcD"), "#01ABCD");
   assert.equal(normalizeCalendarColor("orange"), "#CF6D27");
-  assert.equal(normalizeCalendarColor("#FFF"), undefined);\n  assert.equal(normalizeCalendarColor("constructor"), undefined);
+  assert.equal(normalizeCalendarColor("#FFF"), undefined);
+  assert.equal(normalizeCalendarColor("constructor"), undefined);
   const custom = createCalendar("Custom", "#123456");
   assert.equal(custom.color, "#123456");
   assert.equal(createCalendar("Bad", "rgb(1,2,3)"), undefined);
