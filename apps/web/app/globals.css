@@ -43,7 +43,7 @@
 .editor input,.editor textarea{min-width:0;max-width:100%}
 .fieldPair{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .editor .customSelect,.editor .customField{width:100%;min-width:0;max-width:100%}.fieldPair>label{width:100%;min-width:0}
-.editor .fieldPair>label>.customField{max-width:260px}
+.editor .fieldPair>label>.customField{width:100%;max-width:100%}
 .customSelect{position:relative;min-width:0}
 .customSelectTrigger,.customFieldTrigger{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-width:0;max-width:100%;min-height:42px;padding:9px 10px;border:1px solid #d9cfc3;border-radius:9px;background:#fff;color:#292521;text-align:left;overflow:hidden}
 .customSelectTrigger>span:first-child,.customFieldTrigger>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
