@@ -6,6 +6,7 @@ import { calendarColors, calendarEventsForDay, calendarEventOccurrences, createC
 import { readData, writeData } from "../lib/storage";
 import { dueTimeCaption, overdueDueCaption } from "../lib/date-labels";
 import { TabIcon, type NavigationSection } from "../components/TabIcon";
+import { CalendarTimeline, type CalendarTimelineItem } from "../components/CalendarTimeline";
 
 type View = NavigationSection;
 const views: View[] = ["Dashboard", "Tasks", "Projects", "Calendar", "Settings"];
@@ -95,6 +96,7 @@ export default function Home() {
   const [calendarMonth, setCalendarMonth] = useState(() => localDate(new Date()).slice(0, 7));
   const [calendarSelectedDate, setCalendarSelectedDate] = useState(() => localDate(new Date()));
   const [calendarMode, setCalendarMode] = useState<"month" | "week" | "day" | "agenda">("month");
+  const [calendarNow, setCalendarNow] = useState(() => new Date());
   const [eventEditing, setEventEditing] = useState<{ id?: string; date: string } | null>(null);
   const [scheduleEditing, setScheduleEditing] = useState<{ taskId: string; blockId?: string; date: string } | null>(null);
   const [scheduleUndo, setScheduleUndo] = useState<ScheduledBlock[] | null>(null);
@@ -143,6 +145,10 @@ export default function Home() {
     const timer = window.setInterval(refreshToday, 60_000);
     document.addEventListener("visibilitychange", refreshToday);
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refreshToday); };
+  }, []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setCalendarNow(new Date()), 15_000);
+    return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
     const retryPushSync = () => setPushSyncRevision(value => value + 1);
@@ -327,11 +333,40 @@ export default function Home() {
   };
   const activeCalendars = data.calendars.filter(calendar => !calendar.deletedAt).sort((a, b) => a.sortKey - b.sortKey);
   const calendarEvents = calendarEventsForDay(data, calendarSelectedDate);
-  const monthEventCounts = new Map<string, number>();
+  const monthEventsByDay = new Map<string, ReturnType<typeof calendarEventsForDay>>();
   for (const item of calendarEventOccurrences(data, calendarGridStart, addDays(calendarGridStart, 42))) {
     const end = item.allDay ? item.endDate! : addDays(item.occurrenceDate, 1);
-    for (let day = item.occurrenceDate; day < end; day = addDays(day, 1)) monthEventCounts.set(day, (monthEventCounts.get(day) ?? 0) + 1);
+    for (let day = item.occurrenceDate; day < end; day = addDays(day, 1)) {
+      monthEventsByDay.set(day, [...(monthEventsByDay.get(day) ?? []), item]);
+    }
   }
+  const timelineItems: CalendarTimelineItem[] = [
+    ...calendarEvents.flatMap(item => {
+      if (item.allDay || item.event.allDay || !item.startInstant || !item.endInstant) return [];
+      const event = item.event;
+      const color = activeCalendars.find(calendar => calendar.id === event.calendarId)?.color ?? "orange";
+      const start = localDate(new Date(item.startInstant)) < calendarSelectedDate
+        ? zonedDateTimeToInstant(calendarSelectedDate, "00:00", event.timeZone) ?? item.startInstant
+        : item.startInstant;
+      const lastEventDay = localDate(new Date(Date.parse(item.endInstant) - 1));
+      const end = lastEventDay > calendarSelectedDate
+        ? zonedDateTimeToInstant(addDays(calendarSelectedDate, 1), "00:00", event.timeZone) ?? item.endInstant
+        : item.endInstant;
+      return [{ id: `event:${event.id}:${item.occurrenceDate}`, title: event.title,
+        caption: `${timeLabel(start)} – ${timeLabel(end)} · Event`, start, end, color }];
+    }),
+    ...calendarAgenda.scheduled.map(({ block, task }) => ({
+      id: `block:${block.id}`, title: task.title,
+      caption: `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Planned work`,
+      start: block.startInstant, end: block.endInstant, color: "blue"
+    })),
+    ...calendarAgenda.due.filter(task => task.dueTime && !calendarAgenda.scheduled.some(item => item.task.id === task.id)).flatMap(task => {
+      const start = zonedDateTimeToInstant(calendarSelectedDate, task.dueTime!, task.dueTimeZone ?? zone());
+      if (!start) return [];
+      const end = new Date(Date.parse(start) + 30 * 60_000).toISOString();
+      return [{ id: `deadline:${task.id}`, title: task.title, caption: "Task deadline", start, end, color: "orange" }];
+    })
+  ];
   const calendarMonthLabel = calendarMonthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const shiftCalendarMonth = (offset: number) => {
     const next = new Date(calendarMonthDate);
@@ -390,21 +425,32 @@ export default function Home() {
               <div className={`calendarGrid ${calendarMode !== "month" ? "calendarCompactGrid" : ""}`} role="group" aria-label={`Dates in ${calendarMonthLabel}`}>
                 {(calendarMode === "month" ? calendarDays : calendarMode === "week" ? Array.from({ length: 7 }, (_, i) => ({ date: addDays(calendarSelectedDate, i - parseLocalDate(calendarSelectedDate).getDay()) })) : calendarMode === "agenda" ? Array.from({ length: 14 }, (_, i) => ({ date: addDays(calendarSelectedDate, i) })) : [{ date: calendarSelectedDate }]).map(day => {
                   const taskDay = calendarDays.find(item => item.date === day.date);
-                  const eventCount = monthEventCounts.get(day.date) ?? 0;
+                  const dayEvents = monthEventsByDay.get(day.date) ?? [];
+                  const eventCount = dayEvents.length;
                   const itemCount = (taskDay?.scheduled.length ?? 0) + (taskDay?.due.length ?? 0) + (taskDay?.completed.length ?? 0) + eventCount;
+                  const previews = [
+                    ...dayEvents.map(item => ({ id: `event:${item.event.id}:${item.occurrenceDate}`, title: item.event.title,
+                      color: activeCalendars.find(calendar => calendar.id === item.event.calendarId)?.color ?? "orange" })),
+                    ...(taskDay?.scheduled ?? []).map(item => ({ id: `block:${item.block.id}`, title: item.task.title, color: "blue" })),
+                    ...(taskDay?.due ?? []).map(task => ({ id: `due:${task.id}`, title: task.title, color: "orange" }))
+                  ].slice(0, 2);
                   return <button key={day.date} type="button" className={"calendarDay" + (day.date.slice(0, 7) !== calendarMonth ? " calendarDayOutsideMonth" : "") + (day.date === calendarSelectedDate ? " calendarDaySelected" : "") + (day.date === today ? " calendarDayToday" : "")}
                     aria-label={dateLabel(day.date) + (itemCount ? `, ${itemCount} calendar item${itemCount === 1 ? "" : "s"}` : ", no calendar items")}
                     aria-current={day.date === today ? "date" : undefined} aria-pressed={day.date === calendarSelectedDate}
                     onClick={() => { setCalendarSelectedDate(day.date); if (day.date.slice(0, 7) !== calendarMonth) setCalendarMonth(day.date.slice(0, 7)); }}
                     onDragOver={e => { if (e.dataTransfer.types.includes("application/x-ltm-task")) e.preventDefault(); }}
                     onDrop={e => { e.preventDefault(); const taskId = e.dataTransfer.getData("application/x-ltm-task"); if (!taskId || !data.tasks.some(task => task.id === taskId && !task.completedAt && !task.deletedAt)) return; setCalendarSelectedDate(day.date); setScheduleEditing({ taskId, date: day.date }); }}>
-                    <span>{calendarMode === "agenda" ? dateLabel(day.date) : parseLocalDate(day.date).getDate()}</span>{itemCount > 0 && <small aria-hidden="true">{itemCount} item{itemCount === 1 ? "" : "s"}</small>}
+                    <span>{calendarMode === "agenda" ? dateLabel(day.date) : parseLocalDate(day.date).getDate()}</span>
+                    <div className="calendarDayPreviews" aria-hidden="true">{previews.map(item => <span key={item.id} className="calendarDayPreview"><i className={`calendarColor calendarColor-${item.color}`} />{item.title}</span>)}</div>
+                    {itemCount > previews.length && <small aria-hidden="true">+{itemCount - previews.length} more</small>}
                   </button>;
                 })}
               </div>
             </div>
             <div className="calendarAgenda" aria-live="polite">
               <div className="calendarAgendaHeader"><div><span className="eyebrow">SELECTED DAY</span><h3>{dateLabel(calendarSelectedDate)}</h3></div></div>
+              <h4 className="calendarTimelineHeading">TIMELINE {calendarSelectedDate === today && <span>Now · {timeLabel(calendarNow.toISOString())}</span>}</h4>
+              <CalendarTimeline day={calendarSelectedDate} items={timelineItems} now={calendarNow} />
               {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => <div className="plannedRow" key={`calendar-block:${block.id}`}>{taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block-task:${block.id}`)}<button type="button" className="scheduleAction" aria-label={`Edit scheduled block for ${task.title}`} onClick={() => setScheduleEditing({ taskId: task.id, blockId: block.id, date: calendarSelectedDate })}>Edit time</button><button type="button" className="scheduleAction" aria-label={`Unschedule ${task.title}`} onClick={() => { setScheduleUndo(data.blocks); mutate(value => deleteScheduledBlock(value, block.id)); }}>Remove</button></div>)}</div>}
               {!!calendarAgenda.due.length && <div className="group"><h4>DUE</h4>{calendarAgenda.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : "Due today"))}</div>}
               {!!calendarAgenda.completed.length && <div className="group"><h4>COMPLETED</h4>{calendarAgenda.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `calendar-completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}

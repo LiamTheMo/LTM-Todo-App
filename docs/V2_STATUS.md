@@ -19,21 +19,24 @@ Each phase gets its own permanent major checkpoint. Later checkpoints are create
 
 Implementation and fixes occur on temporary branches from the active phase checkpoint. Merge completed temporary branches into their originating checkpoint after validation. Keep every major checkpoint permanently. Production deployment remains restricted to `main`; promote the completed `v2.00` release through a version-to-main pull request.
 
-## Current status (2026-10-01)
+## Current status (2026-10-02)
 
 - Phase 7 is implemented and merged into `v1.01` (PR #77): local calendars, standalone all-day and timed events, recurrence, and calendar visibility.
 - Phase 8 is implemented and merged into `v1.02` (PR #78): scheduled work blocks, task-to-calendar scheduling, editing, removal, restoration, and undo. Domain tests assert that scheduling does not modify task deadlines.
 - Phase 9 merged into `v1.03` (PRs #79–#81): Kanban grouping, saved filters, bulk task actions, task and event templates, routines, schema v3 migration, and compact due-time captions. Web tests, typecheck, lint, production build, Swift core tests, Apple build, Apple migration tests, and the Apple UI smoke suite passed in the `v1.03` CI run.
 - Due-time captions use compact 12-hour labels such as `Due 9:15am` and `Due 5:30pm` in web and Apple calendar task views.
-- `v2.00` has been created from the green `v1.03` checkpoint. Its required version-branch CI run is in progress. Physical iPhone/iPad checks and production deployment remain outstanding.
+- `v2.00` was created from the green `v1.03` checkpoint. Its required CI passed on `3312fd8` after the Apple UI smoke-test adjustment (run #36945870588).
+- A v2.00 interaction-polish follow-up is adding a custom month grid/day timeline on Apple and web, app-styled option selectors, and a no-autofocus task editor; the follow-up's CI must pass on `v2.00` before promotion.
+- Physical iPhone/iPad validation and production deployment remain outstanding. Manual validation is to be performed against the production build after it is promoted to `main`.
 
 ## Release gate
 
 - [x] Phase 7 implementation merged into `v1.01`.
-- [ ] Phase 7 manual checks pass on iPhone, iPad, and web, including calendar/event persistence, recurrence, time-zone and DST behavior, accessibility, and overlap handling.
+- [ ] After deployment, Phase 7 manual checks pass on iPhone, iPad, and web, including calendar/event persistence, recurrence, time-zone and DST behavior, accessibility, and overlap handling.
 - [x] Phase 8 implementation merged into `v1.02`; automated tests cover scheduling without due-date changes.
-- [ ] Phase 8 manual checks pass for touch, pointer, keyboard, undo, offline persistence, and calendar/Dashboard consistency.
+- [ ] After deployment, Phase 8 manual checks pass for touch, pointer, keyboard, undo, offline persistence, and calendar/Dashboard consistency.
 - [x] Phase 9 implementation merged into `v1.03`; local web checks and version-branch CI pass.
-- [ ] Phase 9 manual checks pass across supported clients, including accessibility and migration behavior.
+- [ ] After deployment, Phase 9 manual checks pass across supported clients, including accessibility and migration behavior.
 - [ ] Confirm required CI passes on `v2.00` and phase documentation matches the release candidate.
 - [ ] Promote `v2.00` to `main` through a pull request and verify the production deployment.
+- [ ] Complete and record the supported-device manual checks against the deployed build.

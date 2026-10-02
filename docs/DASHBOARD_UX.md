@@ -34,9 +34,11 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 
 The Calendar view is a task-planning surface over the existing local task and scheduled-work data. Standalone calendar events are not part of this surface; first-party event management remains Phase 7 scope.
 
-- The web client shows a Sunday-first, six-week month grid with a marker count, a selected-day agenda, Previous/Next month controls, and a Today action.
+- Web and Apple clients show a six-week month grid with event/task previews in each date cell, a selected-day agenda, Previous/Next month controls, and a Today action.
 - The selected-day agenda separates planned work, due tasks, and retained completions. Add task starts with the selected date.
-- The Apple client uses the native date picker and a selected-day agenda, with an Add task action for that date.
+- Selecting a date opens its chronological day timeline. Timed events and planned work appear as blocks; deadlines remain distinct, and a live current-time line is shown for Today.
+- Apple option selectors use LTM-styled popovers rather than the default SwiftUI Picker menus. Date and time entry remain native date/time controls.
+- Opening the Apple task editor must not focus the title field or raise the keyboard; tapping the field opens the keyboard normally.
 - Both clients use Dashboard date-only semantics and the same rolling history boundary. Displaying planned work never changes a task deadline.
 - Navigation order is Dashboard, Tasks, Projects, Calendar, Settings. Inbox remains available as a task filter and is not a separate navigation destination; Settings is shown as a gear icon.
 
