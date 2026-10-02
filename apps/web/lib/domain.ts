@@ -35,7 +35,7 @@ export type Project = Entity & { name: string; color: string; sortKey: number; a
 export type ProjectSection = Entity & { projectId: string; name: string; sortKey: number };
 export type Tag = Entity & { name: string; color: string };
 export type ScheduledBlock = Entity & { taskId: string; startInstant: string; endInstant: string; timeZone: string };
-export type CalendarColor = "orange" | "blue" | "green" | "purple" | "red" | "teal";
+export type CalendarColor = `#${string}`;
 export type LocalCalendar = Entity & { name: string; color: CalendarColor; visible: boolean; sortKey: number };
 export type EventRecurrence = {
   frequency: Frequency;
@@ -71,7 +71,7 @@ export type Routine = Entity & { name: string; templateId: string; taskId: strin
 const reminderFormatters = new Map<string, Intl.DateTimeFormat>();
 export type Completion = { id: string; taskId: string; occurrenceDate?: string; completedAt: string; clearedBlockIds?: string[] };
 export type Data = {
-  schemaVersion: 3;
+  schemaVersion: 4;
   generation: number; // Monotonic document revision for cross-tab write detection.
   tasks: Task[];
   projects: Project[];
@@ -89,11 +89,11 @@ export type Data = {
 };
 const defaultCalendarID = "00000000-0000-4000-8000-000000000001";
 export const defaultCalendar = (now = new Date()): LocalCalendar => ({
-  id: defaultCalendarID, name: "Personal", color: "orange", visible: true, sortKey: 0,
+  id: defaultCalendarID, name: "Personal", color: "#CF6D27", visible: true, sortKey: 0,
   createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1
 });
 export const emptyData = (): Data => ({
-  schemaVersion: 3, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [],
+  schemaVersion: 4, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [],
   calendars: [defaultCalendar()], calendarEvents: [], taskTemplates: [], eventTemplates: [], routines: [], reminders: [], completions: [], savedViews: []
 });
 export const newEntity = (now = new Date()): Entity => ({

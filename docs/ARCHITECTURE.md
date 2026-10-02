@@ -4,7 +4,7 @@
 Ship the responsive React/Next.js web app as the supported client on desktop, iPhone, and iPad. The `apps/apple` SwiftUI project is experimental source and is not built or distributed by CI. Keep domain semantics platform-neutral through documented schemas and fixtures. Browser data is local-first; accounts and cross-device task synchronization are planned for v3. PostgreSQL is a candidate, not a selected or deployed backend.
 
 ## Layers
-1. **Presentation:** SwiftUI / React views and navigation.
+1. **Presentation:** React/Next.js web views and navigation (supported client); SwiftUI is experimental source only.
 2. **Application:** use cases such as CompleteTask, ScheduleTask, MoveTask, QueryDashboard.
 3. **Domain:** Task, Project, Event, recurrence, reminder and ordering rules. No framework dependencies.
 4. **Persistence:** local repositories and migrations.

@@ -3,7 +3,18 @@ import {
   type CalendarEvent, type CalendarEventOccurrence, type Data, type EventTemplate, type LocalCalendar
 } from "./domain.ts";
 
-export const calendarColors: CalendarColor[] = ["orange", "blue", "green", "purple", "red", "teal"];
+export const defaultCalendarColor: CalendarColor = "#CF6D27";
+const legacyCalendarColors: Record<string, CalendarColor> = {
+  orange: "#CF6D27", blue: "#3982C4", green: "#368A5A",
+  purple: "#8356B5", red: "#C44842", teal: "#218E8B"
+};
+export function normalizeCalendarColor(value: unknown): CalendarColor | undefined {
+  if (typeof value !== "string") return;
+  const key = value.toLowerCase();
+  const legacy = Object.prototype.hasOwnProperty.call(legacyCalendarColors, key) ? legacyCalendarColors[key] : undefined;
+  if (legacy) return legacy;
+  return /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() as CalendarColor : undefined;
+}
 const dayMilliseconds = 86_400_000;
 const validDay = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
   Number.isFinite(parseLocalDate(value).getTime()) && addDays(value, 0) === value;
@@ -170,10 +181,11 @@ export function calendarEventsForDay(data: Data, day: string, visibleOnly = true
     : !item.event.allDay && (item.occurrenceDate === day || instantDay(item.endInstant!, item.event.timeZone) === day));
 }
 
-export function createCalendar(name: string, color: CalendarColor = "orange", now = new Date()): LocalCalendar | undefined {
+export function createCalendar(name: string, color: CalendarColor = defaultCalendarColor, now = new Date()): LocalCalendar | undefined {
   const clean = name.trim();
-  if (!clean || !calendarColors.includes(color)) return;
-  return { ...newEntity(now), name: clean, color, visible: true, sortKey: now.getTime() };
+  const normalizedColor = normalizeCalendarColor(color);
+  if (!clean || !normalizedColor) return;
+  return { ...newEntity(now), name: clean, color: normalizedColor, visible: true, sortKey: now.getTime() };
 }
 
 export function saveEventTemplate(data: Data, event: CalendarEvent, name: string): Data {

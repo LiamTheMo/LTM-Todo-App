@@ -20,7 +20,7 @@ All development used temporary branches, then merged into the active permanent p
 - First-party local calendars and events, including all-day/timed events, recurrence, calendar visibility, and custom in-app calendar creation.
 - Six-week month grid with event/task previews, month navigation, selected-day agenda, and chronological timeline.
 - The separate Month/Week/Day/Agenda selector was removed. No separate week or agenda mode is shipped.
-- The +Calendar form uses an in-app six-color wheel (orange, blue, green, purple, red, teal).
+- The +Calendar form uses an in-app full-spectrum calendar color wheel with 8-bit RGB channels (0–255 each); named legacy colors migrate to their previous hex values.
 - Planned-work blocks can be created, edited, and removed. Scheduling is distinct from a due date. Drag/drop scheduling and multiple concurrent blocks per task are not shipped.
 - Kanban, task/event templates, routines, saved views, and bulk task actions.
 - App-styled web data controls; New Task leaves the title unfocused until tapped.

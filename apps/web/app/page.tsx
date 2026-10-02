@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
 import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, undoCompletion, type CalendarColor, type CalendarEvent, type Data, type DateScope, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
-import { calendarColors, calendarEventsForDay, calendarEventOccurrences, createCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
+import { defaultCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
 import { readData, writeData } from "../lib/storage";
 import { dueTimeCaption, overdueDueCaption } from "../lib/date-labels";
 import { TabIcon, type NavigationSection } from "../components/TabIcon";
 import { CalendarTimeline, type CalendarTimelineItem } from "../components/CalendarTimeline";
 import { CustomSelect, DateField, TimeField } from "../components/CustomFields";
+import { CalendarColorPicker } from "../components/CalendarColorPicker";
 
 type View = NavigationSection;
 const views: View[] = ["Dashboard", "Tasks", "Projects", "Calendar", "Settings"];
@@ -100,7 +101,7 @@ export default function Home() {
   const [eventEditing, setEventEditing] = useState<{ id?: string; date: string } | null>(null);
   const [calendarCreating, setCalendarCreating] = useState(false);
   const [calendarName, setCalendarName] = useState("");
-  const [calendarColor, setCalendarColor] = useState<CalendarColor>("orange");
+  const [calendarColor, setCalendarColor] = useState<CalendarColor>(defaultCalendarColor);
   const [scheduleEditing, setScheduleEditing] = useState<{ taskId: string; blockId?: string; date: string } | null>(null);
   const [scheduleUndo, setScheduleUndo] = useState<ScheduledBlock[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -347,7 +348,7 @@ export default function Home() {
     ...calendarEvents.flatMap(item => {
       if (item.allDay || item.event.allDay || !item.startInstant || !item.endInstant) return [];
       const event = item.event;
-      const color = activeCalendars.find(calendar => calendar.id === event.calendarId)?.color ?? "orange";
+      const color = activeCalendars.find(calendar => calendar.id === event.calendarId)?.color ?? defaultCalendarColor;
       const start = localDate(new Date(item.startInstant)) < calendarSelectedDate
         ? zonedDateTimeToInstant(calendarSelectedDate, "00:00", event.timeZone) ?? item.startInstant
         : item.startInstant;
@@ -421,10 +422,10 @@ export default function Home() {
             <div className="calendarActions"><button type="button" className="calendarToday" onClick={goCalendarToday}>Today</button><button type="button" className="calendarToday" onClick={() => setEventEditing({ date: calendarSelectedDate })}>+ Event</button></div>
           </div>
           {scheduleUndo && <div className="scheduleUndo" role="status"><span>Planning change saved.</span><button type="button" onClick={() => { const blocks = scheduleUndo; mutate(value => ({ ...value, blocks })); setScheduleUndo(null); }}>Undo</button></div>}
-          <div className="calendarManagement"><div className="calendarToggles" aria-label="Visible calendars">{activeCalendars.map(calendar => <label key={calendar.id}><input type="checkbox" checked={calendar.visible} onChange={e => mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: e.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }))} /><span className={`calendarColor calendarColor-${calendar.color}`} />{calendar.name}</label>)}</div><button type="button" onClick={() => { setCalendarName(""); setCalendarColor(calendarColors[activeCalendars.length % calendarColors.length] ?? "orange"); setCalendarCreating(true); }}>+ Calendar</button></div>
+          <div className="calendarManagement"><div className="calendarToggles" aria-label="Visible calendars">{activeCalendars.map(calendar => <label key={calendar.id}><input type="checkbox" checked={calendar.visible} onChange={e => mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: e.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }))} /><span className="calendarColor" style={{ backgroundColor: calendar.color }} />{calendar.name}</label>)}</div><button type="button" onClick={() => { setCalendarName(""); setCalendarColor(defaultCalendarColor); setCalendarCreating(true); }}>+ Calendar</button></div>
           {calendarCreating && <form className="calendarCreateForm" onSubmit={event => { event.preventDefault(); const calendar = createCalendar(calendarName, calendarColor); if (!calendar) return; mutate(value => ({ ...value, calendars: [...value.calendars, calendar] })); setCalendarCreating(false); setCalendarName(""); }}>
             <label>Calendar name<input aria-label="Calendar name" value={calendarName} onChange={event => setCalendarName(event.target.value)} maxLength={60} required placeholder="e.g. School" /></label>
-            <fieldset className="calendarColorField"><legend>Color</legend><div className="calendarColorWheel" role="group" aria-label="Calendar color">{calendarColors.map(color => <button type="button" key={color} className={`calendarColorWheelChoice calendarColorWheelChoice-${color}`} aria-label={`${color[0].toUpperCase() + color.slice(1)} calendar color`} aria-pressed={calendarColor === color} onClick={() => setCalendarColor(color)}><span className={`calendarColor calendarColor-${color}`} /></button>)}<span className="calendarColorWheelCenter" aria-hidden="true"><span className={`calendarColor calendarColor-${calendarColor}`} />{calendarColor[0].toUpperCase() + calendarColor.slice(1)}</span></div><span className="calendarColorSelection" aria-live="polite">{calendarColor[0].toUpperCase() + calendarColor.slice(1)} selected</span></fieldset>
+            <fieldset className="calendarColorField"><legend>Color</legend><CalendarColorPicker value={calendarColor} onChange={setCalendarColor} /></fieldset>
             <div className="calendarCreateActions"><button type="button" onClick={() => setCalendarCreating(false)}>Cancel</button><button className="add" disabled={!calendarName.trim()}>Create calendar</button></div>
           </form>}
           <div className="calendarLayout">
@@ -438,7 +439,7 @@ export default function Home() {
                   const itemCount = (taskDay?.scheduled.length ?? 0) + (taskDay?.due.length ?? 0) + (taskDay?.completed.length ?? 0) + eventCount;
                   const previews = [
                     ...dayEvents.map(item => ({ id: `event:${item.event.id}:${item.occurrenceDate}`, title: item.event.title,
-                      color: activeCalendars.find(calendar => calendar.id === item.event.calendarId)?.color ?? "orange" })),
+                      color: activeCalendars.find(calendar => calendar.id === item.event.calendarId)?.color ?? defaultCalendarColor })),
                     ...(taskDay?.scheduled ?? []).map(item => ({ id: `block:${item.block.id}`, title: item.task.title, color: "blue" })),
                     ...(taskDay?.due ?? []).map(task => ({ id: `due:${task.id}`, title: task.title, color: "orange" }))
                   ].slice(0, 2);
@@ -449,7 +450,7 @@ export default function Home() {
                     onDragOver={e => { if (e.dataTransfer.types.includes("application/x-ltm-task")) e.preventDefault(); }}
                     onDrop={e => { e.preventDefault(); const taskId = e.dataTransfer.getData("application/x-ltm-task"); if (!taskId || !data.tasks.some(task => task.id === taskId && !task.completedAt && !task.deletedAt)) return; setCalendarSelectedDate(day.date); setScheduleEditing({ taskId, date: day.date }); }}>
                     <span>{parseLocalDate(day.date).getDate()}</span>
-                    <div className="calendarDayPreviews" aria-hidden="true">{previews.map(item => <span key={item.id} className="calendarDayPreview"><i className={`calendarColor calendarColor-${item.color}`} />{item.title}</span>)}</div>
+                    <div className="calendarDayPreviews" aria-hidden="true">{previews.map(item => <span key={item.id} className="calendarDayPreview"><i className="calendarColor" style={{ backgroundColor: item.color }} />{item.title}</span>)}</div>
                     {itemCount > previews.length && <small aria-hidden="true">+{itemCount - previews.length} more</small>}
                   </button>;
                 })}
@@ -462,7 +463,7 @@ export default function Home() {
               {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => <div className="plannedRow" key={`calendar-block:${block.id}`}>{taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block-task:${block.id}`)}<button type="button" className="scheduleAction" aria-label={`Edit scheduled block for ${task.title}`} onClick={() => setScheduleEditing({ taskId: task.id, blockId: block.id, date: calendarSelectedDate })}>Edit time</button><button type="button" className="scheduleAction" aria-label={`Unschedule ${task.title}`} onClick={() => { setScheduleUndo(data.blocks); mutate(value => deleteScheduledBlock(value, block.id)); }}>Remove</button></div>)}</div>}
               {!!calendarAgenda.due.length && <div className="group"><h4>DUE</h4>{calendarAgenda.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : "Due today"))}</div>}
               {!!calendarAgenda.completed.length && <div className="group"><h4>COMPLETED</h4>{calendarAgenda.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `calendar-completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
-              {!!calendarEvents.length && <div className="group"><h4>EVENTS</h4>{calendarEvents.map(item => <div className="eventRow" key={`${item.event.id}:${item.occurrenceDate}`}><span className={`calendarColor calendarColor-${activeCalendars.find(c => c.id === item.event.calendarId)?.color ?? "orange"}`} /><button type="button" className="eventTitle" onClick={() => setEventEditing({ id: item.event.id, date: item.occurrenceDate })}><strong>{item.event.title}</strong><small>{item.allDay ? "All day" : `${timeLabel(item.startInstant!)} – ${timeLabel(item.endInstant!)}`} · {activeCalendars.find(c => c.id === item.event.calendarId)?.name ?? "Calendar"}</small></button></div>)}</div>}
+              {!!calendarEvents.length && <div className="group"><h4>EVENTS</h4>{calendarEvents.map(item => <div className="eventRow" key={`${item.event.id}:${item.occurrenceDate}`}><span className="calendarColor" style={{ backgroundColor: activeCalendars.find(c => c.id === item.event.calendarId)?.color ?? defaultCalendarColor }} /><button type="button" className="eventTitle" onClick={() => setEventEditing({ id: item.event.id, date: item.occurrenceDate })}><strong>{item.event.title}</strong><small>{item.allDay ? "All day" : `${timeLabel(item.startInstant!)} – ${timeLabel(item.endInstant!)}`} · {activeCalendars.find(c => c.id === item.event.calendarId)?.name ?? "Calendar"}</small></button></div>)}</div>}
               {!calendarAgenda.scheduled.length && !calendarAgenda.due.length && !calendarAgenda.completed.length && !calendarEvents.length && <p className="calendarEmpty">Nothing planned for this day.</p>}
               <button className="linkButton" type="button" onClick={() => setEditing(`new:${calendarSelectedDate}`)}>+ Add task for this day</button>
             </div>
