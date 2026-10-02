@@ -29,7 +29,7 @@ Implementation and fixes occur on temporary branches from the active phase check
 - The v2.00 interaction polish merged in PRs #86–#88: custom month grids/day timelines, app-styled option/date/time selectors, matched date/time widths, and no-autofocus task creation on Apple and web.
 - Native iOS builds and simulator UI tests are removed from GitHub Actions because the unsigned simulator product cannot be installed on physical devices from a GitHub download. `apps/apple` remains experimental source; the supported iPhone/iPad path for v2.00 is the responsive web app added to the Home Screen. The required `apple` check now documents this policy without compiling the app.
 - The latest Apple UI test exposed a deadline-selector visibility issue in the test sequence. The test now checks the switch state and scrolls the form to the date row before querying it; this change cannot be verified in Xcode in this environment, so native app behavior remains outside the v2.00 CI gate.
-- The first v2.00 build deployed successfully from `main` commit `58309aa` (Cloudflare build `2523e21c-d9da-4c5e-bad9-5b67ef327df7`). A production browser smoke check found that the task and event title fields still autofocus. PR #90 removed those attributes and passed v2.00 CI on `8302182`; re-promoting that fixed checkpoint and verifying its deployment remain outstanding.
+- PR #93 promoted the web editor autofocus fix to `main` commit `40ab527`; Cloudflare production build `47802004-3e78-4d67-9aff-4f74479b8cec` succeeded (version `c75eab90-2aa5-41f6-8ffe-bbd8b4869839`). Production browser smoke testing confirmed opening New task leaves the title field unfocused, so the keyboard does not open automatically.
 - Manual validation of the responsive web app on iPhone, iPad, and desktop remains outstanding. Native iOS installation/build validation is not part of this release.
 
 ## Release gate
@@ -40,6 +40,6 @@ Implementation and fixes occur on temporary branches from the active phase check
 - [ ] After deployment, Phase 8 manual checks pass for touch, pointer, keyboard, undo, offline persistence, and calendar/Dashboard consistency.
 - [x] Phase 9 implementation merged into `v1.03`; local web checks and version-branch CI pass.
 - [ ] After deployment, Phase 9 manual checks pass across supported clients, including accessibility and migration behavior.
-- [ ] Confirm web, Swift core, docs, and Apple-build-policy checks pass on the current `v2.00` head and phase documentation matches the release candidate.
-- [ ] Promote the v2.00 fix for web editor autofocus to `main` through a pull request and verify the Cloudflare production deployment.
+- [x] Web, Swift core, docs, and Apple-build-policy checks pass on the current `v2.00` head; phase documentation matches the release candidate.
+- [x] Promote the v2.00 editor autofocus fix through PR #93 and verify the Cloudflare production deployment.
 - [ ] Complete and record responsive-web manual checks on iPhone, iPad, and desktop against the deployed build, including Home Screen install, offline persistence, accessibility, layout, calendar behavior, and notifications.
