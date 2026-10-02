@@ -7,7 +7,8 @@ import { readData, writeData } from "../lib/storage";
 import { dueTimeCaption, overdueDueCaption } from "../lib/date-labels";
 import { TabIcon, type NavigationSection } from "../components/TabIcon";
 import { CalendarTimeline, type CalendarTimelineItem } from "../components/CalendarTimeline";
-import { CustomSelect, DateField, TimeField } from "../components/CustomFields";\nimport { CalendarColorPicker } from "../components/CalendarColorPicker";
+import { CustomSelect, DateField, TimeField } from "../components/CustomFields";
+import { CalendarColorPicker } from "../components/CalendarColorPicker";
 
 type View = NavigationSection;
 const views: View[] = ["Dashboard", "Tasks", "Projects", "Calendar", "Settings"];
