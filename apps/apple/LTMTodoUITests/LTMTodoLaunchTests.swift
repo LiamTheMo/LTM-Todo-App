@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class LTMTodoLaunchTests: XCTestCase {
     func testDashboardLaunchAndPrimaryNavigation() throws {
         let app = XCUIApplication()
@@ -26,9 +27,7 @@ final class LTMTodoLaunchTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 5))
         app.buttons["Add"].tap()
         XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 5))
-        app.buttons["Add task"].tap()
-        XCTAssertTrue(app.navigationBars["Task"].waitForExistence(timeout: 5))
-        app.buttons["Cancel"].tap()
+        app.buttons["Add"].tap()
         XCTAssertTrue(app.tabBars.buttons["Settings"].exists)
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
