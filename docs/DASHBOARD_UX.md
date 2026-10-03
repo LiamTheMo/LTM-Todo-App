@@ -16,7 +16,7 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 
 ## Behavior
 - Launch anchored to Today while retaining loaded dates before and after it.
-- Scroll down into future days and up into the retained past week; extend the bounded date window near either edge while preserving the visible day, without allowing the history boundary to move earlier than six days before Today.
+- Scroll down into future days and up through the retained past week; extend the bounded date window near either edge while preserving the visible day, without allowing the history boundary to move earlier than six days before Today.
 - Day headers stick within the date stream. The Dashboard itself does not scroll with the browser page; navigation and Overdue remain in place.
 - Return-to-Today stays available while away from Today.
 - Past dates show retained completed tasks and completed scheduled work dimmed. Keep Add controls available for the retained past dates; a task added with a past due date appears both in Overdue and in Due on its assigned date. Existing rows may still be opened or undone when that completion is the latest occurrence.
@@ -31,10 +31,9 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 - Search/filter state must be visibly distinguishable from the normal dashboard.
 
 ## Calendar surface
+The Calendar view is a local planning surface over tasks, planned-work blocks and first-party calendar events.
 
-The Calendar view is a local planning surface over tasks, planned-work blocks, and first-party calendar events. The currently shipped client is the responsive web app; the native Apple project is experimental and not built or distributed by CI.
-
-- The month view is a six-week grid with event/task previews in each date cell, Previous/Next month controls, and a Today action.
+- The month view is a six-week grid with event/task previews in each date cell, Previous/Next month controls and a Today action.
 - Selecting a date shows its agenda and chronological timeline. Timed events and planned-work blocks appear in the timeline; deadlines remain distinct. The current-time marker on Today refreshes every 15 seconds.
 - The calendar has no separate Month/Week/Day/Agenda mode selector. Month navigation plus selecting a date are the available controls.
 - Calendar creation is an in-app form with a full-spectrum sRGB color wheel and exact 0–255 RGB channel inputs. Task and event date/time/option fields use app-styled web controls; opening New Task does not focus the title field.
@@ -42,7 +41,7 @@ The Calendar view is a local planning surface over tasks, planned-work blocks, a
 - Navigation order is Dashboard, Tasks, Projects, Calendar, Settings. Inbox remains available as a task filter and is not a separate navigation destination; Settings is shown as a gear icon.
 
 ## Accessibility
-Date boundaries cannot rely on color alone. Support Dynamic Type, VoiceOver semantic grouping, keyboard navigation on iPad/web, sufficient targets, reduced motion and logical focus after completion/deletion. The earlier/later date-window controls must remain keyboard and accessibility operable.
+Date boundaries cannot rely on color alone. Support responsive layouts, keyboard navigation, sufficient targets, reduced motion and logical focus after completion/deletion. Date-window controls must remain keyboard and accessibility operable.
 
 ## Performance
 Use virtualized/lazy rendering. Keep a bounded window around the visible date and shift it in overlapping steps; do not materialize years of empty dates. Query date windows and extend as the user approaches boundaries.
@@ -57,6 +56,5 @@ Use virtualized/lazy rendering. Keep a bounded window around the visible date an
 - A date-only deadline remains on the same local calendar date across DST/zone changes according to defined semantics.
 - Past date sections retain Add controls, and scrolling the date stream does not move the app navigation or Overdue section.
 
-
-## Supported-client note (2026-10-02)
-This specification describes intended Dashboard behavior for the current responsive web client. The retained SwiftUI project is experimental source and is not built or distributed by GitHub Actions. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for what is currently shipped and [V2_STATUS.md](V2_STATUS.md) for remaining manual checks.
+## Supported-client note (2026-10-03)
+This specification describes intended Dashboard behavior for the responsive web app on desktop, iPhone and iPad. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for what is currently shipped and [V2_STATUS.md](V2_STATUS.md) for remaining manual checks.
