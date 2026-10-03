@@ -31,7 +31,7 @@ All development used temporary branches, then merged into the active permanent p
 - Current results and logs are available in GitHub Actions. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for verified behavior and explicit gaps.
 
 ## Dashboard updates
-- Every non-deleted task visible in the Tasks Kanban also appears on the Dashboard. Dated tasks and scheduled work stay in day groups; overdue tasks remain in Overdue; tasks without a visible date appear in Other Tasks.
+- Dated tasks and scheduled work stay in Dashboard day groups; overdue tasks remain in Overdue. Tasks without due dates stay available in Tasks and are omitted from the Dashboard.
 - Dashboard history retains 31 calendar days: today plus the previous 30 days.
 
 ## Remaining v2 release validation

@@ -13,13 +13,13 @@ This file records shipped behavior. Product specs and phase documents describe i
 
 ## Shipped product behavior
 
-- Dashboard and task management include local persistence, projects/sections, tags, subtasks, recurrence, reminders, routines and templates. Tasks is a status-based Kanban with text search; the Dashboard includes all non-deleted tasks and retains up to 31 calendar days of history.
+- Dashboard and task management include local persistence, projects/sections, tags, recurrence, reminders, routines and templates. Tasks is a status-based Kanban with text search; the Dashboard includes dated tasks and recent completion history, while open tasks without due dates remain in Tasks only; it retains up to 31 calendar days of history.
 - The first-party Calendar has local calendars and events, including all-day/timed events, recurrence, visibility, in-app creation, and calendar rename/recolor editing. The full-spectrum color wheel supports 8-bit RGB channels (0–255 each); hue selection matches the visible spectrum.
 - Selecting a date shows its agenda and chronological day timeline. Timed events and scheduled task blocks appear in the timeline; due dates remain separate from planned-work times.
 - The calendar has no Month/Week/Day/Agenda mode switch. Month navigation and selecting a date are the available calendar navigation controls.
 - Planned-work blocks can be created, edited and removed from task/calendar forms. Drag-and-drop scheduling and multiple blocks per task are not shipped.
 - The current-time marker on today's timeline refreshes every 15 seconds. It moves with elapsed time, but is not a frame-by-frame animation.
-- Task editor data selectors use in-app custom controls. Opening New Task does not focus the title field. The date picker opens to the current month and highlights today's date.
+- Task editor data selectors use in-app custom controls. Opening New Task does not focus the title field. The date picker opens to the current month and highlights today's date. Task date and time inputs stay side by side on phone layouts.
 - Due-time captions use compact 12-hour labels, for example `Due 9:15am` and `Due 5:30pm`.
 
 ## Delivery and validation

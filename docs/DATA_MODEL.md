@@ -8,7 +8,7 @@ Most persistent entities have `id` (UUID), `createdAt`, `updatedAt`, `revision`,
 
 ## Entities
 
-- **Task:** title, notes, priority, optional project/section/parent IDs, tag IDs, sort key, optional date-only due date, optional local due time and time zone, completion timestamp, and optional structured recurrence.
+- **Task:** title, notes, priority, optional project/section IDs, tag IDs, sort key, optional date-only due date, optional local due time and time zone, completion timestamp, and optional structured recurrence.
 - **Project / Section / Tag:** named organization records; projects and sections carry sort keys, tags have colors, and projects may be archived.
 - **ScheduledBlock:** task ID, start/end instants, and time zone. Scheduling is separate from a task's due date. The current editor supports a scheduled block per scheduling operation; multiple simultaneous work blocks per task and drag/drop scheduling are not shipped.
 - **LocalCalendar:** name, canonical `#RRGGBB` sRGB color (each 8-bit channel ranges from 0 to 255), visibility, and sort key. A default Personal calendar is created locally.
