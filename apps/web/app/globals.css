@@ -62,6 +62,7 @@
 .datePickerGrid>span{padding:6px 0;color:#83786c;font-size:12px}
 .datePickerGrid button{min-width:0;aspect-ratio:1;border:0;border-radius:8px;background:transparent;color:#292521}
 .datePickerGrid button:hover:not(:disabled),.datePickerGrid button.selected{background:#f4e5d2;color:#8b4b14;font-weight:700}
+.datePickerGrid button.today{box-shadow:inset 0 0 0 1.5px #b45d1d}
 .datePickerGrid button:disabled{opacity:.35}
 .timePickerPanel{display:grid;grid-template-columns:1fr 1fr .8fr;gap:8px;padding:10px;overflow:hidden}
 .timePickerColumn{display:flex;flex-direction:column;gap:2px;overflow:auto;max-height:220px;overscroll-behavior:contain}
@@ -125,3 +126,5 @@
 @media(max-width:700px){.calendarCreateForm .calendarColorField{width:100%;box-sizing:border-box}.calendarSpectrumWheel{width:min(184px,54vw)}}
 
 .calendarToggle{display:flex;align-items:center;gap:4px}.calendarEditButton{border:0;border-radius:6px;padding:4px 7px;background:transparent;color:#8b4b14;font-size:11px;font-weight:650;cursor:pointer}.calendarEditButton:hover,.calendarEditButton:focus-visible{background:#f4e5d2}
+
+button.danger{color:#a83728!important}

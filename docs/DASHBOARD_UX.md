@@ -4,7 +4,7 @@
 The Dashboard answers: **What is happening and what is due, day by day?** It replaces separate Today, Upcoming and History navigation.
 
 ## Structure
-The app shell stays within the viewport; navigation and Dashboard controls remain in place while the content pane scrolls. The date stream opens at Today, scrolls down into future dates and up through seven calendar dates of history (Today plus the previous six days). Older due tasks, completion history, and scheduled events expire from local storage automatically. An Overdue section stays visible above the stream; unfinished task deadlines before the current local date appear there, and an empty section says “Nothing overdue”.
+The app shell stays within the viewport; navigation and Dashboard controls remain in place while the content pane scrolls. The date stream opens at Today, scrolls down into future dates and up through a 31-calendar-day history window (Today plus the previous 30 days). Older due tasks, completion history, and scheduled events expire from local storage automatically. An Overdue section stays visible above the stream; unfinished task deadlines before the current local date appear there, and an empty section says “Nothing overdue”.
 
 Each date section has:
 1. Sticky date header: relative label when useful + formatted date.
@@ -16,19 +16,22 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 
 ## Behavior
 - Launch anchored to Today while retaining loaded dates before and after it.
-- Scroll down into future days and up through the retained past week; extend the bounded date window near either edge while preserving the visible day, without allowing the history boundary to move earlier than six days before Today.
+- Scroll down into future days and up through the retained past month; extend the bounded date window near either edge while preserving the visible day, without allowing the history boundary to move earlier than 30 days before Today.
 - Day headers stick within the date stream. The Dashboard itself does not scroll with the browser page; navigation and Overdue remain in place.
 - Return-to-Today stays available while away from Today.
 - Past dates show retained completed tasks and completed scheduled work dimmed. Keep Add controls available for the retained past dates; a task added with a past due date appears both in Overdue and in Due on its assigned date. Existing rows may still be opened or undone when that completion is the latest occurrence.
 - Empty days collapse to a compact row; past empty days say “No completed items” and still offer Add.
 - Overdue means an unfinished task with a due date before the current local date. A scheduled event or work block without an expired task deadline is never overdue.
-- Overdue tasks appear in the Overdue section and remain in Due on their assigned date while that date is within the retained week.
+- Overdue tasks appear in the Overdue section and remain in Due on their assigned date while that date is within the retained month.
 - Each overdue task shows its deadline as a relative calendar-day label, such as “Due 2 days ago”; use “day” for one day.
 - Keep the Overdue section visible when empty and show “Nothing overdue”. Style its title at the same size as the day heading, with a noticeable orange-red accent and the Dashboard's warm neutral surfaces.
 - Completion is optimistic/local and immediately reflected.
 - Tapping an item opens detail without losing scroll position.
 - Quick add defaults intelligently to current dashboard context but must make the assigned date obvious.
 - Search/filter state must be visibly distinguishable from the normal dashboard.
+
+## Dashboard task coverage
+Every non-deleted task visible in the Tasks Kanban also appears on the Dashboard. Dated tasks, scheduled work and recent completions stay in their day groups; overdue tasks stay in Overdue; tasks outside the visible date range or without a day appear in Other Tasks.
 
 ## Calendar surface
 The Calendar view is a local planning surface over tasks, planned-work blocks and first-party calendar events.
@@ -38,7 +41,7 @@ The Calendar view is a local planning surface over tasks, planned-work blocks an
 - The calendar has no separate Month/Week/Day/Agenda mode selector. Month navigation plus selecting a date are the available controls.
 - Calendar creation is an in-app form with a full-spectrum sRGB color wheel and exact 0–255 RGB channel inputs. Task and event date/time/option fields use app-styled web controls; opening New Task does not focus the title field.
 - The supported responsive web client uses Dashboard date-only semantics and the same rolling history boundary. Displaying planned work never changes a task deadline.
-- Navigation order is Dashboard, Tasks, Projects, Calendar, Settings. Inbox remains available as a task filter and is not a separate navigation destination; Settings is shown as a gear icon.
+- Navigation order is Dashboard, Tasks, Projects, Calendar, Settings. Tasks is a status-based Kanban with text search and no other task filter controls; Settings is shown as a gear icon.
 
 ## Accessibility
 Date boundaries cannot rely on color alone. Support responsive layouts, keyboard navigation, sufficient targets, reduced motion and logical focus after completion/deletion. Date-window controls must remain keyboard and accessibility operable.
@@ -49,10 +52,10 @@ Use virtualized/lazy rendering. Keep a bounded window around the visible date an
 ## Acceptance examples
 - A task due Oct 5 and scheduled Oct 3 appears Oct 3 under Scheduled and Oct 5 under Due.
 - Completing it Oct 3 removes/marks the future due presentation according to completion rules.
-- A completed task occurrence appears, dimmed, on its due/occurrence date; it is not repeated in the Due section. Checking it off on another date does not move it. It expires after its date leaves the retained seven-day window.
+- A completed task occurrence appears, dimmed, on its due/occurrence date; it is not repeated in the Due section. Checking it off on another date does not move it. It expires after its date leaves the retained 31-calendar-day window.
 - An unfinished task due Oct 3 appears in Overdue and in Due while browsing Oct 3, as long as Oct 3 is within the retained week.
 - Adding a task from Oct 3 when today is Oct 4 sets its due date to Oct 3 and immediately lists it in both Overdue and that date's Due group.
-- The earliest retained date is six calendar days before Today. Older tasks and scheduled events are deleted automatically, and users cannot assign a new due date before that boundary.
+- The earliest retained date is 30 calendar days before Today. Older tasks and scheduled events are deleted automatically, and users cannot assign a new due date before that boundary.
 - A date-only deadline remains on the same local calendar date across DST/zone changes according to defined semantics.
 - Past date sections retain Add controls, and scrolling the date stream does not move the app navigation or Overdue section.
 
