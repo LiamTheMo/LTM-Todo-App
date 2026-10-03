@@ -5,7 +5,7 @@ This file is authoritative for AI agents and contributors working in this reposi
 ## 1. Product intent
 Build a polished personal productivity system delivered as a responsive web app for desktop, iPhone and iPad browsers. Users may install it to the Home Screen where supported. The app owns its task and calendar models. Do not introduce Google Calendar or another calendar service as a core dependency; interoperability may be added later only as an optional integration.
 
-The primary home experience is a vertically scrolling chronological Dashboard. It opens at Today, scrolls forward into future dates and upward into past activity, and keeps overdue deadlines separate from everyday events. Past completed work is dimmed; users can still add a task with a past due date, which appears both in Overdue and Due on its assigned date until completed. Keep seven calendar dates including Today (Today plus the prior six days); older task, completion, and scheduled-event history is automatically removed, and new due dates cannot be assigned outside that window. Due-dated completion history stays on its due/occurrence date, while undated tasks use their completion date. Each day is a section containing what is scheduled on that day and what is due on that day. Scheduled time and due time are separate concepts.
+The primary home experience is a vertically scrolling chronological Dashboard. It opens at Today, scrolls forward into future dates and upward into past activity, and keeps overdue deadlines separate from everyday events. Past completed work is dimmed; users can still add a task with a past due date, which appears both in Overdue and Due on its assigned date until completed. Keep 31 calendar dates including Today (Today plus the prior 30 days); older task, completion, and scheduled-event history is automatically removed, and new due dates cannot be assigned outside that window. Due-dated completion history stays on its due/occurrence date, while undated tasks use their completion date. Each day is a section containing what is scheduled on that day and what is due on that day. Open tasks without due dates remain available in Tasks and do not appear on the Dashboard. Scheduled time and due time are separate concepts.
 
 ## 2. Git workflow
 Major branches are only `main` and `vX.XX`. Version branches are permanent checkpoints and must never be deleted. Never implement, fix, refactor, clean up, audit-remediate, or maintain directly on a major branch.
@@ -40,7 +40,7 @@ Classify audit results as:
 - Stable UUIDs for synchronizable entities from day one.
 - Store created/updated timestamps and revision/version metadata needed for future sync.
 - Support soft deletion/tombstones for syncable records.
-- Automatically purge task, completion, and scheduled-event history older than the seven-calendar-day Dashboard window; retain independent tasks whose parent metadata came from legacy snapshots.
+- Automatically purge task, completion, and scheduled-event history older than the 31-calendar-day Dashboard window; legacy child task records are retained as standalone tasks.
 - Model due time separately from scheduled start/end.
 - Recurrence is structured data, not display text.
 - Calendar events and tasks are distinct domain entities.
