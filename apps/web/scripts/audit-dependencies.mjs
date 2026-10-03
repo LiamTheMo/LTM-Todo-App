@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { isAllowedDevAuditReport } from "./audit-policy.mjs";
 
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const lockfile = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
 
 function run(args, options = {}) {
   const result = spawnSync(npm, args, {
@@ -34,8 +36,8 @@ if (full.status !== 0 && full.status !== 1) {
   console.error(full.stderr || `npm audit exited with status ${full.status}.`);
   process.exit(full.status || 1);
 }
-if (!isAllowedDevAuditReport(report)) {
-  console.error("Full dependency audit found an unapproved high/critical advisory.");
+if (!isAllowedDevAuditReport(report, lockfile)) {
+  console.error("Full dependency audit found an unapproved high/critical advisory or a non-dev affected lockfile node.");
   console.error(JSON.stringify(report.vulnerabilities ?? {}, null, 2));
   process.exit(1);
 }
@@ -45,7 +47,7 @@ const allowed = Object.entries(report.vulnerabilities ?? {})
   .map(([name]) => name);
 if (allowed.length) {
   console.warn(
-    `Production audit passed. Allowing only the unpatched dev-only GHSA-vfj7-8cjw-p6xm chain: ${allowed.join(", ")}. Remove this exception when braces publishes a fix.`
+    `Production audit passed. Allowing only the unpatched dev-only GHSA-vfj7-8cjw-p6xm chain after checking package-lock nodes: ${allowed.join(", ")}. Remove this exception when braces publishes a fix.`
   );
 } else {
   console.log("Production and full high/critical dependency audits passed.");
