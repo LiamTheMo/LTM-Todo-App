@@ -22,7 +22,6 @@ export type Task = Entity & {
   priority: Priority;
   projectId?: string;
   sectionId?: string;
-  parentTaskId?: string;
   tagIds: string[];
   sortKey: number;
   dueDate?: string; // YYYY-MM-DD: never convert a date-only deadline to UTC midnight.
@@ -167,8 +166,6 @@ export function nextOccurrence(rule: Recurrence, after: string): string | undefi
 export function completeTask(data: Data, id: string, now = new Date()): Data {
   const task = data.tasks.find(item => item.id === id && !item.deletedAt);
   if (!task || task.completedAt) return data;
-  // A parent remains open while any direct child is unfinished.
-  if (data.tasks.some(item => item.parentTaskId === id && !item.completedAt && !item.deletedAt)) return data;
   const completedAt = now.toISOString();
   const occurrenceDate = task.dueDate;
   const recurrence = task.recurrence && { ...task.recurrence, occurrences: task.recurrence.occurrences + 1 };
@@ -202,8 +199,6 @@ export function undoCompletion(data: Data, completionId: string): Data {
 }
 export function saveTask(data: Data, task: Task, reminderMinutes = "", today = localDate(new Date())): Data {
   if (task.dueDate && !isInRetainedHistory(task.dueDate, today)) return data;
-  const parent = task.parentTaskId && data.tasks.find(item => item.id === task.parentTaskId && !item.deletedAt);
-  if (task.parentTaskId && (!parent || parent.parentTaskId || parent.id === task.id || parent.projectId !== task.projectId || data.tasks.some(item => item.parentTaskId === task.id))) return data;
   const stamp = new Date().toISOString();
   const oldTask = data.tasks.find(item => item.id === task.id);
   const currentReminder = data.reminders.find(reminder => reminder.taskId === task.id && !reminder.deletedAt);
@@ -214,10 +209,7 @@ export function saveTask(data: Data, task: Task, reminderMinutes = "", today = l
   } : undefined;
   return {
     ...data,
-    tasks: oldTask ? data.tasks.map(item => item.id === task.id ? task :
-      item.parentTaskId === task.id && (oldTask.projectId !== task.projectId || oldTask.sectionId !== task.sectionId) ? {
-        ...item, projectId: task.projectId, sectionId: task.sectionId, updatedAt: stamp, revision: item.revision + 1
-      } : item) : [...data.tasks, task],
+    tasks: oldTask ? data.tasks.map(item => item.id === task.id ? task : item) : [...data.tasks, task],
     blocks: data.blocks,
     reminders: [
       ...data.reminders.map(reminder => reminder.id === currentReminder?.id ? nextReminder ?? { ...reminder, deletedAt: stamp, updatedAt: stamp, revision: reminder.revision + 1 } : reminder),
@@ -308,11 +300,7 @@ export function bulkSetPriority(data: Data, ids: string[], priority: Priority): 
     ? { ...task, priority, updatedAt: stamp, revision: task.revision + 1 } : task) };
 }
 export function bulkCompleteTasks(data: Data, ids: string[], now = new Date()): Data {
-  const selected = new Set(ids);
-  const subtasks = new Set(data.tasks.filter(task => task.parentTaskId).map(task => task.id));
-  const ordered = [...selected].sort((a, b) =>
-    Number(subtasks.has(b)) - Number(subtasks.has(a)));
-  return ordered.reduce((value, id) => completeTask(value, id, now), data);
+  return [...new Set(ids)].reduce((value, id) => completeTask(value, id, now), data);
 }
 
 export function reminderTrigger(task: Task, reminder: Reminder): number | undefined {
@@ -456,13 +444,7 @@ export function pruneExpiredHistory(data: Data, today = localDate(new Date())): 
   const existingTaskIds = new Set(data.tasks.filter(task => !expiredTaskIds.has(task.id)).map(task => task.id));
   let changed = expiredTaskIds.size > 0;
   const stamp = new Date().toISOString();
-  let detachedChild = false;
-  const tasks = data.tasks.filter(task => !expiredTaskIds.has(task.id)).map(task => {
-    const detached = task.parentTaskId && expiredTaskIds.has(task.parentTaskId);
-    if (detached) detachedChild = true;
-    return detached ? { ...task, parentTaskId: undefined, updatedAt: stamp, revision: task.revision + 1 } : task;
-  });
-  if (detachedChild) changed = true;
+  const tasks = data.tasks.filter(task => !expiredTaskIds.has(task.id));
 
   const blocks = data.blocks.filter(block => {
     if (!existingTaskIds.has(block.taskId)) return false;
@@ -499,7 +481,7 @@ export function reorderTask(data: Data, id: string, direction: -1 | 1): Data {
   const task = data.tasks.find(item => item.id === id);
   if (!task) return data;
   const group = data.tasks.filter(item => !item.deletedAt && item.projectId === task.projectId &&
-    item.sectionId === task.sectionId && item.parentTaskId === task.parentTaskId).sort(taskOrder);
+    item.sectionId === task.sectionId).sort(taskOrder);
   const from = group.findIndex(item => item.id === id);
   const to = from + direction;
   if (to < 0 || to >= group.length) return data;

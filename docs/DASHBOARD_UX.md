@@ -31,7 +31,7 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 - Search/filter state must be visibly distinguishable from the normal dashboard.
 
 ## Dashboard task coverage
-Every non-deleted task visible in the Tasks Kanban also appears on the Dashboard. Dated tasks, scheduled work and recent completions stay in their day groups; overdue tasks stay in Overdue; tasks outside the visible date range or without a day appear in Other Tasks.
+Dated tasks, scheduled work and recent completions appear in their Dashboard day groups; overdue tasks also appear in Overdue. Dated tasks outside the visible range appear in Other Tasks. Open tasks without due dates stay in Tasks and are omitted from the Dashboard.
 
 ## Calendar surface
 The Calendar view is a local planning surface over tasks, planned-work blocks and first-party calendar events.
