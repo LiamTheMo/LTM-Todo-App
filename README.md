@@ -1,6 +1,6 @@
 # LTM Todo App
 
-LTM Todo is an ad-free personal productivity web app with a first-party task and calendar model. The supported experience works in desktop browsers and on iPhone/iPad, where it can be added to the Home Screen. It does not depend on Google Calendar.
+LTM Todo is an ad-free personal productivity web app with a first-party task and calendar model. It works in desktop browsers and on iPhone/iPad, where it can be added to the Home Screen. It does not depend on Google Calendar.
 
 ## Product pillars
 
@@ -28,7 +28,5 @@ The calendar offers month navigation and a selected-day timeline; it does not ha
 Follow [AGENTS.md](AGENTS.md). Permanent checkpoints are `main` and `vX.XX` version branches. Develop on temporary branches from the intended checkpoint, merge after validation, and deploy only from `main`.
 
 - Web: `cd apps/web && npm ci && npm run dev`; checks: `npm test && npm run typecheck && npm run lint`. Use `npm run build:vinext` for the Cloudflare production build; `npm run build` is the Next.js fallback build.
-- Swift core: `swift test` from the repository root.
-- `apps/apple` remains experimental source. GitHub Actions does not build, sign, or distribute it; use the responsive web app on iPhone/iPad.
 
 The deployed app stores user task data locally in each browser's IndexedDB. It has no accounts or cross-device task synchronization yet. Web Push reminders use a separate per-browser queue in Cloudflare D1 and do not sync task data.

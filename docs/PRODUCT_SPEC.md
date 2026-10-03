@@ -4,7 +4,7 @@
 Many task applications gate useful behavior behind subscriptions, impose arbitrary limits, or monetize attention with ads. LTM Todo should provide a capable personal task/planning system without designing basic productivity around monetization restrictions.
 
 ## Users
-The current supported product is a single owner using the responsive web app on desktop, iPhone, and iPad. Task data is local to each browser. The architecture should support later multi-device accounts and synchronization; collaboration is later still. The native SwiftUI project is experimental source, not a released client.
+The supported product is a single owner using the responsive web app on desktop, iPhone and iPad. Task data is local to each browser. The architecture should support later multi-device accounts and synchronization; collaboration is later.
 
 ## Core concepts
 **Task:** actionable work. May have a due date/time without being scheduled.
@@ -30,7 +30,7 @@ The web client exposes the branded site icon in browser/search surfaces and supp
 First-party local calendars; timed/all-day events and recurring event series; a six-week month grid with previews and a selected-day agenda/timeline; multiple manageable local calendars with in-app rename/recolor/show-hide controls and a full-spectrum sRGB color wheel with 8-bit RGB selection (0–255 per channel); planned-work blocks; routines; templates; Kanban; saved views; bulk actions. Separate week/day/agenda mode tabs and drag-and-drop scheduling are not part of the shipped interface.
 
 ## v3 requirements
-Authentication; cross-device task-data sync; conflict handling; tombstones; incremental sync; read-only subscriptions to HTTPS iCalendar (ICS) feed links; separate subscribed calendars with show/hide, color, last-refresh status and unsubscribe controls; backup/export; attachments; optional sharing/collaboration. Subscription refresh must not block offline task or calendar use. The web production client already exists in v1/v2; v3 adds accounts, synchronization and read-only external calendar feeds.
+Authentication; cross-device task-data sync; conflict handling; tombstones; incremental sync; read-only subscriptions to HTTPS iCalendar (ICS) feed links; separate subscribed calendars with show/hide, color, last-refresh status and unsubscribe controls; backup/export; attachments; optional sharing/collaboration. Subscription refresh must not block offline task or calendar use. The production web client already exists; v3 adds accounts, synchronization and read-only external calendar feeds.
 
 Subscribed feed events are external and read-only in LTM. Refreshes update existing items by stable source event identity, add new items, and remove cancelled/deleted source events without creating duplicates. Keep source calendars separate from user-owned LTM calendars and tasks. Treat subscription URLs as secrets, fetch and cache them through an authenticated backend, and protect the fetch path against SSRF, redirects to private networks, oversized feeds and abusive refreshes. Import only HTTPS iCalendar feeds for the initial release. Provider-specific OAuth and writing changes back to external calendars are separate future work.
 
