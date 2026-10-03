@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
 import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, undoCompletion, type CalendarColor, type CalendarEvent, type Data, type DateScope, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
-import { defaultCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
+import { defaultCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, updateCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
 import { readData, writeData } from "../lib/storage";
 import { dueTimeCaption, overdueDueCaption } from "../lib/date-labels";
 import { TabIcon, type NavigationSection } from "../components/TabIcon";
@@ -100,6 +100,7 @@ export default function Home() {
   const [calendarNow, setCalendarNow] = useState(() => new Date());
   const [eventEditing, setEventEditing] = useState<{ id?: string; date: string } | null>(null);
   const [calendarCreating, setCalendarCreating] = useState(false);
+  const [calendarEditingId, setCalendarEditingId] = useState<string | null>(null);
   const [calendarName, setCalendarName] = useState("");
   const [calendarColor, setCalendarColor] = useState<CalendarColor>(defaultCalendarColor);
   const [scheduleEditing, setScheduleEditing] = useState<{ taskId: string; blockId?: string; date: string } | null>(null);
@@ -422,11 +423,11 @@ export default function Home() {
             <div className="calendarActions"><button type="button" className="calendarToday" onClick={goCalendarToday}>Today</button><button type="button" className="calendarToday" onClick={() => setEventEditing({ date: calendarSelectedDate })}>+ Event</button></div>
           </div>
           {scheduleUndo && <div className="scheduleUndo" role="status"><span>Planning change saved.</span><button type="button" onClick={() => { const blocks = scheduleUndo; mutate(value => ({ ...value, blocks })); setScheduleUndo(null); }}>Undo</button></div>}
-          <div className="calendarManagement"><div className="calendarToggles" aria-label="Visible calendars">{activeCalendars.map(calendar => <label key={calendar.id}><input type="checkbox" checked={calendar.visible} onChange={e => mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: e.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }))} /><span className="calendarColor" style={{ backgroundColor: calendar.color }} />{calendar.name}</label>)}</div><button type="button" onClick={() => { setCalendarName(""); setCalendarColor(defaultCalendarColor); setCalendarCreating(true); }}>+ Calendar</button></div>
-          {calendarCreating && <form className="calendarCreateForm" onSubmit={event => { event.preventDefault(); const calendar = createCalendar(calendarName, calendarColor); if (!calendar) return; mutate(value => ({ ...value, calendars: [...value.calendars, calendar] })); setCalendarCreating(false); setCalendarName(""); }}>
+          <div className="calendarManagement"><div className="calendarToggles" aria-label="Visible calendars">{activeCalendars.map(calendar => <div className="calendarToggle" key={calendar.id}><label><input type="checkbox" checked={calendar.visible} onChange={e => mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: e.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }))} /><span className="calendarColor" style={{ backgroundColor: calendar.color }} />{calendar.name}</label><button type="button" className="calendarEditButton" aria-label={`Edit ${calendar.name} calendar`} onClick={() => { setCalendarName(calendar.name); setCalendarColor(calendar.color); setCalendarEditingId(calendar.id); setCalendarCreating(true); }}>Edit</button></div>)}</div><button type="button" onClick={() => { setCalendarEditingId(null); setCalendarName(""); setCalendarColor(defaultCalendarColor); setCalendarCreating(true); }}>+ Calendar</button></div>
+          {calendarCreating && <form className="calendarCreateForm" aria-label={calendarEditingId ? "Edit calendar" : "Create calendar"} onSubmit={event => { event.preventDefault(); if (calendarEditingId) mutate(value => updateCalendar(value, calendarEditingId, calendarName, calendarColor)); else { const calendar = createCalendar(calendarName, calendarColor); if (!calendar) return; mutate(value => ({ ...value, calendars: [...value.calendars, calendar] })); } setCalendarCreating(false); setCalendarEditingId(null); setCalendarName(""); }}>
             <label>Calendar name<input aria-label="Calendar name" value={calendarName} onChange={event => setCalendarName(event.target.value)} maxLength={60} required placeholder="e.g. School" /></label>
             <fieldset className="calendarColorField"><legend>Color</legend><CalendarColorPicker value={calendarColor} onChange={setCalendarColor} /></fieldset>
-            <div className="calendarCreateActions"><button type="button" onClick={() => setCalendarCreating(false)}>Cancel</button><button className="add" disabled={!calendarName.trim()}>Create calendar</button></div>
+            <div className="calendarCreateActions"><button type="button" onClick={() => { setCalendarCreating(false); setCalendarEditingId(null); }}>Cancel</button><button className="add" disabled={!calendarName.trim()}>{calendarEditingId ? "Save changes" : "Create calendar"}</button></div>
           </form>}
           <div className="calendarLayout">
             <div>

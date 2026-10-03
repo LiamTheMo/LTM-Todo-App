@@ -123,3 +123,5 @@
 .calendarHexOutput i{width:13px;height:13px;border:1px solid #0002;border-radius:50%}
 .calendarCreateForm .calendarColorField{min-width:240px}
 @media(max-width:700px){.calendarCreateForm .calendarColorField{width:100%;box-sizing:border-box}.calendarSpectrumWheel{width:min(184px,54vw)}}
+
+.calendarToggle{display:flex;align-items:center;gap:4px}.calendarEditButton{border:0;border-radius:6px;padding:4px 7px;background:transparent;color:#8b4b14;font-size:11px;font-weight:650;cursor:pointer}.calendarEditButton:hover,.calendarEditButton:focus-visible{background:#f4e5d2}
