@@ -17,7 +17,7 @@ Implement the defining LTM Todo home experience: a fast, continuous day-by-day s
 - Keep navigation and Dashboard controls fixed while the day stream scrolls. Extend a bounded window in either direction while preserving the visible date, with no more than 31 calendar dates of past/current activity (Today plus the prior 30 days).
 - Show completed task occurrences on their due/occurrence dates and completed scheduled work on scheduled dates with a muted completed treatment. Undated completed tasks use their local completion date. Keep Add controls available on retained past dates; a task added with a past due date remains in its date's Due group and is also shown in Overdue until completed.
 - Keep completion history in the Dashboard date stream instead of separate History navigation. Retain completion records for undo and recurrence semantics while their occurrence date is within the 31-calendar-day window, then automatically remove expired history.
-- Automatically remove tasks whose due date has left the retained 31-calendar-day window, old undated completed tasks, and scheduled-event records older than the cutoff. Clear expired schedules attached to otherwise-retained tasks  Tasks without due dates remain available in Tasks and are omitted from Dashboard.
+- Automatically remove tasks whose due date has left the retained 31-calendar-day window, old undated completed tasks, and scheduled-event records older than the cutoff. Clear expired schedules attached to otherwise-retained tasks. Open tasks without due dates remain available in Tasks and are omitted from the Dashboard.
 - Return-to-Today control.
 - Overdue treatment.
 - Completion/edit interactions preserving scroll position.
