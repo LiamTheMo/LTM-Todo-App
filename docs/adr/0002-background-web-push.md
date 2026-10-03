@@ -4,7 +4,7 @@
 Accepted for the v1.00 notification fix.
 
 ## Decision
-Keep task data authoritative and local on each device. Add a narrow Cloudflare D1 service for opt-in Web Push subscriptions and scheduled reminder delivery. A per-install random bearer token protects device schedule updates; only its SHA-256 hash is stored. A minute Cron Trigger claims due reminders and sends encrypted Web Push payloads authenticated with a stable VAPID key pair. The retained experimental Apple source uses OS-scheduled local notifications; that behavior is not part of the supported web release.
+Keep task data authoritative and local on each device. Add a narrow Cloudflare D1 service for opt-in Web Push subscriptions and scheduled reminder delivery. A per-install random bearer token protects device schedule updates; only its SHA-256 hash is stored. A minute Cron Trigger claims due reminders and sends encrypted Web Push payloads authenticated with a stable VAPID key pair. Reminders are delivered through the responsive web app's browser notification support; no native Apple notification client is maintained.
 
 The D1 service stores the device push endpoint/keys and a hash used to prevent duplicate device subscriptions, the reminder title and trigger instant, delivery retry state, and hashed registration rate-limit identifiers. It does not receive notes, projects, tags, or the full task document. Disabling push deletes that device subscription and its queued reminders. Inactive devices are pruned after 180 days.
 
