@@ -110,7 +110,7 @@
 
 /* Full sRGB calendar color picker */
 .calendarColorPicker{display:grid;justify-items:center;gap:10px;min-width:0;padding:6px 2px}
-.calendarSpectrumWheel{position:relative;width:min(184px,56vw);aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair;background:radial-gradient(circle,#fff 0%,transparent 72%),conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);box-shadow:inset 0 0 0 1px #0002}
+.calendarSpectrumWheel{position:relative;width:min(184px,56vw);aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair;background:radial-gradient(circle,#fff 0%,transparent 72%),conic-gradient(from 90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);box-shadow:inset 0 0 0 1px #0002}
 .calendarSpectrumWheel:focus-visible{outline:3px solid #292521;outline-offset:4px}
 .calendarSpectrumMarker{position:absolute;width:16px;height:16px;transform:translate(-50%,-50%);border:2px solid white;border-radius:50%;box-shadow:0 1px 4px #0008,0 0 0 1px #292521}
 .calendarBrightness{display:flex;align-items:center;gap:8px;width:min(100%,230px);font-size:12px;color:#625b53}
