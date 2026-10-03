@@ -105,8 +105,6 @@ test("history retention keeps 31 calendar days and removes expired task and even
   data.tasks.push(
     task("expired", "2026-08-31"),
     task("boundary", "2026-09-01"),
-    task("parent", "2026-08-31"),
-    task("child", undefined, { parentTaskId: "parent" }),
     task("old-completed", undefined, { completedAt: "2026-08-31T12:00:00Z" }),
     task("open-undated", undefined),
     task("future", "2026-10-02")
@@ -124,8 +122,7 @@ test("history retention keeps 31 calendar days and removes expired task and even
     { id: "retained-completion", taskId: "boundary", occurrenceDate: "2026-09-01", completedAt: "2026-09-01T16:00:00Z" }
   );
   const retained = pruneExpiredHistory(data, today);
-  assert.deepEqual(retained.tasks.map(item => item.id), ["boundary", "child", "open-undated", "future"]);
-  assert.equal(retained.tasks.find(item => item.id === "child").parentTaskId, undefined);
+  assert.deepEqual(retained.tasks.map(item => item.id), ["boundary", "open-undated", "future"]);
   assert.deepEqual(retained.blocks.map(item => item.id), ["retained-block"]);
   assert.deepEqual(retained.reminders.map(item => item.id), ["retained-reminder"]);
   assert.deepEqual(retained.completions.map(item => item.id), ["retained-completion"]);
@@ -244,26 +241,10 @@ test("completed and deleted records leave active search", () => {
   assert.deepEqual(filterTasks(data, { query: "chapter", tagId: "school", completed: false }).map(item => item.id), ["alpha"]);
   assert.deepEqual(filterTasks(data, { completed: true }).map(item => item.id), ["beta"]);
 });
-test("parent completion waits for unfinished subtasks", () => {
+test("bulk completion completes each selected task once without relationship ordering", () => {
   const data = emptyData();
-  data.tasks.push(task("parent", "2026-10-01"), task("child", undefined, { parentTaskId: "parent" }));
-  assert.equal(completeTask(data, "parent").completions.length, 0);
-  const childDone = completeTask(data, "child");
-  assert.equal(completeTask(childDone, "parent").completions.length, 2);
-});
-test("task saves enforce one-level subtasks within the same project", () => {
-  const data = emptyData();
-  data.tasks.push(task("parent", undefined, { projectId: "p" }), task("child", undefined, { projectId: "p", parentTaskId: "parent" }));
-  assert.equal(saveTask(data, task("grandchild", undefined, { projectId: "p", parentTaskId: "child" })), data);
-  assert.equal(saveTask(data, task("wrong-project", undefined, { projectId: "other", parentTaskId: "parent" })), data);
-  assert.equal(saveTask(data, { ...data.tasks[0], parentTaskId: "child" }), data);
-  const valid = saveTask(data, task("sibling", undefined, { projectId: "p", parentTaskId: "parent" }));
-  assert.equal(valid.tasks.at(-1).parentTaskId, "parent");
-});
-test("bulk completion uses normal parent/subtask rules in one domain operation", () => {
-  const data = emptyData();
-  data.tasks.push(task("parent", undefined), task("child", undefined, { parentTaskId: "parent" }));
-  const done = bulkCompleteTasks(data, ["parent", "child", "parent"], new Date("2026-10-01T12:00:00Z"));
+  data.tasks.push(task("one", undefined), task("two", undefined));
+  const done = bulkCompleteTasks(data, ["one", "two", "one"], new Date("2026-10-01T12:00:00Z"));
   assert.equal(done.completions.length, 2);
   assert.ok(done.tasks.every(item => item.completedAt));
 });
