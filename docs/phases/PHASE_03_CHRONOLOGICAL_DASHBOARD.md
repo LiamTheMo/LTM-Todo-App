@@ -14,10 +14,10 @@ Implement the defining LTM Todo home experience: a fast, continuous day-by-day s
 - A separate Overdue section above the day stream for unfinished tasks with a due date before the local current date.
 - Keep the Overdue section visible when there are no overdue tasks and show “Nothing overdue”.
 - Use the existing Dashboard card, neutral surfaces and orange-brown accent palette for the Overdue section.
-- Keep navigation and Dashboard controls fixed while the day stream scrolls. Extend a bounded window in either direction while preserving the visible date, with no more than seven calendar dates of past/current activity (Today plus the prior six days).
+- Keep navigation and Dashboard controls fixed while the day stream scrolls. Extend a bounded window in either direction while preserving the visible date, with no more than 31 calendar dates of past/current activity (Today plus the prior 30 days).
 - Show completed task occurrences on their due/occurrence dates and completed scheduled work on scheduled dates with a muted completed treatment. Undated completed tasks use their local completion date. Keep Add controls available on retained past dates; a task added with a past due date remains in its date's Due group and is also shown in Overdue until completed.
-- Keep completion history in the Dashboard date stream instead of separate History navigation. Retain completion records for undo and recurrence semantics while their occurrence date is within the seven-day window, then automatically remove expired history.
-- Automatically remove tasks whose due date has left the retained week, old undated completed tasks, and scheduled-event records older than the cutoff. Clear expired schedules attached to otherwise-retained tasks and detach subtasks when an expired parent is removed.
+- Keep completion history in the Dashboard date stream instead of separate History navigation. Retain completion records for undo and recurrence semantics while their occurrence date is within the 31-calendar-day window, then automatically remove expired history.
+- Automatically remove tasks whose due date has left the retained 31-calendar-day window, old undated completed tasks, and scheduled-event records older than the cutoff. Clear expired schedules attached to otherwise-retained tasks and detach subtasks when an expired parent is removed.
 - Return-to-Today control.
 - Overdue treatment.
 - Completion/edit interactions preserving scroll position.
@@ -39,7 +39,7 @@ Day bucketing; due-vs-scheduled split; today boundary; DST; locale/calendar fixt
 - Dashboard launches anchored at Today with previous completion dates available by scrolling upward and future dates available by scrolling downward.
 - The Overdue section always appears above the day stream and shows “Nothing overdue” when empty.
 - Navigation and Overdue stay in place while the day stream scrolls in both directions.
-- The Dashboard exposes no more than seven calendar dates of past/current activity; expired task and event history is removed automatically.
+- The Dashboard exposes no more than 31 calendar dates of past/current activity; expired task and event history is removed automatically.
 - Past dates show retained completed activity in a muted, accessible treatment and retain Add controls; retained past-dated unfinished tasks appear in both Overdue and their original Due section.
 - Completion history is accessible from past dates without separate History navigation.
 - Continuous scrolling works without opening date pickers.

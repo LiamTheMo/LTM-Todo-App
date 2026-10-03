@@ -18,3 +18,6 @@ Power features do not change basic task semantics. Saved views remain determinis
 
 ## AI execution prompt
 Implement Phase 9 as composable application-layer capabilities over existing domain models. Avoid adding one-off fields solely for a single view. Audit complexity and keep Dashboard defaults uncluttered.
+
+## Current Tasks UI
+The Tasks page is currently a status-based Kanban with text search. Status, project, tag, priority, and date filter controls, saved-view management, and bulk selection are not exposed there. The saved-view collection remains in the local schema for compatibility.

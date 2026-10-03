@@ -19,8 +19,9 @@ All development used temporary branches, then merged into the active permanent p
 - The separate Month/Week/Day/Agenda selector was removed. No separate week or agenda mode is shipped.
 - The +Calendar form uses an in-app full-spectrum calendar color wheel with 8-bit RGB channels (0–255 each). Pointer selection matches the visible hue spectrum; named legacy colors migrate to their previous hex values.
 - Planned-work blocks can be created, edited and removed. Scheduling is distinct from a due date. Drag/drop scheduling and multiple concurrent blocks per task are not shipped.
-- Kanban, task/event templates, routines, saved views and bulk task actions.
-- App-styled web data controls; New Task leaves the title unfocused until tapped.
+- Tasks uses a status-based Kanban with text search. Other task filters, saved-view controls and bulk actions have been removed from that page.
+- Task, event templates and routines.
+- App-styled web data controls; New Task leaves the title unfocused until tapped. The date picker opens to the current month and marks today.
 - Due-time captions use 12-hour labels such as `Due 9:15am` / `Due 5:30pm`.
 
 ## Release and checks
@@ -28,6 +29,10 @@ All development used temporary branches, then merged into the active permanent p
 - The version-branch CI gate runs `web` and `docs`. Web checks include dependency audit, tests, typecheck, lint and a production build.
 - Native Swift and Xcode app source, tests and build workflows have been removed; the repository maintains the responsive web client only.
 - Current results and logs are available in GitHub Actions. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for verified behavior and explicit gaps.
+
+## Dashboard updates
+- Every non-deleted task visible in the Tasks Kanban also appears on the Dashboard. Dated tasks and scheduled work stay in day groups; overdue tasks remain in Overdue; tasks without a visible date appear in Other Tasks.
+- Dashboard history retains 31 calendar days: today plus the previous 30 days.
 
 ## Remaining v2 release validation
 - [ ] Finish manual responsive-web validation on iPhone, iPad and desktop against the deployed build: calendar/event persistence and recurrence, time zones/DST, accessibility, touch/keyboard/pointer navigation, Home Screen install, offline behavior, layout and notifications.

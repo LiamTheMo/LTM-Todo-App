@@ -115,7 +115,7 @@ export function calendarGridDates(month: string): string[] {
   const offset = parseLocalDate(first).getDay();
   return Array.from({ length: 42 }, (_, index) => addDays(first, index - offset));
 }
-export const historyDays = 7;
+export const historyDays = 31;
 export const historyStart = (today = localDate(new Date())) => addDays(today, 1 - historyDays);
 const isInRetainedHistory = (day: string, today: string) => day >= historyStart(today);
 export const instantDay = (instant: string, timeZone: string): string => {
