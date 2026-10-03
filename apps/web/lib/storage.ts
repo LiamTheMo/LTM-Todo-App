@@ -21,6 +21,11 @@ export function normalizeData(value: unknown): Data {
   const normalized = { ...raw };
   for (const name of collections) normalized[name] ??= [];
   if (migratingV1 && !(normalized.calendars as unknown[]).length) normalized.calendars = emptyData().calendars;
+  normalized.tasks = (normalized.tasks as Array<Record<string, unknown>>).map(task => {
+    const standalone = { ...task };
+    delete standalone.parentTaskId;
+    return standalone;
+  });
   const data = { ...emptyData(), ...normalized, schemaVersion: 4,
     generation: (raw.generation as number | undefined) ?? 0 } as Data;
   for (const name of collections) {
@@ -90,10 +95,6 @@ export function normalizeData(value: unknown): Data {
   const tagIds = new Set(data.tags.map(tag => tag.id));
   const tasksById = new Map(data.tasks.map(task => [task.id, task]));
   for (const task of data.tasks) {
-    if (task.parentTaskId && (!tasksById.has(task.parentTaskId) || task.parentTaskId === task.id)) throw new Error("Invalid task parent relationship");
-    const parent = task.parentTaskId ? tasksById.get(task.parentTaskId) : undefined;
-    if (parent?.parentTaskId) throw new Error("Subtasks may only have one level of nesting");
-    if (parent && parent.projectId !== task.projectId) throw new Error("Subtask and parent must share a project");
     if (task.projectId && !projectIds.has(task.projectId)) throw new Error("Task refers to a missing project");
     const section = task.sectionId ? sectionsById.get(task.sectionId) : undefined;
     if (task.sectionId && (!section || section.projectId !== task.projectId)) throw new Error("Task refers to an invalid section");
