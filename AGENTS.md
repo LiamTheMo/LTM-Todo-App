@@ -40,7 +40,7 @@ Classify audit results as:
 - Stable UUIDs for synchronizable entities from day one.
 - Store created/updated timestamps and revision/version metadata needed for future sync.
 - Support soft deletion/tombstones for syncable records.
-- Automatically purge task, completion, and scheduled-event history older than the seven-calendar-day Dashboard window; detach retained subtasks when an expired parent is removed.
+- Automatically purge task, completion, and scheduled-event history older than the seven-calendar-day Dashboard window; retain independent tasks whose parent metadata came from legacy snapshots.
 - Model due time separately from scheduled start/end.
 - Recurrence is structured data, not display text.
 - Calendar events and tasks are distinct domain entities.
