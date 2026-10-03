@@ -197,7 +197,12 @@ export default function Home() {
   useEffect(() => {
     if (!ready || error || !pushActive || !pushToken) return;
     let cancelled = false;
-    const reminders = scheduledReminderTriggers(data).slice(0, 5_000).map(({ reminder, task, triggerAt }) => ({
+    const upcoming = scheduledReminderTriggers(data);
+    const configuredCount = data.reminders.filter(reminder => {
+      const task = data.tasks.find(item => item.id === reminder.taskId);
+      return !reminder.deletedAt && reminder.enabled && task && !task.deletedAt && !task.completedAt;
+    }).length;
+    const reminders = upcoming.slice(0, 5_000).map(({ reminder, task, triggerAt }) => ({
       id: reminder.id, title: task.title, triggerAt: Math.floor(triggerAt)
     }));
     pushSyncQueue.current = pushSyncQueue.current.catch(() => undefined).then(async () => {
@@ -209,10 +214,14 @@ export default function Home() {
       });
       if (!response.ok) throw new Error("Reminder schedules could not be synchronized. Check your connection and reopen Settings to retry.");
       if (!cancelled) {
-        const total = scheduledReminderTriggers(data).length;
+        const total = upcoming.length;
         setPushStatus(reminders.length < total
-          ? `First ${reminders.length.toLocaleString()} of ${total.toLocaleString()} reminders synced; this device supports up to 5,000 scheduled reminders.`
-          : `${reminders.length} reminder${reminders.length === 1 ? "" : "s"} synced to this device.`);
+          ? `First ${reminders.length.toLocaleString()} of ${total.toLocaleString()} upcoming reminders synced; this device supports up to 5,000 scheduled reminders.`
+          : total > 0
+            ? `${total} upcoming reminder${total === 1 ? "" : "s"} synced to this device.`
+            : configuredCount > 0
+              ? `0 upcoming reminders synced. ${configuredCount} enabled task reminder${configuredCount === 1 ? " has" : "s have"} no future notification time; its notification time may already have passed.`
+              : "No active task reminders to sync.");
       }
     }).catch(cause => {
       if (!cancelled) setPushStatus(cause instanceof Error ? cause.message : "Reminder schedules could not be synchronized.");
