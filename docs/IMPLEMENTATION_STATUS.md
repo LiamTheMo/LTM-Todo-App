@@ -13,7 +13,7 @@ This file records shipped behavior. Product specs and phase documents describe i
 
 ## Shipped product behavior
 
-- Dashboard and task management include local persistence, projects/sections, tags, recurrence, reminders, routines and templates. Tasks is a status-based Kanban with text search; the Dashboard includes all non-deleted tasks and retains up to 31 calendar days of history.
+- Dashboard and task management include local persistence, projects/sections, tags, recurrence, reminders, routines and templates. Tasks is a status-based Kanban with text search; the Dashboard includes dated tasks and recent completion history, while open tasks without due dates remain in Tasks only; it retains up to 31 calendar days of history.
 - The first-party Calendar has local calendars and events, including all-day/timed events, recurrence, visibility, in-app creation, and calendar rename/recolor editing. The full-spectrum color wheel supports 8-bit RGB channels (0–255 each); hue selection matches the visible spectrum.
 - Selecting a date shows its agenda and chronological day timeline. Timed events and scheduled task blocks appear in the timeline; due dates remain separate from planned-work times.
 - The calendar has no Month/Week/Day/Agenda mode switch. Month navigation and selecting a date are the available calendar navigation controls.
