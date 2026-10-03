@@ -17,24 +17,27 @@ test("legacy v1 snapshots gain missing collections and a generation without losi
   assert.equal(normalizeData({ ...legacy, generation: 7 }).generation, 7);
 });
 
-test("normalization rejects broken task relationships and nested subtasks", () => {
-  const base = { id: "a", title: "A", notes: "", tagIds: [], sortKey: 1,
+test("legacy subtasks migrate to standalone tasks without losing task records", () => {
+  const base = { id: "parent", title: "Parent", notes: "", tagIds: [], sortKey: 1,
     createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", revision: 1 };
-  assert.throws(() => normalizeData({ schemaVersion: 1, tasks: [{ ...base, parentTaskId: "missing" }] }), /parent relationship/);
-  assert.throws(() => normalizeData({ schemaVersion: 1, tasks: [base, { ...base, id: "b", parentTaskId: "a" }, { ...base, id: "c", parentTaskId: "b" }] }), /one level/);
+  const restored = normalizeData({ schemaVersion: 1, tasks: [
+    base, { ...base, id: "child", title: "Child", parentTaskId: "parent" },
+    { ...base, id: "nested", title: "Nested child", parentTaskId: "child" }
+  ] });
+  assert.equal(restored.tasks.length, 3);
+  assert.deepEqual(restored.tasks.map(task => task.id), ["parent", "child", "nested"]);
+  assert.ok(restored.tasks.every(task => !("parentTaskId" in task)));
   assert.throws(() => normalizeData({ schemaVersion: 1, tasks: [{ ...base, projectId: "missing" }] }), /missing project/);
 });
 
-test("normalization validates a large valid task graph without quadratic relationship scans", () => {
+test("normalization preserves large standalone task collections", () => {
   const tasks = [];
   const count = 5000;
-  for (let index = 0; index < count; index++) tasks.push({ id: `parent-${index}`, title: `Parent ${index}`, tagIds: [], sortKey: index,
+  for (let index = 0; index < count * 2; index++) tasks.push({ id: `task-${index}`, title: `Task ${index}`, tagIds: [], sortKey: index,
     createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", revision: 1 });
-  for (let index = 0; index < count; index++) tasks.push({ id: `child-${index}`, title: `Child ${index}`, tagIds: [], sortKey: index,
-    parentTaskId: `parent-${index}`, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", revision: 1 });
   const start = performance.now();
   assert.equal(normalizeData({ schemaVersion: 1, tasks }).tasks.length, count * 2);
-  assert.ok(performance.now() - start < 2500, "10,000 task relationship validation should finish within 2.5 seconds");
+  assert.ok(performance.now() - start < 2500, "10,000 task normalization should finish within 2.5 seconds");
 });
 
 test("corrupt or unsupported snapshots fail closed instead of being replaced", () => {
