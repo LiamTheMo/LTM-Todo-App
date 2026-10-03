@@ -1,4 +1,4 @@
-# Phase 4 — Projects, Sections, Subtasks & Tags
+# Phase 4 — Projects, Sections & Tags
 **Target:** v1.00
 
 ## Objective
