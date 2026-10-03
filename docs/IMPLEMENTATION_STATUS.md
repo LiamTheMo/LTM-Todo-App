@@ -30,7 +30,8 @@ This file records shipped behavior. Product specs and phase documents describe i
 
 ## Not shipped yet
 
-- Cross-device task-data sync, accounts, backend authentication, sync conflict handling, and backup/export.
+- Accounts, cross-device task-data sync, backend authentication, sync conflict handling, and backup/export.
+- External calendar subscriptions from ICS URLs; the current calendar supports only LTM-owned local calendars and events. OAuth connections and writing events back to providers are also not shipped.
 - Drag-and-drop scheduling, multiple work blocks per task, and separate week/day/agenda calendar modes.
 - Native iOS app distribution.
 
