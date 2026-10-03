@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCalendar, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, validEvent, zonedDateTimeToInstant } from "../lib/calendar-domain.ts";
+import { createCalendar, updateCalendar, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, validEvent, zonedDateTimeToInstant } from "../lib/calendar-domain.ts";
 import { emptyData, newEntity } from "../lib/domain.ts";
 
 const eventBase = (data, fields) => ({
@@ -106,4 +106,25 @@ test("calendar colors accept the full RGB spectrum and normalize legacy presets"
   const custom = createCalendar("Custom", "#123456");
   assert.equal(custom.color, "#123456");
   assert.equal(createCalendar("Bad", "rgb(1,2,3)"), undefined);
+});
+
+test("editing a calendar renames and recolors it without changing its identity or linked events", () => {
+  const data = emptyData();
+  const original = data.calendars[0];
+  const event = eventBase(data, { calendarId: original.id });
+  data.calendarEvents.push(event);
+  const now = new Date("2026-02-03T04:05:06.000Z");
+  const updated = updateCalendar(data, original.id, "  Work  ", "#00FF80", now);
+  const calendar = updated.calendars[0];
+  assert.equal(calendar.id, original.id);
+  assert.equal(calendar.createdAt, original.createdAt);
+  assert.equal(calendar.name, "Work");
+  assert.equal(calendar.color, "#00FF80");
+  assert.equal(calendar.visible, original.visible);
+  assert.equal(calendar.sortKey, original.sortKey);
+  assert.equal(calendar.revision, original.revision + 1);
+  assert.equal(calendar.updatedAt, now.toISOString());
+  assert.equal(updated.calendarEvents[0].calendarId, event.calendarId);
+  assert.equal(updateCalendar(data, "missing", "Work", "#00FF80"), data);
+  assert.equal(updateCalendar(data, original.id, " ", "#00FF80"), data);
 });

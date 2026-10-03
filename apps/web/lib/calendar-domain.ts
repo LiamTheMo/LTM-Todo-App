@@ -188,6 +188,17 @@ export function createCalendar(name: string, color: CalendarColor = defaultCalen
   return { ...newEntity(now), name: clean, color: normalizedColor, visible: true, sortKey: now.getTime() };
 }
 
+export function updateCalendar(data: Data, id: string, name: string, color: CalendarColor, now = new Date()): Data {
+  const existing = data.calendars.find(calendar => calendar.id === id && !calendar.deletedAt);
+  const clean = name.trim();
+  const normalizedColor = normalizeCalendarColor(color);
+  if (!existing || !clean || !normalizedColor) return data;
+  const updatedAt = now.toISOString();
+  return { ...data, calendars: data.calendars.map(calendar => calendar.id === id ? {
+    ...calendar, name: clean, color: normalizedColor, updatedAt, revision: calendar.revision + 1
+  } : calendar) };
+}
+
 export function saveEventTemplate(data: Data, event: CalendarEvent, name: string): Data {
   const clean = name.trim();
   if (!clean || !validEvent(event) || !data.calendars.some(calendar => calendar.id === event.calendarId && !calendar.deletedAt)) return data;
