@@ -3,9 +3,9 @@
 This file is authoritative for AI agents and contributors working in this repository.
 
 ## 1. Product intent
-Build a polished personal productivity system for iPhone, iPad, and web. The app owns its task and calendar models. Do not introduce Google Calendar or another calendar service as a core dependency. External interoperability may be added later only as optional integration.
+Build a polished personal productivity system delivered as a responsive web app for desktop, iPhone and iPad browsers. Users may install it to the Home Screen where supported. The app owns its task and calendar models. Do not introduce Google Calendar or another calendar service as a core dependency; interoperability may be added later only as an optional integration.
 
-The primary home experience is a vertically scrolling chronological Dashboard. It opens at Today, scrolls forward into future dates and upward into past activity, and keeps overdue deadlines separate from everyday events. Past completed work is dimmed; users can still add a task with a past due date, which appears both in Overdue and in Due on its assigned date until completed. Keep seven calendar dates including Today (Today plus the prior six days); older task, completion, and scheduled-event history is automatically removed, and new due dates cannot be assigned outside that window. Due-dated completion history stays on its due/occurrence date, while undated tasks use their completion date. Each day is a section containing what is scheduled on that day and what is due on that day. Scheduled time and due time are separate concepts.
+The primary home experience is a vertically scrolling chronological Dashboard. It opens at Today, scrolls forward into future dates and upward into past activity, and keeps overdue deadlines separate from everyday events. Past completed work is dimmed; users can still add a task with a past due date, which appears both in Overdue and Due on its assigned date until completed. Keep seven calendar dates including Today (Today plus the prior six days); older task, completion, and scheduled-event history is automatically removed, and new due dates cannot be assigned outside that window. Due-dated completion history stays on its due/occurrence date, while undated tasks use their completion date. Each day is a section containing what is scheduled on that day and what is due on that day. Scheduled time and due time are separate concepts.
 
 ## 2. Git workflow
 Major branches are only `main` and `vX.XX`. Version branches are permanent checkpoints and must never be deleted. Never implement, fix, refactor, clean up, audit-remediate, or maintain directly on a major branch.
@@ -26,9 +26,9 @@ Deployment/publishing is allowed only after a `vX.XX` pull request merges into `
 Repeat until clean or genuinely blocked:
 **Audit -> Implement/Fix -> Validate -> Review -> Apply Changes -> Revalidate**
 
-Audit architecture, requirements, incomplete work, regressions, security, dead code, duplication, maintainability and existing CI. Run all relevant tests, lint, formatting, type checks, builds and security checks. Review GitHub/Codex findings and resolve actionable items. Preserve unrelated changes.
+Audit architecture, requirements, incomplete work, regressions, security, dead code, duplication, maintainability and existing CI. Run all relevant web tests, lint, formatting, type checks, builds and security checks. Review GitHub/Codex findings and resolve actionable items. Preserve unrelated changes.
 
-GitHub CI runs only on pushes to permanent version branches (`vX.XX`), not on `main`, pull requests, or temporary branches. Run the relevant checks locally on the temporary branch before opening or merging its PR. After it merges into a version branch, wait for that branch's CI to pass before promoting the version to `main`. The `main` ruleset must require a PR and the successful version-branch CI checks. Validate PR source/base names locally with `bash scripts/check-branch-flow.sh <base> <head>`. Cloudflare Workers Builds deploys production from `main`; disable preview builds so version and temporary branches never deploy. GitHub Actions must not deploy.
+GitHub CI runs only on pushes to permanent version branches (`vX.XX`), not on `main`, pull requests, or temporary branches. Run relevant checks locally on the temporary branch before opening or merging its PR. After it merges into a version branch, wait for that branch's CI to pass before promoting the version to `main`. The `main` ruleset must require a PR and successful `web` and `docs` checks. Validate PR source/base names locally with `bash scripts/check-branch-flow.sh <base> <head>`. Cloudflare Workers Builds deploys production from `main`; disable preview builds so version and temporary branches never deploy. GitHub Actions must not deploy.
 
 Classify audit results as:
 - Completed / Passed
@@ -44,19 +44,16 @@ Classify audit results as:
 - Model due time separately from scheduled start/end.
 - Recurrence is structured data, not display text.
 - Calendar events and tasks are distinct domain entities.
-- Local persistence is authoritative for interactive client behavior; network sync is asynchronous.
+- Local persistence is authoritative for interactive behavior; network sync is asynchronous.
 - Time-zone behavior must be explicit and tested.
-- Accessibility, Dynamic Type, keyboard navigation and reduced-motion behavior are product requirements.
+- Accessibility, responsive layouts, keyboard navigation and reduced-motion behavior are product requirements.
 - Never put secrets in source control.
+- The supported client is the TypeScript/React web app. Do not add a native Apple application, Swift package, Xcode project, or native-app build/test workflow.
 
-## 5. Target clients
-- Supported iPhone/iPad and desktop client: the responsive TypeScript/React web app, installable to the Home Screen on supported mobile browsers.
-- Experimental source: `apps/apple` contains SwiftUI code, but CI does not build, sign, or distribute the native app. Do not describe it as a supported shipped client.
-- Web implementation: TypeScript + React/Next.js, deployed to Cloudflare Workers.
+## 5. Target client
+- Desktop, iPhone and iPad: responsive TypeScript/React web app, installable to the Home Screen on supported mobile browsers.
 - Shared contract: versioned API/domain schemas and deterministic recurrence/date semantics.
-- Backend and accounts are planned for v3. Select and document the sync service and storage through an ADR before implementation; PostgreSQL remains a proposal, not a shipped dependency.
-
-Do not force UI code sharing between SwiftUI and React. Share behavior through specifications, schemas, fixtures and conformance tests.
+- Backend in v3: API/sync service backed by PostgreSQL unless an ADR deliberately changes it.
 
 ## 6. Quality bar
 Every phase document is an implementation contract. Do not silently omit acceptance criteria. Prefer modular, readable, testable code. Add tests with behavior. Date, recurrence, ordering, synchronization and conflict code require especially strong deterministic tests.

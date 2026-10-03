@@ -9,25 +9,6 @@ permissions:
   contents: read
 
 jobs:
-  swift-core:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-      - uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: "6.0"
-      - name: Test platform-neutral Swift core
-        run: swift test
-
-  # Keep the established required-check name for the main ruleset while making
-  # the no-native-build policy explicit. An unsigned simulator app cannot be
-  # installed on a physical iPhone/iPad from a GitHub artifact.
-  apple:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Confirm native iOS builds are disabled
-        run: echo "Native iOS app builds and simulator UI tests are disabled; use the deployed web app on iPhone/iPad."
-
   web:
     runs-on: ubuntu-24.04
     defaults:
