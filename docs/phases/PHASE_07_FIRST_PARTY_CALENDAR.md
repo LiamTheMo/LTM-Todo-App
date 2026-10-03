@@ -5,7 +5,7 @@
 Add LTM Todo's own calendar rather than depending on Google Calendar.
 
 ## Scope
-Calendar and CalendarEvent domain entities; multiple local calendars with custom full-spectrum sRGB colors (8-bit RGB channels); timed/all-day events; event recurrence; month grid with a selected-day agenda and timeline; (Separate Month/Week/Day/Agenda mode tabs are not used.) event detail/editor; calendar visibility controls; tasks/due indicators rendered alongside events without conflating entity types.
+Calendar and CalendarEvent domain entities; multiple local calendars with custom full-spectrum sRGB colors (8-bit RGB channels); timed/all-day events; event recurrence; month grid with a selected-day agenda and timeline; (Separate Month/Week/Day/Agenda mode tabs are not used.) event detail/editor; calendar creation, rename/recolor editing, and visibility controls; tasks/due indicators rendered alongside events without conflating entity types.
 
 ## Rules
 Events are commitments; tasks are completable work. An event does not become a task merely because it appears near one. All-day values are dates, not midnight UTC instants. Timed events retain time-zone semantics. Calendar views consume the same scheduling domain used by Dashboard.
@@ -18,7 +18,7 @@ Handle overlapping events deterministically. Month cells show concise event/task
 The supported web client uses app-styled calendar/date/time controls and leaves New Task's title unfocused until tapped. Native iOS Picker/DatePicker behavior is not part of the shipped client because the Apple app is experimental and not built or distributed by CI.
 
 ## Tests
-All-day multi-day; overlap layout; DST; event recurrence; calendar visibility; month boundary; time-zone changes; Dashboard/calendar consistency; event previews in month cells; live now-line movement; task-editor keyboard remains hidden on open; custom selector accessibility; no native date/time pickers; date/time field widths match option fields.
+All-day multi-day; overlap layout; DST; event recurrence; calendar visibility; calendar rename/recolor preserves IDs and linked events; month boundary; time-zone changes; Dashboard/calendar consistency; event previews in month cells; live now-line movement; task-editor keyboard remains hidden on open; custom selector accessibility; no native date/time pickers; date/time field widths match option fields.
 
 ## Acceptance criteria
 Users can manage an entirely first-party calendar offline. No Google Calendar dependency is required. Event/task distinctions remain clear. Calendar and Dashboard agree on scheduled data.

@@ -17,7 +17,7 @@ All development used temporary branches, then merged into the active permanent p
 
 ## Shipped in v2.00
 
-- First-party local calendars and events, including all-day/timed events, recurrence, calendar visibility, and custom in-app calendar creation.
+- First-party local calendars and events, including all-day/timed events, recurrence, visibility, in-app creation, and calendar rename/recolor editing.
 - Six-week month grid with event/task previews, month navigation, selected-day agenda, and chronological timeline.
 - The separate Month/Week/Day/Agenda selector was removed. No separate week or agenda mode is shipped.
 - The +Calendar form uses an in-app full-spectrum calendar color wheel with 8-bit RGB channels (0–255 each); named legacy colors migrate to their previous hex values.
@@ -28,7 +28,7 @@ All development used temporary branches, then merged into the active permanent p
 
 ## Release and checks
 
-- The v2.00 implementation was promoted to `main` through PR #114; Cloudflare Workers Builds deploys the production site from `main`.
+- The current v2.00 implementation was promoted to `main` through PR #121; Cloudflare Workers Builds deploys the production site from `main`.
 - The `v2.00` branch CI gate runs `web`, `swift-core`, `docs`, and the Apple no-native-build policy check. Current results and logs are recorded in GitHub Actions.
 - The Swift job emits a Node.js 20 deprecation warning because `swift-actions/setup-swift` declares Node 20. Stable v2.4.0 and prerelease v3.0.0-beta.1 both declare Node 20; the current action remains because the Swift tests pass and the beta does not resolve the warning.
 - The production web implementation includes the custom calendar color wheel and calendar view cleanup. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for verified behavior and explicit gaps.

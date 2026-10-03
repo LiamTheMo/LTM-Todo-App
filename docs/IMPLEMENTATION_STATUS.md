@@ -14,7 +14,7 @@ This file records shipped behavior. Product specs and phase documents describe i
 ## Shipped product behavior
 
 - Dashboard and task management include local persistence, projects/sections, tags, subtasks, recurrence, reminders, search and filters, saved views, routines, templates, bulk actions, and retained completion history.
-- The first-party Calendar has local calendars, a six-week month grid with event/task previews, calendar visibility, timed/all-day events and recurring series. Calendar creation uses the in-app full-spectrum calendar color wheel with 8-bit RGB channels (0–255 each); named legacy colors migrate to their previous hex values.
+- The first-party Calendar has local calendars, a six-week month grid with event/task previews, calendar visibility, timed/all-day events and recurring series. Calendars can be created, renamed, recolored and shown/hidden in-app. The full-spectrum color wheel supports 8-bit RGB channels (0–255 each); named legacy colors migrate to their previous hex values.
 - Selecting a date shows its agenda and chronological day timeline. Timed events and scheduled task blocks appear in the timeline; due dates remain separate from planned-work times.
 - The calendar has no Month/Week/Day/Agenda mode switch. Month navigation and selecting a date are the available calendar navigation controls.
 - Planned-work blocks can be created, edited, and removed from the task/calendar forms. Drag-and-drop scheduling and multiple blocks per task are not shipped.
@@ -30,7 +30,8 @@ This file records shipped behavior. Product specs and phase documents describe i
 
 ## Not shipped yet
 
-- Cross-device task-data sync, accounts, backend authentication, sync conflict handling, and backup/export.
+- Accounts, cross-device task-data sync, backend authentication, sync conflict handling, and backup/export.
+- External calendar subscriptions from ICS URLs; the current calendar supports only LTM-owned local calendars and events. OAuth connections and writing events back to providers are also not shipped.
 - Drag-and-drop scheduling, multiple work blocks per task, and separate week/day/agenda calendar modes.
 - Native iOS app distribution.
 

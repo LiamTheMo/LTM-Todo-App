@@ -27,10 +27,12 @@ Unlimited local tasks/projects/sections/tags/subtasks/reminders/recurrence rules
 The web client exposes the branded site icon in browser/search surfaces and supports adding the site to an iPhone Home Screen as a standalone web app.
 
 ## v2 requirements
-First-party local calendars; timed/all-day events and recurring event series; a six-week month grid with previews and a selected-day agenda/timeline; multiple local calendars with an in-app full-spectrum sRGB color wheel and 8-bit RGB selection (0–255 per channel); planned-work blocks; routines; templates; Kanban; saved views; bulk actions. Separate week/day/agenda mode tabs and drag-and-drop scheduling are not part of the shipped interface.
+First-party local calendars; timed/all-day events and recurring event series; a six-week month grid with previews and a selected-day agenda/timeline; multiple manageable local calendars with in-app rename/recolor/show-hide controls and a full-spectrum sRGB color wheel with 8-bit RGB selection (0–255 per channel); planned-work blocks; routines; templates; Kanban; saved views; bulk actions. Separate week/day/agenda mode tabs and drag-and-drop scheduling are not part of the shipped interface.
 
 ## v3 requirements
-Authentication; cross-device task-data sync; conflict handling; tombstones; incremental sync; backup/export; attachments; optional sharing/collaboration. The web production client already exists in v1/v2; v3 expands it with accounts and synchronization.
+Authentication; cross-device task-data sync; conflict handling; tombstones; incremental sync; read-only subscriptions to HTTPS iCalendar (ICS) feed links; separate subscribed calendars with show/hide, color, last-refresh status and unsubscribe controls; backup/export; attachments; optional sharing/collaboration. Subscription refresh must not block offline task or calendar use. The web production client already exists in v1/v2; v3 adds accounts, synchronization and read-only external calendar feeds.
+
+Subscribed feed events are external and read-only in LTM. Refreshes update existing items by stable source event identity, add new items, and remove cancelled/deleted source events without creating duplicates. Keep source calendars separate from user-owned LTM calendars and tasks. Treat subscription URLs as secrets, fetch and cache them through an authenticated backend, and protect the fetch path against SSRF, redirects to private networks, oversized feeds and abusive refreshes. Import only HTTPS iCalendar feeds for the initial release. Provider-specific OAuth and writing changes back to external calendars are separate future work.
 
 ## Explicit non-goals through v3
-Advertising, paid feature gates, Google Calendar as a core dependency, AI-generated planning, enterprise administration, public social feeds.
+Advertising, paid feature gates, Google-account OAuth or write-back in the initial v3 release, AI-generated planning, enterprise administration, public social feeds.

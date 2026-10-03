@@ -31,3 +31,5 @@ Entity `deletedAt` fields support local deletion semantics. The web client prune
 ## Future synchronization model
 
 A server-side change journal, ownership model, cursor, conflict policy, and protocol do not exist yet. Phase 10 must define them; Phase 11 implements device convergence while local writes remain available offline. Preserve stable IDs and revisions, and do not treat the proposed sync model as part of schema v4 currently stored in IndexedDB.
+
+External calendar subscriptions are also future v3 data and are not represented in schema v4. Phase 10 must define an account-owned subscription record, protected storage for its HTTPS feed URL, and source identity metadata. Phase 11 may materialize fetched events in a separate read-only source calendar; subscription refresh must update/cancel events by stable source UID without converting them to editable local events or tasks.
