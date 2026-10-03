@@ -18,10 +18,10 @@ Phases 1–6 delivered local task management, projects, recurrence, reminders, s
 
 The deployed calendar has no Month/Week/Day/Agenda mode tabs. It uses month navigation and selected-day interaction. v2.00 implementation is on `main`; responsive web manual release validation remains listed in [V2_STATUS.md](V2_STATUS.md).
 
-## v3.00 — Accounts & Sync
+## v3.00 — Accounts, Sync & Calendar Subscriptions
 
-- Phase 10 — Choose backend/authentication and define/test the synchronization protocol.
-- Phase 11 — Implement multi-device synchronization and conflict resolution for supported clients while preserving offline use.
-- Phase 12 — Backup/export, attachments, optional sharing/collaboration, and release hardening.
+- Phase 10 — Choose backend/authentication, define the synchronization protocol, and design secure external iCalendar feed storage and fetching.
+- Phase 11 — Implement multi-device synchronization and conflict resolution; add read-only HTTPS iCalendar (ICS) subscriptions that refresh and appear as separate calendars.
+- Phase 12 — Backup/export, attachments, optional sharing/collaboration, and release hardening, including subscription privacy and recovery checks.
 
-Cross-device task sync starts after the v2.00 release gate is complete. Begin with Phase 10's threat model, backend/auth ADR, data ownership, migrations, and protocol tests; implement client sync in Phase 11 only after the contract is tested. Web Push is not task synchronization.
+Cross-device task sync starts after the v2.00 release gate is complete. Begin with Phase 10's threat model, backend/auth ADR, data ownership, migrations, protocol tests, and a secure feed-ingestion design. Phase 11 implements offline-first device sync and read-only ICS subscriptions after the contract is tested. Subscribed events remain separate from editable LTM events and tasks. Google-account OAuth, write-back, and two-way calendar synchronization are outside the initial v3 subscription scope. Web Push is not task synchronization.

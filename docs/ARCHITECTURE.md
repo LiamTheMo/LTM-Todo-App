@@ -22,7 +22,7 @@ A user must be able to launch, browse, create, edit, schedule and complete local
 TypeScript, React/Next.js, IndexedDB for offline local state, a tested domain package, and Node-based UI/domain tests. Cloudflare Workers serves the production web app; the current CI production build uses Vinext.
 
 ### Backend (planned v3)
-No task-data sync service is deployed. Phase 10 must select the backend/auth model through an ADR and specify a versioned incremental sync protocol before implementation; PostgreSQL is a proposal only.
+No task-data sync service or external-calendar feed service is deployed. Phase 10 must select the backend/auth model through an ADR and specify a versioned incremental sync protocol before implementation; PostgreSQL is a proposal only. It must also define the authenticated feed-fetch/cache boundary for read-only HTTPS iCalendar subscriptions. Feed URLs can be bearer secrets: store them encrypted, restrict access to the owning account, and prevent arbitrary-URL fetches from reaching private or link-local networks. Never log full feed URLs or credentials.
 
 ## Time model
 Persist instants in UTC where an instant exists, plus time-zone identifiers where local calendar semantics matter. Date-only deadlines must remain date-only and must not be converted into arbitrary midnight instants. All-day events use calendar dates. Recurrence evaluation must specify calendar/time zone and DST behavior.
@@ -31,7 +31,7 @@ Persist instants in UTC where an instant exists, plus time-zone identifiers wher
 Every syncable record should include stable UUID, owner ID when accounts exist, createdAt, updatedAt, revision/version, deletedAt/tombstone state. Avoid database-generated identifiers as public identity.
 
 ## Security
-No secrets in clients/repository. Use platform secure storage for credentials/tokens. Validate all server authorization independently of client claims. Treat attachment URLs as protected resources. Dependency and secret scanning belong in CI when code exists.
+No secrets in clients/repository. Use platform secure storage for credentials/tokens. Validate all server authorization independently of client claims. Treat attachment URLs and external calendar feed URLs as protected resources. Feed ingestion must constrain schemes, redirects, destination networks, response size, timeouts, refresh rate and logging. Dependency and secret scanning belong in CI when code exists.
 
 ## ADRs
 Architecturally significant deviations require an ADR under `docs/adr/` describing context, decision, alternatives and consequences.

@@ -7,6 +7,9 @@ Complete the multi-device ecosystem and harden it for sustained personal use.
 ## Scope
 Portable export/backup format; restore/import validation; attachment metadata/storage; quotas based on technical safety rather than arbitrary feature gating; optional project/task sharing and collaboration if enabled; audit/security pass; privacy controls; session/device management; disaster recovery; full regression/performance/accessibility release pass.
 
+## Calendar subscription recovery
+Document whether exports include subscription URLs; by default, never include bearer feed URLs in an unencrypted export. Verify users can remove subscriptions, revoke stored credentials, recover after feed failures, and distinguish cached read-only external events from their own editable calendars.
+
 ## Data portability
 Export should use documented, versioned formats and preserve stable IDs/relationships where safe. Restore is transactional or recoverable. Validate before destructive replacement.
 
@@ -17,7 +20,7 @@ Protect authorization at object access. Handle upload interruption, orphan clean
 If implemented, explicitly model membership/roles and server authorization. Do not infer permission from possession of an ID/link. Conflict semantics must be revisited for multi-user edits.
 
 ## Release validation
-Full iPhone/iPad/browser matrix; offline/online transitions; large dataset; migration from prior versions; restore drill; sync outage; accessibility; notification lifecycle; security/dependency scanning.
+Full iPhone/iPad/browser matrix; offline/online transitions; large dataset; migration from prior versions; restore drill; sync outage; ICS subscription add/refresh/unsubscribe and failure recovery; feed-URL privacy; accessibility; notification lifecycle; security/dependency scanning.
 
 ## Acceptance criteria
 Users can recover/export their data. No known critical data-loss/security issue. v1/v2 functionality remains intact across synchronized clients. Remaining manual checks are documented and completed before declaring v3.00 production-ready.
