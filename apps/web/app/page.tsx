@@ -272,9 +272,9 @@ export default function Home() {
   const taskRow = (task: Task, caption?: string, completionId?: string, key = task.id) => {
     const isComplete = Boolean(completionId || task.completedAt);
     const latestCompletion = completionId && data.completions.filter(item => item.taskId === task.id).at(-1)?.id === completionId;
-    return <div className={`taskRow ${isComplete ? "completed" : ""} ${task.parentTaskId ? "subtask" : ""}`} key={key}>
-      <button className="complete" disabled={completionId ? !latestCompletion : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt)} onClick={() => completionId ? latestCompletion && mutate(value => undoCompletion(value, completionId)) : toggle(task)} aria-label={isComplete ? `Reopen ${task.title}` : `Complete ${task.title}`}>{isComplete ? "✓" : "○"}</button>
-      <button className="taskText" draggable={!isComplete} onDragStart={e => { if (isComplete) return; e.dataTransfer.setData("application/x-ltm-task", task.id); e.dataTransfer.effectAllowed = "copy"; }} onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : data.tasks.some(child => child.parentTaskId === task.id && !child.completedAt && !child.deletedAt) ? "Finish subtasks first" : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
+    return <div className={`taskRow priority-${task.priority} ${isComplete ? "completed" : ""}`} key={key}>
+      <button className="complete" disabled={completionId ? !latestCompletion : false} onClick={() => completionId ? latestCompletion && mutate(value => undoCompletion(value, completionId)) : toggle(task)} aria-label={isComplete ? `Reopen ${task.title}` : `Complete ${task.title}`}>{isComplete ? "✓" : "○"}</button>
+      <button className="taskText" draggable={!isComplete} onDragStart={e => { if (isComplete) return; e.dataTransfer.setData("application/x-ltm-task", task.id); e.dataTransfer.effectAllowed = "copy"; }} onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
       {!isComplete && <button className="scheduleAction" onClick={() => setScheduleEditing({ taskId: task.id, date: calendarSelectedDate })} aria-label={`Schedule work for ${task.title}`} title="Schedule work">◷</button>}
       <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
     </div>;
@@ -389,7 +389,7 @@ export default function Home() {
       ...day.completed.map(item => item.task.id)
     ])
   ]);
-  const otherDashboardTasks = filterTasks(data, { today }).filter(task => !shownDashboardTaskIds.has(task.id));
+  const otherDashboardTasks = filterTasks(data, { today }).filter(task => Boolean(task.dueDate) && !shownDashboardTaskIds.has(task.id));
   return <main className="shell">
     <aside className="sidebar"><h1><span className="brandMark" aria-hidden="true" /> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} aria-current={view === item ? "page" : undefined} aria-label={item === "Settings" ? "Settings" : undefined} title={item === "Settings" ? "Settings" : undefined} onClick={() => {
       setProjectId("");
@@ -648,7 +648,6 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
   const [priority, setPriority] = useState<Priority>(task?.priority ?? "none");
   const [projectId, setProjectId] = useState(task?.projectId ?? initialProject ?? "");
   const [sectionId, setSectionId] = useState(task?.sectionId ?? "");
-  const [parentTaskId, setParentTaskId] = useState(task?.parentTaskId ?? "");
   const [tagIds, setTagIds] = useState(task?.tagIds ?? []);
   const [reminderMinutes, setReminderMinutes] = useState(reminder ? String(reminder.minutesBefore) : "");
   const [frequency, setFrequency] = useState(task?.recurrence?.frequency ?? "");
@@ -662,7 +661,7 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
     e.preventDefault(); if (!title.trim() || expiredDueDate || (frequency && (!dueDate || (repeatUntil && repeatUntil < dueDate) || (repeatCount !== "" && Number(repeatCount) < 1)))) return;
     const stamp = new Date().toISOString();
     onSave({ ...(task ?? newEntity()), title: title.trim(), notes, priority, projectId: projectId || undefined, sectionId: projectId && sectionId ? sectionId : undefined,
-      parentTaskId: parentTaskId || undefined, tagIds, sortKey: task?.sortKey ?? Date.now(), dueDate: dueDate || undefined,
+      tagIds, sortKey: task?.sortKey ?? Date.now(), dueDate: dueDate || undefined,
       dueTime: dueDate && dueTime ? dueTime : undefined, dueTimeZone: dueDate && dueTime ? zone() : undefined, updatedAt: stamp, revision: task ? task.revision + 1 : 1,
       recurrence: frequency && dueDate ? { frequency: frequency as "daily" | "weekly" | "monthly" | "yearly", interval: Math.max(1, interval),
         anchorDate: task?.dueDate === dueDate ? task?.recurrence?.anchorDate ?? dueDate : dueDate, occurrences: task?.recurrence?.occurrences ?? 0,
@@ -673,11 +672,10 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
     <div className="editorHead"><h2>{task ? "Edit task" : "New task"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
     <label>Title<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
-    <div className="fieldPair"><label>Date<DateField value={dueDate} min={earliestDate} onChange={setDueDate} /></label><label>Time<TimeField value={dueTime} disabled={!dueDate} onChange={setDueTime} /></label></div>
+    <div className="fieldPair dateTimePair"><label>Date<DateField value={dueDate} min={earliestDate} onChange={setDueDate} /></label><label>Time<TimeField value={dueTime} disabled={!dueDate} onChange={setDueTime} /></label></div>
     {expiredDueDate && <p className="hint">Choose a date within the seven-day history window.</p>}
-    <div className="fieldPair"><label>Priority<CustomSelect value={priority} onChange={e => setPriority(e.target.value as Priority)}>{priorities.map(p => <option key={p} value={p}>{priorityLabel(p)}</option>)}</CustomSelect></label><label>Project<CustomSelect value={projectId} onChange={e => { setProjectId(e.target.value); setSectionId(""); setParentTaskId(""); }}><option value="">Inbox</option>{data.projects.filter(p => !p.deletedAt && !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</CustomSelect></label></div>
+    <div className="fieldPair"><label>Priority<CustomSelect value={priority} onChange={e => setPriority(e.target.value as Priority)}>{priorities.map(p => <option key={p} value={p}>{priorityLabel(p)}</option>)}</CustomSelect></label><label>Project<CustomSelect value={projectId} onChange={e => { setProjectId(e.target.value); setSectionId(""); }}><option value="">Inbox</option>{data.projects.filter(p => !p.deletedAt && !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</CustomSelect></label></div>
     {projectId && <label>Section<CustomSelect value={sectionId} onChange={e => setSectionId(e.target.value)}><option value="">Project root</option>{data.sections.filter(s => s.projectId === projectId && !s.deletedAt).map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</CustomSelect></label>}
-    <label>Subtask of<CustomSelect value={parentTaskId} onChange={e => setParentTaskId(e.target.value)}><option value="">No parent</option>{data.tasks.filter(t => !t.deletedAt && !t.parentTaskId && t.id !== task?.id && (t.projectId ?? "") === projectId).map(t => <option value={t.id} key={t.id}>{t.title}</option>)}</CustomSelect></label>
     {!!data.tags.length && <fieldset><legend>Tags</legend>{data.tags.filter(t => !t.deletedAt).map(t => <label className="checkLabel" key={t.id}><input type="checkbox" checked={tagIds.includes(t.id)} onChange={e => setTagIds(e.target.checked ? [...tagIds, t.id] : tagIds.filter(id => id !== t.id))} /> {t.name}</label>)}</fieldset>}
     <div className="fieldPair"><label>Repeat<CustomSelect value={frequency} onChange={e => setFrequency(e.target.value)}><option value="">Never</option>{["daily", "weekly", "monthly", "yearly"].map(f => <option key={f} value={f}>{f[0].toUpperCase() + f.slice(1)}</option>)}</CustomSelect></label><label>Every<input type="number" min="1" max="365" disabled={!frequency} value={interval} onChange={e => setInterval(Number(e.target.value))} /></label></div>
     {frequency === "weekly" && <fieldset><legend>Repeat on</legend>{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((name, day) => <label className="checkLabel" key={day}><input type="checkbox" checked={weekdays.includes(day)} onChange={e => setWeekdays(e.target.checked ? [...weekdays, day] : weekdays.filter(value => value !== day))} /> {name}</label>)}<p className="hint">If none are selected, repeat on the original weekday.</p></fieldset>}
