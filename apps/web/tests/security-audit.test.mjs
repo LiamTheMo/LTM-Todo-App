@@ -4,20 +4,28 @@ import { ALLOWED_DEV_ADVISORY, isAllowedDevAuditReport } from "../scripts/audit-
 
 const braces = {
   severity: "high",
-  dev: true,
+  nodes: ["node_modules/braces"],
   via: [{ severity: "high", url: ALLOWED_DEV_ADVISORY }]
 };
+const devLock = {
+  packages: {
+    "node_modules/braces": { dev: true },
+    "node_modules/micromatch": { dev: true },
+    "node_modules/fast-glob": { dev: true },
+    "node_modules/minimatch": { dev: true }
+  }
+};
 
-test("allows the exact unpatched advisory when it affects dev dependencies only", () => {
-  assert.equal(isAllowedDevAuditReport({ vulnerabilities: { braces } }), true);
+test("allows the exact unpatched advisory for a lockfile-confirmed dev-only package", () => {
+  assert.equal(isAllowedDevAuditReport({ vulnerabilities: { braces } }, devLock), true);
 });
 
-test("allows transitive dev-only packages only when their chain leads to the exact advisory", () => {
+test("allows transitive dev-only packages only when their chain reaches the exact advisory", () => {
   assert.equal(isAllowedDevAuditReport({ vulnerabilities: {
     braces,
-    micromatch: { severity: "high", dev: true, via: ["braces"] },
-    "fast-glob": { severity: "high", dev: true, via: ["micromatch"] }
-  } }), true);
+    micromatch: { severity: "high", nodes: ["node_modules/micromatch"], via: ["braces"] },
+    "fast-glob": { severity: "high", nodes: ["node_modules/fast-glob"], via: ["micromatch"] }
+  } }, devLock), true);
 });
 
 test("rejects unrelated high-severity advisories", () => {
@@ -25,29 +33,34 @@ test("rejects unrelated high-severity advisories", () => {
     braces,
     minimatch: {
       severity: "high",
-      dev: true,
+      nodes: ["node_modules/minimatch"],
       via: [{ severity: "high", url: "https://github.com/advisories/GHSA-other" }]
     }
-  } }), false);
+  } }, devLock), false);
 });
 
-test("rejects the allowed advisory if an affected package is not dev-only", () => {
+test("rejects affected packages whose lockfile nodes are production dependencies", () => {
+  const prodLock = { packages: { "node_modules/braces": { dev: false } } };
+  assert.equal(isAllowedDevAuditReport({ vulnerabilities: { braces } }, prodLock), false);
+});
+
+test("rejects missing or unknown lockfile nodes", () => {
   assert.equal(isAllowedDevAuditReport({ vulnerabilities: {
-    braces: { ...braces, dev: false }
-  } }), false);
+    braces: { ...braces, nodes: ["node_modules/missing"] }
+  } }, devLock), false);
 });
 
-test("rejects broken or cyclic dependency chains", () => {
+test("rejects broken and cyclic dependency chains", () => {
   assert.equal(isAllowedDevAuditReport({ vulnerabilities: {
     braces,
-    micromatch: { severity: "high", dev: true, via: ["missing-package"] }
-  } }), false);
+    micromatch: { severity: "high", nodes: ["node_modules/micromatch"], via: ["missing-package"] }
+  } }, devLock), false);
   assert.equal(isAllowedDevAuditReport({ vulnerabilities: {
-    alpha: { severity: "high", dev: true, via: ["beta"] },
-    beta: { severity: "high", dev: true, via: ["alpha"] }
-  } }), false);
+    alpha: { severity: "high", nodes: ["node_modules/minimatch"], via: ["beta"] },
+    beta: { severity: "high", nodes: ["node_modules/minimatch"], via: ["alpha"] }
+  } }, devLock), false);
 });
 
 test("accepts a clean high/critical audit result", () => {
-  assert.equal(isAllowedDevAuditReport({ vulnerabilities: {} }), true);
+  assert.equal(isAllowedDevAuditReport({ vulnerabilities: {} }, devLock), true);
 });
