@@ -8,7 +8,7 @@ LTM Todo is an ad-free personal productivity web app with a first-party task and
 - Due dates stay separate from planned-work blocks.
 - Offline-first local data; common task and calendar changes work without a server.
 - A responsive, installable web app with local browser storage.
-- No ads or artificial limits on tasks, projects, reminders, tags, subtasks, recurrence, or calendars.
+- No ads or artificial limits on tasks, projects, reminders, tags, recurrence, or calendars.
 - First-party calendars and events, with custom full-spectrum RGB calendar colors.
 
 ## Current implementation
