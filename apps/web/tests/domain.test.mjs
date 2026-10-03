@@ -84,7 +84,7 @@ test("overdue includes recent unfinished deadlines and ignores older dates and s
   const data = emptyData();
   data.projects.push({ id: "archived", name: "Archived", color: "#fff", sortKey: 0, createdAt: "", updatedAt: "", revision: 1,
     archivedAt: "2026-09-01T00:00:00Z" });
-  data.tasks.push(task("oldest", "2026-09-20"), task("newer", "2026-09-28"), task("boundary", "2026-09-23"), task("today", "2026-09-29"),
+  data.tasks.push(task("oldest", "2026-08-29"), task("newer", "2026-09-28"), task("boundary", "2026-08-30"), task("today", "2026-09-29"),
     task("future", "2026-10-01"), task("done", "2026-09-10", { completedAt: "2026-09-10T12:00:00Z" }),
     task("archived", "2026-09-10", { projectId: "archived" }), task("event", undefined));
   data.blocks.push({ id: "event-block", taskId: "event", startInstant: "2026-09-20T15:00:00Z",
@@ -130,9 +130,9 @@ test("history retention keeps 31 calendar days and removes expired task and even
   assert.deepEqual(retained.reminders.map(item => item.id), ["retained-reminder"]);
   assert.deepEqual(retained.completions.map(item => item.id), ["retained-completion"]);
 });
-test("task editor domain guard rejects a due date outside the retained week", () => {
+test("task editor domain guard rejects a due date outside the retained month", () => {
   const data = emptyData();
-  assert.equal(saveTask(data, task("too-old", "2026-09-24"), "", "2026-10-01"), data);
+  assert.equal(saveTask(data, task("too-old", "2026-08-31"), "", "2026-10-01"), data);
 });
 test("task edits without work-time fields preserve existing scheduled data", () => {
   const data = emptyData();
