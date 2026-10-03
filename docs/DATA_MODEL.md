@@ -26,7 +26,7 @@ The `Data` document contains `schemaVersion`, `generation`, and arrays for tasks
 
 Date-only task deadlines remain `YYYY-MM-DD` values and are not converted to UTC midnight. Timed values retain local time-zone context. Timed calendar events store instants; all-day events use date values. Recurrence stores frequency, interval, optional weekdays/until/count, and for tasks anchor date/occurrence count.
 
-Entity `deletedAt` fields support local deletion semantics. The web client prunes expired Dashboard history to Today plus the previous six local calendar dates, including old due tasks, completions, and scheduled blocks/events according to their date rules.
+Entity `deletedAt` fields support local deletion semantics. The web client prunes expired Dashboard history to Today plus the previous 30 local calendar dates, including old due tasks, completions, and scheduled blocks/events according to their date rules.
 
 ## Future synchronization model
 
