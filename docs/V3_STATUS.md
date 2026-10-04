@@ -8,14 +8,14 @@ Phase checkpoints are cumulative: `v2.01` (Phase 10), `v2.02` (Phase 11), and `v
 
 | Checkpoint | Phase | Implementation | Promotion / validation |
 | --- | --- | --- | --- |
-| `v2.01` | Phase 10: backend, authentication, and sync protocol | Complete Phase 10–12 implementation is present in this cumulative tree | PR #144 merged; `web` and `docs` CI passed on commit `2d5a926` |
-| `v2.02` | Phase 11: multi-device sync and ICS | Inherits the complete implementation from `v2.01`; phase code landed together in PR #144 | Checkpoint merged via PR #145; CI passed on commit `552f912` |
-| `v2.03` | Phase 12: portability, attachments, lifecycle, and release hardening | Inherits the complete implementation from `v2.02` | Checkpoint created from validated `v2.02`; Phase 12 checkpoint promotion is in progress |
-| `v3.00` | Integrated release | Code is present in the cumulative tree | Release branch/PR to `main` not yet created; no production deployment |
+| `v2.01` | Phase 10: backend, authentication, and sync protocol | Complete Phase 10–12 implementation is present in this cumulative tree | PR #144 merged; `web` and `docs` CI passed |
+| `v2.02` | Phase 11: multi-device sync and ICS | Inherits the complete implementation from `v2.01`; phase code landed together in PR #144 | PR #145 merged; `web` and `docs` CI passed |
+| `v2.03` | Phase 12: portability, attachments, lifecycle, and release hardening | Inherits the complete implementation from `v2.02` | PR #146 merged; `web` and `docs` CI passed |
+| `v3.00` | Integrated release | Inherits the validated cumulative implementation | Release branch created from `v2.03`; branch CI passed; PR to `main` is next |
 
 ## Current implementation state
 
-PR #144 (`feat/v2.01-phase10-cloudflare-d1`) merged the complete Phase 10–12 implementation into `v2.01` as commit `2d5a9265f78966b20dfbe4f6bdd5ca4c683854e4`. Its GitHub Actions run passed both required `web` and `docs` checks. PR #145 promoted the Phase 11 cumulative checkpoint into `v2.02`; its GitHub Actions run passed both checks on commit `552f912aa4e4925b1d676135e46f1d6689f487eb`. The original implementation was co-located rather than delivered as three independent phase PRs. The `v2.02` and `v2.03` branches therefore preserve cumulative checkpoints; the history is not represented as separate phase-specific code delivery.
+PR #144 (`feat/v2.01-phase10-cloudflare-d1`) merged the complete Phase 10–12 implementation into `v2.01`. PRs #145 and #146 promoted the cumulative Phase 11 and Phase 12 checkpoints into `v2.02` and `v2.03`. Each checkpoint's GitHub Actions `web` and `docs` checks passed. Branch `v3.00` was created from the validated `v2.03` commit, and its CI passed. The original implementation was co-located rather than delivered as three independent phase PRs. The version branches are cumulative snapshots; the history is not represented as separate phase-specific code delivery. The v3.00-to-main release PR and production deployment are not yet complete.
 
 ### Phase 10 — Backend, Authentication & Sync Protocol (`v2.01`)
 
@@ -44,10 +44,10 @@ PR #144 (`feat/v2.01-phase10-cloudflare-d1`) merged the complete Phase 10–12 i
 
 ## Automated verification
 
-Local validation on the implementation tree passed: 151 tests, TypeScript typecheck, ESLint, Vinext production build, and dependency audit. The production dependency audit is clean; one documented unpatched development-only `braces` advisory remains allowed. GitHub Actions `web` and `docs` checks passed on both the `v2.01` and `v2.02` checkpoint commits.
+Local validation on the implementation tree passed: 151 tests, TypeScript typecheck, ESLint, Vinext production build, and dependency audit. The production dependency audit is clean; one documented unpatched development-only `braces` advisory remains allowed. GitHub Actions `web` and `docs` checks passed on the `v2.01`, `v2.02`, `v2.03`, and `v3.00` branch commits.
 
 ## Remaining release gates
 
-**Requires Cloudflare/user-side configuration and live validation:** production D1, R2, Durable Object and rate-limit bindings; OIDC provider settings and secrets; production migrations/connectivity; TLS/DNS pinning in the live Worker; cross-device and supported-device journeys; backup restore, account deletion, retention, attachment recovery, and orphan-cleanup drills.
+**Requires Cloudflare configuration and live validation:** production D1, R2, Durable Object and rate-limit bindings; two D1 IDs and production migrations; OIDC provider settings and secrets; stable sync/session/feed-encryption and VAPID secrets; TLS/DNS pinning in the live Worker; cross-device and supported-device journeys; backup restore, account deletion, retention, attachment recovery, and orphan-cleanup drills. Cloudflare Workers Builds must be connected to this repository with `main` as production branch, `apps/web` as the root, build command `npm run build:vinext`, deploy command `npm run deploy:worker`, and preview builds disabled.
 
-**Still in progress:** merge and validate the `v2.03` cumulative checkpoint; create the `v3.00` release branch and PR to `main`; verify Cloudflare Workers Builds production deployment. No production deployment has been verified yet.
+**Still in progress:** open and merge the `v3.00` PR to `main` through required checks; then verify the Cloudflare production build/deployment and smoke-test the live app. No production deployment has been verified yet.
