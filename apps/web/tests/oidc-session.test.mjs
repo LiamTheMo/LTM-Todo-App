@@ -44,6 +44,10 @@ test("auth cookie ciphertext is purpose-bound, authenticated, and rejects tamper
 test("OIDC discovery failures stay generic and emit only safe diagnostic codes", async () => {
   const cases = [
     { code: "provider_discovery_fetch_failed", fetcher: async () => { throw new Error("private provider response details"); } },
+    { code: "provider_discovery_http_error", fetcher: async (_url, init = {}) => {
+      assert.equal(init.redirect, "manual");
+      return new Response(null, { status: 302, headers: { Location: "https://attacker.example/metadata" } });
+    } },
     { code: "provider_issuer_mismatch", fetcher: async () => Response.json({ issuer: "https://unexpected.example",
       authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/oauth/token`, jwks_uri: jwksUri }) }
   ];
@@ -82,6 +86,7 @@ test("OIDC code flow uses PKCE/state/nonce and creates an encrypted same-origin 
   };
   const access = await token(pair.privateKey, { iss: issuer, sub: "account-42", aud: audience, exp: now / 1000 + 3600 });
   const fetcher = async (input, init = {}) => {
+    assert.equal(init.redirect, "manual");
     const url = String(input);
     if (url === `${issuer}/.well-known/openid-configuration`) return Response.json({ issuer,
       authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: jwksUri });
