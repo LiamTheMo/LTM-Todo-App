@@ -137,7 +137,7 @@ export class OidcJwtAuthenticator implements SyncAuthenticator {
   private async getKeys(forceRefresh: boolean): Promise<OidcJwk[]> {
     if (!forceRefresh && this.cachedKeys && this.cachedKeys.expiresAt > this.now()) return this.cachedKeys.keys;
     let response: Response;
-    try { response = await this.fetcher(this.options.jwksUri, { redirect: "error", signal: AbortSignal.timeout(5_000),
+    try { response = await this.fetcher(this.options.jwksUri, { redirect: "manual", signal: AbortSignal.timeout(5_000),
       headers: { Accept: "application/json" } }); }
     catch { throw new JwksUnavailableError(); }
     if (!response.ok) throw new JwksUnavailableError();
