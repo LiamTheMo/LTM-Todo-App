@@ -41,6 +41,21 @@ From `apps/web`:
 
 The Worker name is fixed by `wrangler.jsonc` as `ltm-todo-app`.
 
+## Authentication failure logs
+
+The auth API keeps provider failures generic for browsers and emits a redacted Worker log event named `oidc_authentication_failure`. It contains only a fixed route label and one diagnostic code; it never logs the exception text, query string, cookies, tokens, or configured secret values. Review the `ltm-todo-app` Worker logs in Cloudflare after reproducing a sign-in failure.
+
+Diagnostic codes:
+
+- `provider_discovery_fetch_failed` — the Worker could not fetch Auth0's discovery document.
+- `provider_discovery_http_error` — Auth0 returned a non-success status.
+- `provider_discovery_invalid_document` — the discovery response was missing required OIDC fields or was not valid JSON.
+- `provider_issuer_mismatch` or `provider_jwks_uri_mismatch` — the deployed build secret differs from the exact value in Auth0's discovery document.
+- `provider_endpoint_invalid` — an advertised OIDC endpoint is malformed or does not use HTTPS.
+- `unexpected_error` — another error occurred; no exception details are written to logs.
+
+The public response remains `503 authentication_unavailable`; the diagnostic code is available only in Worker logs.
+
 ## Background push notifications
 
 Web reminders use the same `ltm-todo-app` Worker. Before enabling them in production:

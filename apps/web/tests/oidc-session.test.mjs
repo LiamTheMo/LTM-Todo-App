@@ -41,6 +41,28 @@ test("auth cookie ciphertext is purpose-bound, authenticated, and rejects tamper
   assert.throws(() => new AuthCookieCodec(Buffer.alloc(8).toString("base64url")), /32 bytes/);
 });
 
+test("OIDC discovery failures stay generic and emit only safe diagnostic codes", async () => {
+  const cases = [
+    { code: "provider_discovery_fetch_failed", fetcher: async () => { throw new Error("private provider response details"); } },
+    { code: "provider_issuer_mismatch", fetcher: async () => Response.json({ issuer: "https://unexpected.example",
+      authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/oauth/token`, jwks_uri: jwksUri }) }
+  ];
+  for (const item of cases) {
+    let diagnostic;
+    const service = new OidcSessionService({ ...authOptions(), fetcher: item.fetcher,
+      diagnosticLogger: value => { diagnostic = value; } });
+    const marker = `private-return-to-${item.code}`;
+    const returnTo = encodeURIComponent(`/tasks?marker=${marker}`);
+    const response = await service.handle(new Request(`https://app.example.test/api/v1/auth/login?returnTo=${returnTo}`));
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "authentication_unavailable" });
+    assert.deepEqual(diagnostic, { event: "oidc_authentication_failure", route: "login", code: item.code });
+    assert.equal(JSON.stringify(diagnostic).includes(secret), false);
+    assert.equal(JSON.stringify(diagnostic).includes(marker), false);
+    assert.equal(JSON.stringify(diagnostic).includes("private provider response details"), false);
+  }
+});
+
 test("OIDC code flow uses PKCE/state/nonce and creates an encrypted same-origin session", async () => {
   const { pair, publicKey } = await createKeys();
   let flowOptions;
