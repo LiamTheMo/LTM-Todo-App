@@ -166,6 +166,7 @@ export class OidcSessionService {
     const authorization = new URL(metadata.authorization_endpoint);
     authorization.searchParams.set("response_type", "code");
     authorization.searchParams.set("client_id", this.options.clientId);
+    authorization.searchParams.set("audience", this.options.audience);
     authorization.searchParams.set("redirect_uri", this.options.redirectUri);
     authorization.searchParams.set("scope", "openid");
     authorization.searchParams.set("state", flow.state);
