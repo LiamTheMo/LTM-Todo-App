@@ -17,7 +17,7 @@ test("rejects modified, malformed, and expired cursor values", async () => {
   const codec = new SyncCursorCodec(secret, () => now);
   const cursor = await codec.encode("account-a", 9, 60_000);
   const encoded = cursor.slice(3);
-  const tampered = `v1.${encoded.slice(0, -1)}${encoded.endsWith("A") ? "B" : "A"}`;
+  const tampered = `v1.${encoded[0] === "A" ? "B" : "A"}${encoded.slice(1)}`;
   await assert.rejects(() => codec.decode(tampered, "account-a"), /Invalid sync cursor/);
   now += 60_000;
   await assert.rejects(() => codec.decode(cursor, "account-a"), /Invalid sync cursor/);

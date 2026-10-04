@@ -151,9 +151,10 @@ test("OIDC code flow uses PKCE/state/nonce and creates an encrypted same-origin 
 });
 
 test("OIDC callback rejects a state mismatch and logout rejects cross-site origins", async () => {
+  let diagnostic;
   const fetcher = async url => url === `${issuer}/.well-known/openid-configuration` ? Response.json({ issuer,
     authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: jwksUri }) : new Response("unexpected", { status: 500 });
-  const service = new OidcSessionService({ ...authOptions(), fetcher });
+  const service = new OidcSessionService({ ...authOptions(), fetcher, diagnosticLogger: value => { diagnostic = value; } });
   const login = await service.handle(new Request("https://app.example.test/api/v1/auth/login"));
   const cookie = login.headers.get("Set-Cookie").split(";")[0];
   const callback = new URL(redirectUri);
@@ -161,10 +162,68 @@ test("OIDC callback rejects a state mismatch and logout rejects cross-site origi
   callback.searchParams.set("state", "attacker-state");
   const failed = await service.handle(new Request(callback, { headers: { Cookie: cookie } }));
   assert.equal(failed.status, 401);
+  assert.equal(await failed.text(), "Authentication failed. Please try signing in again.");
+  assert.deepEqual(diagnostic, { event: "oidc_authentication_failure", route: "callback", code: "callback_flow_invalid" });
   const logout = await service.handle(new Request("https://app.example.test/api/v1/auth/logout", {
     method: "POST", headers: { Origin: "https://evil.example" }
   }));
   assert.equal(logout.status, 403);
+});
+
+test("OIDC callback logs redacted diagnostic codes for provider and token failures", async () => {
+  const cases = [
+    { code: "callback_provider_error", status: 401, providerError: true, expectedTokenRequests: 0 },
+    { code: "callback_token_exchange_rejected", status: 401, expectedTokenRequests: 1,
+      tokenResponse: () => Response.json({ error: "invalid_client", error_description: "private-provider-description" }, { status: 401 }) },
+    { code: "callback_token_exchange_failed", status: 503, expectedTokenRequests: 1,
+      tokenResponse: () => { throw new Error("private-token-endpoint-details"); } },
+    { code: "callback_token_response_invalid", status: 401, expectedTokenRequests: 1,
+      tokenResponse: () => Response.json({ access_token: "private-access-token", expires_in: 3600 }) },
+    { code: "callback_id_token_invalid", status: 401, expectedTokenRequests: 1,
+      tokenResponse: () => Response.json({ access_token: "private-access-token", id_token: "private-id-token",
+        token_type: "Bearer", expires_in: 3600 }) }
+  ];
+
+  for (const item of cases) {
+    let diagnostic;
+    let tokenRequests = 0;
+    const fetcher = async input => {
+      const url = String(input);
+      if (url === `${issuer}/.well-known/openid-configuration`) return Response.json({ issuer,
+        authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: jwksUri });
+      if (url === `${issuer}/token`) {
+        tokenRequests++;
+        return item.tokenResponse();
+      }
+      return new Response("unexpected", { status: 500 });
+    };
+    const service = new OidcSessionService({ ...authOptions(), fetcher, diagnosticLogger: value => { diagnostic = value; } });
+    const marker = "private-return-and-provider-error-marker";
+    const login = await service.handle(new Request(
+      `https://app.example.test/api/v1/auth/login?returnTo=${encodeURIComponent(`/tasks?marker=${marker}`)}`));
+    const cookie = login.headers.get("Set-Cookie").split(";")[0];
+    const authorization = new URL(login.headers.get("Location"));
+    const callback = new URL(redirectUri);
+    if (item.providerError) {
+      callback.searchParams.set("error", "access_denied");
+      callback.searchParams.set("error_description", marker);
+    } else {
+      callback.searchParams.set("code", "one-time-code");
+      callback.searchParams.set("state", authorization.searchParams.get("state"));
+    }
+
+    const failed = await service.handle(new Request(callback, { headers: { Cookie: cookie } }));
+    assert.equal(failed.status, item.status, item.code);
+    if (item.status === 401) assert.equal(await failed.text(), "Authentication failed. Please try signing in again.");
+    else assert.deepEqual(await failed.json(), { error: "authentication_unavailable" });
+    assert.deepEqual(diagnostic, { event: "oidc_authentication_failure", route: "callback", code: item.code });
+    assert.equal(JSON.stringify(diagnostic).includes(marker), false);
+    assert.equal(JSON.stringify(diagnostic).includes("private-token-endpoint-details"), false);
+    assert.equal(JSON.stringify(diagnostic).includes("private-provider-description"), false);
+    assert.equal(JSON.stringify(diagnostic).includes("private-access-token"), false);
+    assert.equal(JSON.stringify(diagnostic).includes("private-id-token"), false);
+    assert.equal(tokenRequests, item.expectedTokenRequests);
+  }
 });
 
 test("browser-cookie sync writes require exact same-origin while bearer writes remain stateless", async () => {
