@@ -8,13 +8,15 @@
     "build": "next build",
     "build:vinext": "vite build",
     "deploy:worker": "node scripts/deploy-worker.mjs",
+    "migrate:local": "wrangler d1 migrations apply ltm-todo-notifications --local && wrangler d1 migrations apply ltm-todo-sync --local",
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+    "test": "node --experimental-strip-types --experimental-sqlite --test tests/*.test.mjs"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "2.0.0",
+    "ical.js": "^2.2.1",
     "next": "16.3.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"
@@ -27,8 +29,11 @@
     "@types/react-dom": "19.1.9",
     "@vinext/cloudflare": "1.0.0",
     "@vitejs/plugin-rsc": "^0.5.34",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "eslint": "9.36.0",
     "eslint-config-next": "16.3.6",
+    "fake-indexeddb": "^6.2.5",
     "typescript": "5.9.2",
     "vinext": "1.0.0",
     "vite": "latest",

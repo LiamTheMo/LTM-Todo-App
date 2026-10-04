@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "mutations": [
+    {
+      "entityType": "tasks",
+      "entityId": "4fef5e72-f114-4ea5-8d40-9d8069654f40",
+      "baseRevision": -1,
+      "operation": "upsert",
+      "clientMutationId": "4e731b4e-c82c-4df6-a26a-847a2c115414",
+      "clientSchemaVersion": 4,
+      "payload": { "id": "4fef5e72-f114-4ea5-8d40-9d8069654f40" }
+    }
+  ]
+}

@@ -132,3 +132,12 @@ button.danger{color:#a83728!important}
 .dashboardHome .otherTasksPanel{flex:0 1 auto;max-height:min(22vh,180px);min-height:0;overflow-y:auto;overscroll-behavior:contain;margin-bottom:10px;border:1px solid #e1dbd3;border-radius:14px;background:#fff}
 .dashboardHome .otherTasksPanel .group{padding:8px 16px}
 .dashboardHome .otherTasksPanel h4{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;background:#fff}
+
+.calendarManagementActions,.calendarEditActions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.calendarManagementActions button,.calendarEditActions button:not(.calendarEditButton){border:0;border-radius:7px;padding:6px 9px;background:#f4e5d2;color:#8b4b14;font-size:11px;font-weight:650;cursor:pointer}
+.calendarManagementActions button:disabled,.calendarEditActions button:disabled{opacity:.55;cursor:wait}
+.calendarToggles .calendarToggle label small{color:#8c837a}
+.calendarCreateForm>p{max-width:620px;margin:0;color:#756c61;font-size:12px;line-height:1.5}
+.calendarCreateForm input[type=url]{min-width:min(100%,320px)}
+.eventTitle[aria-label*="read-only"]{cursor:default;color:inherit}
+@media(max-width:700px){.calendarManagement{align-items:flex-start}.calendarManagementActions{width:100%;justify-content:flex-end}.calendarCreateForm input[type=url]{min-width:0}}

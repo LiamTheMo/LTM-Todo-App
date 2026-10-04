@@ -53,7 +53,7 @@ Classify audit results as:
 ## 5. Target client
 - Desktop, iPhone and iPad: responsive TypeScript/React web app, installable to the Home Screen on supported mobile browsers.
 - Shared contract: versioned API/domain schemas and deterministic recurrence/date semantics.
-- Backend in v3: API/sync service backed by PostgreSQL unless an ADR deliberately changes it.
+- Backend in v3: Cloudflare Worker APIs backed by D1, per-account Durable Objects for serialized sync, and R2 for attachment bytes, as decided in ADR 0003.
 
 ## 6. Quality bar
 Every phase document is an implementation contract. Do not silently omit acceptance criteria. Prefer modular, readable, testable code. Add tests with behavior. Date, recurrence, ordering, synchronization and conflict code require especially strong deterministic tests.

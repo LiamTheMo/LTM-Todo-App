@@ -26,7 +26,7 @@ test("scheduled work and due date stay in separate Dashboard groups", () => {
     endInstant: "2026-10-03T17:00:00Z", timeZone: "America/Edmonton",
     createdAt: "", updatedAt: "", revision: 1
   });
-  const days = dashboardDays(data, "2026-10-03", 3);
+  const days = dashboardDays(data, "2026-10-03", 3, "2026-10-03");
   assert.equal(days[0].scheduled[0].task.id, "one");
   assert.equal(days[2].due[0].id, "one");
   assert.equal(data.tasks[0].dueDate, "2026-10-05");

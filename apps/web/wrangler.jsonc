@@ -11,6 +11,18 @@
     "binding": "ASSETS"
   },
   "workers_dev": true,
+  "ratelimits": [
+    {
+      "name": "SYNC_EDGE_LIMITER",
+      "namespace_id": "93002011",
+      "simple": { "limit": 300, "period": 60 }
+    },
+    {
+      "name": "AUTH_EDGE_LIMITER",
+      "namespace_id": "93002012",
+      "simple": { "limit": 30, "period": 60 }
+    }
+  ],
   "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [
     {
@@ -19,6 +31,26 @@
       // Replace this UUID after creating the production D1 database.
       "database_id": "00000000-0000-4000-8000-000000000001",
       "migrations_dir": "migrations"
+    },
+    {
+      "binding": "SYNC_DB",
+      "database_name": "ltm-todo-sync",
+      "database_id": "00000000-0000-4000-8000-000000000002",
+      "migrations_dir": "sync-migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "SYNC_COORDINATOR", "class_name": "AccountSyncCoordinator" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["AccountSyncCoordinator"] }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS_BUCKET",
+      "bucket_name": "ltm-todo-attachments"
     }
   ],
   "vars": {
