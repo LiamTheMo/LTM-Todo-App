@@ -15,7 +15,7 @@ Phase work is delivered as cumulative checkpoints: `v2.01` (Phase 10), `v2.02` (
 
 ## Current implementation state
 
-The complete Phase 10–12 implementation is co-located in the dirty working tree on `feat/v2.01-phase10-cloudflare-d1` (`dfe1e4f`). It is not committed or pushed, and no remote CI, PR, merge, or production deployment has run for these changes. Do not read the status table as saying the phase branches/checkpoints have been delivered.
+The complete Phase 10–12 implementation is co-located on `feat/v2.01-phase10-cloudflare-d1` and has been pushed as commit `bc73fec`. A PR to the new `v2.01` checkpoint is the next promotion step; remote CI and merge have not run, and there is no production deployment. The code is integrated on one implementation branch rather than separated into distinct Phase 10/11/12 PRs, so the later phase checkpoints still need to be created after `v2.01` validation.
 
 ### Phase 10 — Backend, Authentication & Sync Protocol (`v2.01`)
 
@@ -52,4 +52,4 @@ The final local verification passed: 151 tests, TypeScript typecheck, ESLint, Vi
 
 **Requires manual validation:** Cloudflare production bindings/secrets/provider configuration; production migrations/connectivity; TLS/DNS pinning in the live Worker; multi-device and supported-device UI journeys; backup restore, deletion, retention, attachment-recovery and orphan-cleanup drills.
 
-**Incomplete release operations:** Commit and push the implementation branch; promote each phase through its permanent `v2.01`/`v2.02`/`v2.03` checkpoint with required checks; create and merge the `v3.00`-to-`main` PR; verify Cloudflare's main-branch deployment. Until those complete, deployed `main` remains the previous v2 behavior.
+**Incomplete release operations:** Open and merge the implementation PR to `v2.01`; wait for version-branch CI; create and validate `v2.02` and `v2.03` checkpoints; create and merge the `v3.00`-to-`main` PR; verify Cloudflare's main-branch deployment. Until those complete, deployed `main` remains the previous v2 behavior.
