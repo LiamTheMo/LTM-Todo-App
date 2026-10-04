@@ -1,10 +1,10 @@
 # Web Domain Data Model
 
-This describes the current local web schema (`schemaVersion: 4`) in `apps/web/lib/domain.ts`. It is an IndexedDB document, not a server schema. Future sync records and protocol fields are proposals until Phase 10/11.
+This describes the local web schema (`schemaVersion: 4`) in `apps/web/lib/domain.ts` and the separate v3 server sync model. The local document remains in IndexedDB; the v3 protocol mirrors supported entities into account-owned D1 records. The v3 backend/client are implemented locally but are not yet deployed.
 
 ## Shared entity fields
 
-Most persistent entities have `id` (UUID), `createdAt`, `updatedAt`, `revision`, and optional `deletedAt`. The top-level document has `generation` for cross-tab write detection. There is no owner ID, change journal, sync state, or account identity today.
+Most persistent entities have `id` (UUID), `createdAt`, `updatedAt`, `revision`, and optional `deletedAt`. The top-level document has `generation` for cross-tab write detection. Account identity is held by the authenticated session, not copied into entity payloads. The local document and sync outbox/cursor are stored separately in IndexedDB.
 
 ## Entities
 
@@ -28,8 +28,14 @@ Date-only task deadlines remain `YYYY-MM-DD` values and are not converted to UTC
 
 Entity `deletedAt` fields support local deletion semantics. The web client prunes expired Dashboard history to Today plus the previous 30 local calendar dates, including old due tasks, completions, and scheduled blocks/events according to their date rules.
 
-## Future synchronization model
+## Server synchronization model
 
-A server-side change journal, ownership model, cursor, conflict policy, and protocol do not exist yet. Phase 10 must define them; Phase 11 implements device convergence while local writes remain available offline. Preserve stable IDs and revisions, and do not treat the proposed sync model as part of schema v4 currently stored in IndexedDB.
+The v1 sync protocol mirrors the listed entity types into account-scoped D1 rows. D1 stores revisions, tombstones, idempotency results, and an ordered change journal; opaque account-scoped cursors drive incremental pulls. The Durable Object serializes each account's sync requests. Client writes remain local-first and are queued in a separate IndexedDB journal. Attachments are stored in R2 with D1 metadata and are not embedded in task payloads.
 
-External calendar subscriptions are also future v3 data and are not represented in schema v4. Phase 10 must define an account-owned subscription record, protected storage for its HTTPS feed URL, and source identity metadata. Phase 11 may materialize fetched events in a separate read-only source calendar; subscription refresh must update/cancel events by stable source UID without converting them to editable local events or tasks.
+## External calendar subscriptions
+
+ICS subscriptions live in a separate account-owned D1 table, not in the editable entity-sync payload. The source HTTPS URL is an encrypted bearer secret; validators, refresh timestamps, backoff state, and a bounded event cache are stored server-side. Refreshes run through the Worker and a pinned-address TLS transport; clients never fetch arbitrary feed URLs directly.
+
+The client persists a bounded cached subscription response for offline display. Feed-derived CalendarEvent projections are ephemeral and read-only: they use the source UID and original recurrence identity for stable rendering but are not written to the editable `calendarEvents` collection. Subscription URLs, cached feed text/events, and attachment bytes are excluded from portable backups. User-owned calendar metadata may be present locally for presentation, but subscription credentials are never part of the sync entity payload.
+
+Production DNS/TLS socket behavior and provider compatibility remain a live validation gate before enabling the service on `main`.
