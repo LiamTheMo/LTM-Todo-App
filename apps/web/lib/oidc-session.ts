@@ -236,7 +236,7 @@ export class OidcSessionService {
     const form = new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: this.options.redirectUri,
       client_id: this.options.clientId, code_verifier: flow.verifier });
     if (this.options.clientSecret) form.set("client_secret", this.options.clientSecret);
-    const tokenResponse = await this.fetcher(metadata.token_endpoint, { method: "POST", redirect: "error",
+    const tokenResponse = await this.fetcher(metadata.token_endpoint, { method: "POST", redirect: "manual",
       signal: AbortSignal.timeout(5_000), headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" }, body: form });
     const tokens = await readJsonBounded(tokenResponse);
     if (!tokenResponse.ok || !isObject(tokens) || typeof tokens.access_token !== "string" ||
@@ -325,7 +325,7 @@ export class OidcSessionService {
     let response: Response;
     try {
       response = await this.fetcher(`${issuer}/.well-known/openid-configuration`, {
-        redirect: "error", signal: AbortSignal.timeout(5_000), headers: { Accept: "application/json" }
+        redirect: "manual", signal: AbortSignal.timeout(5_000), headers: { Accept: "application/json" }
       });
     } catch {
       throw new OidcDiscoveryFailure("provider_discovery_fetch_failed");
