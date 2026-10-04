@@ -19,6 +19,7 @@ export type OidcSessionOptions = OidcVerifierOptions & {
   fetcher?: typeof fetch;
   now?: () => number;
   sessionRegistry?: AuthSessionRegistry;
+  diagnosticLogger?: (diagnostic: OidcAuthenticationDiagnostic) => void;
 };
 
 type OidcMetadata = {
@@ -31,6 +32,32 @@ type ProviderEndpoints = { authorization_endpoint: string; token_endpoint: strin
 type OidcFlow = { state: string; nonce: string; verifier: string; returnPath: string; issuedAt: number };
 type OidcSession = { accessToken: string; expiresAt: number; sessionId?: string };
 type JsonObject = Record<string, unknown>;
+
+export type OidcAuthenticationDiagnosticRoute =
+  | "login" | "callback" | "session" | "sessions" | "session_revoke" | "logout" | "logout_all" | "unknown";
+export type OidcAuthenticationDiagnosticCode =
+  | "provider_discovery_fetch_failed"
+  | "provider_discovery_http_error"
+  | "provider_discovery_invalid_document"
+  | "provider_issuer_mismatch"
+  | "provider_jwks_uri_mismatch"
+  | "provider_endpoint_invalid"
+  | "unexpected_error";
+export type OidcAuthenticationDiagnostic = {
+  event: "oidc_authentication_failure";
+  route: OidcAuthenticationDiagnosticRoute;
+  code: OidcAuthenticationDiagnosticCode;
+};
+
+class OidcDiscoveryFailure extends Error {
+  readonly code: OidcAuthenticationDiagnosticCode;
+
+  constructor(code: OidcAuthenticationDiagnosticCode) {
+    super("OIDC provider discovery failed");
+    this.name = "OidcDiscoveryFailure";
+    this.code = code;
+  }
+}
 
 const isObject = (value: unknown): value is JsonObject => value !== null && typeof value === "object" && !Array.isArray(value);
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
@@ -150,7 +177,18 @@ export class OidcSessionService {
       if (pathname === "/api/v1/auth/logout-all" && request.method === "POST") return await this.logoutAll(request);
       if (/^\/api\/v1\/auth\/sessions\/[0-9a-f]{64}$/i.test(pathname) && request.method === "POST") return await this.revokeSession(request, pathname.slice(pathname.lastIndexOf("/") + 1));
       return json({ error: "not_found" }, 404);
-    } catch {
+    } catch (error) {
+      const diagnostic: OidcAuthenticationDiagnostic = {
+        event: "oidc_authentication_failure",
+        route: diagnosticRoute(pathname),
+        code: error instanceof OidcDiscoveryFailure ? error.code : "unexpected_error"
+      };
+      try {
+        if (this.options.diagnosticLogger) this.options.diagnosticLogger(diagnostic);
+        else console.error(JSON.stringify(diagnostic));
+      } catch {
+        // Diagnostics must never change the public authentication response.
+      }
       return json({ error: "authentication_unavailable" }, 503);
     }
   }
@@ -284,18 +322,53 @@ export class OidcSessionService {
   private async getMetadata(): Promise<ProviderEndpoints> {
     if (this.metadata && this.metadata.expiresAt > this.now()) return this.metadata.value;
     const issuer = this.options.issuer.replace(/\/$/, "");
-    const response = await this.fetcher(`${issuer}/.well-known/openid-configuration`, {
-      redirect: "error", signal: AbortSignal.timeout(5_000), headers: { Accept: "application/json" }
-    });
-    const metadata = await readJsonBounded(response) as OidcMetadata | undefined;
-    if (!response.ok || !metadata || metadata.issuer !== this.options.issuer || metadata.jwks_uri !== this.options.jwksUri ||
-        typeof metadata.authorization_endpoint !== "string" || typeof metadata.token_endpoint !== "string") throw new Error("Invalid OIDC metadata");
+    let response: Response;
+    try {
+      response = await this.fetcher(`${issuer}/.well-known/openid-configuration`, {
+        redirect: "error", signal: AbortSignal.timeout(5_000), headers: { Accept: "application/json" }
+      });
+    } catch {
+      throw new OidcDiscoveryFailure("provider_discovery_fetch_failed");
+    }
+    if (!response.ok) throw new OidcDiscoveryFailure("provider_discovery_http_error");
+    let metadataValue: unknown;
+    try {
+      metadataValue = await readJsonBounded(response);
+    } catch {
+      throw new OidcDiscoveryFailure("provider_discovery_invalid_document");
+    }
+    if (!isObject(metadataValue)) throw new OidcDiscoveryFailure("provider_discovery_invalid_document");
+    const metadata = metadataValue as OidcMetadata;
+    if (metadata.issuer !== this.options.issuer) throw new OidcDiscoveryFailure("provider_issuer_mismatch");
+    if (metadata.jwks_uri !== this.options.jwksUri) throw new OidcDiscoveryFailure("provider_jwks_uri_mismatch");
+    if (typeof metadata.authorization_endpoint !== "string" || typeof metadata.token_endpoint !== "string") {
+      throw new OidcDiscoveryFailure("provider_discovery_invalid_document");
+    }
     for (const endpoint of [metadata.authorization_endpoint, metadata.token_endpoint, metadata.jwks_uri]) {
-      if (typeof endpoint !== "string" || new URL(endpoint).protocol !== "https:") throw new Error("OIDC endpoints must use HTTPS");
+      if (typeof endpoint !== "string") throw new OidcDiscoveryFailure("provider_discovery_invalid_document");
+      let parsedEndpoint: URL;
+      try {
+        parsedEndpoint = new URL(endpoint);
+      } catch {
+        throw new OidcDiscoveryFailure("provider_endpoint_invalid");
+      }
+      if (parsedEndpoint.protocol !== "https:") throw new OidcDiscoveryFailure("provider_endpoint_invalid");
     }
     const value = { authorization_endpoint: metadata.authorization_endpoint, token_endpoint: metadata.token_endpoint };
     this.metadata = { value, expiresAt: this.now() + 10 * 60_000 };
     return value;
+  }
+}
+
+function diagnosticRoute(pathname: string): OidcAuthenticationDiagnosticRoute {
+  switch (pathname) {
+    case "/api/v1/auth/login": return "login";
+    case "/api/v1/auth/callback": return "callback";
+    case "/api/v1/auth/session": return "session";
+    case "/api/v1/auth/sessions": return "sessions";
+    case "/api/v1/auth/logout": return "logout";
+    case "/api/v1/auth/logout-all": return "logout_all";
+    default: return /^\/api\/v1\/auth\/sessions\/[0-9a-f]{64}$/i.test(pathname) ? "session_revoke" : "unknown";
   }
 }
 
