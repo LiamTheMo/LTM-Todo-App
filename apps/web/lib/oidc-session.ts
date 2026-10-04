@@ -42,6 +42,17 @@ export type OidcAuthenticationDiagnosticCode =
   | "provider_issuer_mismatch"
   | "provider_jwks_uri_mismatch"
   | "provider_endpoint_invalid"
+  | "callback_request_invalid"
+  | "callback_provider_error"
+  | "callback_flow_invalid"
+  | "callback_code_invalid"
+  | "callback_token_exchange_failed"
+  | "callback_token_exchange_rejected"
+  | "callback_token_response_invalid"
+  | "callback_id_token_invalid"
+  | "callback_access_token_invalid"
+  | "callback_identity_mismatch"
+  | "callback_session_cookie_too_large"
   | "unexpected_error";
 export type OidcAuthenticationDiagnostic = {
   event: "oidc_authentication_failure";
@@ -55,6 +66,16 @@ class OidcDiscoveryFailure extends Error {
   constructor(code: OidcAuthenticationDiagnosticCode) {
     super("OIDC provider discovery failed");
     this.name = "OidcDiscoveryFailure";
+    this.code = code;
+  }
+}
+
+class OidcCallbackFailure extends Error {
+  readonly code: OidcAuthenticationDiagnosticCode;
+
+  constructor(code: OidcAuthenticationDiagnosticCode) {
+    super("OIDC callback processing failed");
+    this.name = "OidcCallbackFailure";
     this.code = code;
   }
 }
@@ -181,14 +202,10 @@ export class OidcSessionService {
       const diagnostic: OidcAuthenticationDiagnostic = {
         event: "oidc_authentication_failure",
         route: diagnosticRoute(pathname),
-        code: error instanceof OidcDiscoveryFailure ? error.code : "unexpected_error"
+        code: error instanceof OidcDiscoveryFailure || error instanceof OidcCallbackFailure
+          ? error.code : "unexpected_error"
       };
-      try {
-        if (this.options.diagnosticLogger) this.options.diagnosticLogger(diagnostic);
-        else console.error(JSON.stringify(diagnostic));
-      } catch {
-        // Diagnostics must never change the public authentication response.
-      }
+      this.logDiagnostic(diagnostic);
       return json({ error: "authentication_unavailable" }, 503);
     }
   }
@@ -229,32 +246,48 @@ export class OidcSessionService {
     const flowValid = flow && Number.isFinite(flow.issuedAt) && flow.issuedAt <= this.now() &&
       flow.issuedAt + FLOW_LIFETIME_SECONDS * 1000 > this.now() && typeof flow.verifier === "string" &&
       typeof flow.nonce === "string" && typeof flow.state === "string" && state === flow.state;
-    if (url.origin !== callback.origin || url.pathname !== callback.pathname || !flowValid || !code || code.length > 4096 ||
-        url.searchParams.has("error")) return this.authFailure();
+    if (url.origin !== callback.origin || url.pathname !== callback.pathname) return this.authFailure("callback_request_invalid");
+    if (url.searchParams.has("error")) return this.authFailure("callback_provider_error");
+    if (!flowValid) return this.authFailure("callback_flow_invalid");
+    if (!code || code.length > 4096) return this.authFailure("callback_code_invalid");
 
     const metadata = await this.getMetadata();
     const form = new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: this.options.redirectUri,
       client_id: this.options.clientId, code_verifier: flow.verifier });
     if (this.options.clientSecret) form.set("client_secret", this.options.clientSecret);
-    const tokenResponse = await this.fetcher(metadata.token_endpoint, { method: "POST", redirect: "manual",
-      signal: AbortSignal.timeout(5_000), headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" }, body: form });
+    let tokenResponse: Response;
+    try {
+      tokenResponse = await this.fetcher(metadata.token_endpoint, { method: "POST", redirect: "manual",
+        signal: AbortSignal.timeout(5_000), headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" }, body: form });
+    } catch {
+      throw new OidcCallbackFailure("callback_token_exchange_failed");
+    }
+    if (!tokenResponse.ok) return this.authFailure("callback_token_exchange_rejected");
     const tokens = await readJsonBounded(tokenResponse);
-    if (!tokenResponse.ok || !isObject(tokens) || typeof tokens.access_token !== "string" ||
+    if (!isObject(tokens) || typeof tokens.access_token !== "string" ||
         typeof tokens.id_token !== "string" || typeof tokens.expires_in !== "number" || !Number.isInteger(tokens.expires_in) ||
         tokens.expires_in < 1 || tokens.expires_in > MAX_SESSION_SECONDS ||
-        (tokens.token_type !== undefined && tokens.token_type !== "Bearer")) return this.authFailure();
+        (tokens.token_type !== undefined && tokens.token_type !== "Bearer")) return this.authFailure("callback_token_response_invalid");
 
-    const [identity, accessPrincipal] = await Promise.all([
-      this.idTokenVerifier.verifyToken(tokens.id_token, flow.nonce),
-      this.accessTokenVerifier.verifyToken(tokens.access_token)
-    ]);
-    if (!identity || !accessPrincipal || identity.issuer !== accessPrincipal.issuer || identity.subject !== accessPrincipal.subject) {
-      return this.authFailure();
+    let identity: SyncPrincipal | undefined;
+    let accessPrincipal: SyncPrincipal | undefined;
+    try {
+      [identity, accessPrincipal] = await Promise.all([
+        this.idTokenVerifier.verifyToken(tokens.id_token, flow.nonce),
+        this.accessTokenVerifier.verifyToken(tokens.access_token)
+      ]);
+    } catch {
+      throw new OidcCallbackFailure("callback_token_exchange_failed");
+    }
+    if (!identity) return this.authFailure("callback_id_token_invalid");
+    if (!accessPrincipal) return this.authFailure("callback_access_token_invalid");
+    if (identity.issuer !== accessPrincipal.issuer || identity.subject !== accessPrincipal.subject) {
+      return this.authFailure("callback_identity_mismatch");
     }
     const expiresAt = this.now() + tokens.expires_in * 1000;
     const sessionId = crypto.randomUUID();
     const session = await this.cookies.seal({ accessToken: tokens.access_token, expiresAt, sessionId } satisfies OidcSession, "session");
-    if (session.length > MAX_COOKIE_VALUE_CHARS) return this.authFailure();
+    if (session.length > MAX_COOKIE_VALUE_CHARS) return this.authFailure("callback_session_cookie_too_large");
     if (this.options.sessionRegistry) await this.options.sessionRegistry.issue(accessPrincipal, sessionId, expiresAt);
     const headers = new Headers({ Location: new URL(flow.returnPath, callback.origin).href, "Cache-Control": "no-store",
       "Referrer-Policy": "no-referrer" });
@@ -313,10 +346,20 @@ export class OidcSessionService {
     return new Response(null, { status: 204, headers });
   }
 
-  private authFailure(): Response {
+  private authFailure(code: OidcAuthenticationDiagnosticCode): Response {
+    this.logDiagnostic({ event: "oidc_authentication_failure", route: "callback", code });
     const headers = new Headers({ "Cache-Control": "no-store" });
     headers.append("Set-Cookie", cookieHeader(FLOW_COOKIE, "", 0));
     return new Response("Authentication failed. Please try signing in again.", { status: 401, headers });
+  }
+
+  private logDiagnostic(diagnostic: OidcAuthenticationDiagnostic): void {
+    try {
+      if (this.options.diagnosticLogger) this.options.diagnosticLogger(diagnostic);
+      else console.error(JSON.stringify(diagnostic));
+    } catch {
+      // Diagnostics must never change the public authentication response.
+    }
   }
 
   private async getMetadata(): Promise<ProviderEndpoints> {
