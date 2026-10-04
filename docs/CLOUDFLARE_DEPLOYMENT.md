@@ -47,14 +47,15 @@ The auth API keeps provider failures generic for browsers and emits a redacted W
 
 Diagnostic codes:
 
-- `provider_discovery_fetch_failed` — the Worker could not fetch Auth0's discovery document.
-- `provider_discovery_http_error` — Auth0 returned a non-success status.
-- `provider_discovery_invalid_document` — the discovery response was missing required OIDC fields or was not valid JSON.
-- `provider_issuer_mismatch` or `provider_jwks_uri_mismatch` — the deployed build secret differs from the exact value in Auth0's discovery document.
-- `provider_endpoint_invalid` — an advertised OIDC endpoint is malformed or does not use HTTPS.
-- `unexpected_error` — another error occurred; no exception details are written to logs.
+- `provider_discovery_fetch_failed`, `provider_discovery_http_error`, `provider_discovery_invalid_document`, `provider_issuer_mismatch`, `provider_jwks_uri_mismatch`, and `provider_endpoint_invalid` identify discovery fetch, HTTP, document, or configuration failures.
+- `callback_provider_error`, `callback_flow_invalid`, `callback_code_invalid`, and `callback_request_invalid` identify an Auth0 callback error or invalid/missing login-flow state.
+- `callback_token_exchange_failed` and `callback_token_exchange_rejected` distinguish a failed token request from a non-success Auth0 response.
+- `callback_token_response_invalid`, `callback_id_token_invalid`, and `callback_access_token_invalid` identify malformed token data or an ID/access token that failed verification (including issuer, audience, signature, or nonce checks).
+- `callback_token_verification_failed` means the Worker could not complete signing-key verification; `callback_identity_mismatch` means the verified tokens identify different subjects or issuers.
+- `callback_session_cookie_too_large` means the encrypted session exceeded the safe cookie-size limit.
+- `unexpected_error` identifies an otherwise unclassified failure; no exception details are written.
 
-The public response remains `503 authentication_unavailable`; the diagnostic code is available only in Worker logs.
+Discovery and unexpected runtime failures return `503 authentication_unavailable`; rejected callback/token conditions return a generic `401` message. The exact diagnostic code is available only in Worker logs.
 
 ## Background push notifications
 
