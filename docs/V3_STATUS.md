@@ -4,26 +4,26 @@
 
 Deliver an offline-first account and synchronization system across the supported responsive web app on desktop, iPhone, and iPad. Add protected attachments, portable backups, and optional read-only HTTPS iCalendar (ICS) subscriptions without changing local-first task behavior or the 31-calendar-day Dashboard history policy. Native Apple app source is not maintained; mobile support is through the installed web app.
 
-Phase work is delivered as cumulative checkpoints: `v2.01` (Phase 10), `v2.02` (Phase 11), and `v2.03` (Phase 12), followed by the integrated `v3.00` release PR to `main`. Production deployment is main-only through Cloudflare Workers Builds. No temporary feature branch is a release.
+Phase checkpoints are cumulative: `v2.01` (Phase 10), `v2.02` (Phase 11), and `v2.03` (Phase 12), followed by the integrated `v3.00` release and Cloudflare production deployment from `main`.
 
-| Checkpoint | Phase | Code status in current local tree | Promotion status |
+| Checkpoint | Phase | Implementation | Promotion / validation |
 | --- | --- | --- | --- |
-| `v2.01` | Backend, authentication, and sync protocol | Implemented; local checks pass | Not yet merged to the checkpoint |
-| `v2.02` | Multi-device web client and read-only ICS subscriptions | Implemented; local checks pass | Not yet merged to the checkpoint |
-| `v2.03` | Backup/restore, attachments, lifecycle and release hardening | Implemented; local checks pass | Not yet merged to the checkpoint |
-| `v3.00` | Integrated v3 release | Code is present locally | Not yet created, reviewed, or promoted |
+| `v2.01` | Phase 10: backend, authentication, and sync protocol | Complete Phase 10–12 implementation is present in this cumulative tree | PR #144 merged; `web` and `docs` CI passed on commit `2d5a926` |
+| `v2.02` | Phase 11: multi-device sync and ICS | Inherits the complete implementation from `v2.01`; phase code landed together in PR #144 | Checkpoint created from validated `v2.01`; Phase 11 checkpoint promotion is in progress |
+| `v2.03` | Phase 12: portability, attachments, lifecycle, and release hardening | Implemented and tested in the inherited cumulative tree | Checkpoint not yet created |
+| `v3.00` | Integrated release | Code is present in the cumulative tree | Release branch/PR to `main` not yet created; no production deployment |
 
 ## Current implementation state
 
-The complete Phase 10–12 implementation is co-located on `feat/v2.01-phase10-cloudflare-d1` and has been pushed as commit `bc73fec`. A PR to the new `v2.01` checkpoint is the next promotion step; remote CI and merge have not run, and there is no production deployment. The code is integrated on one implementation branch rather than separated into distinct Phase 10/11/12 PRs, so the later phase checkpoints still need to be created after `v2.01` validation.
+PR #144 (`feat/v2.01-phase10-cloudflare-d1`) merged the complete Phase 10–12 implementation into `v2.01` as commit `2d5a9265f78966b20dfbe4f6bdd5ca4c683854e4`. The branch's GitHub Actions run completed successfully: both required `web` and `docs` checks passed. The original implementation was co-located rather than delivered as three independent phase PRs. The later `v2.02` and `v2.03` branches are being maintained as cumulative checkpoints, and this history is not represented as separate phase-specific code delivery.
 
 ### Phase 10 — Backend, Authentication & Sync Protocol (`v2.01`)
 
-- [x] Threat model and Cloudflare backend/auth decision are documented in ADR 0003.
-- [x] Versioned entity schema, authorization boundary, protocol JSON Schema, valid/invalid fixtures, API parser, and account-scoped opaque cursors are implemented and tested.
+- [x] Cloudflare backend/auth decision and threat model are documented in ADR 0003.
+- [x] Versioned entity schema, authorization boundary, protocol JSON Schema, fixtures, API parser, and account-scoped opaque cursors are implemented and tested.
 - [x] D1 sync schema and transactional adapter, per-account Durable Object coordination, OIDC verification, Authorization Code + PKCE session flow, CSRF/origin checks, bounded requests, and rate limits are implemented.
 - [x] Local migrations and SQLite integration tests cover atomicity, account isolation, conflicts, and retry behavior.
-- [ ] Production OIDC compatibility, D1/R2/Durable Object bindings, edge-limit namespaces, secrets, and migrations still require provisioned Cloudflare resources and live smoke tests.
+- [ ] Production OIDC compatibility, D1/R2/Durable Object bindings, edge-limit namespaces, secrets, and migrations require provisioned Cloudflare resources and live smoke tests.
 
 ### Phase 11 — Multi-Device Sync & Web Client (`v2.02`)
 
@@ -31,25 +31,23 @@ The complete Phase 10–12 implementation is co-located on `feat/v2.01-phase10-c
 - [x] Read-only ICS subscriptions support add, refresh, visibility, recoloring, unsubscribe, conditional requests, bounded caching, and offline display. Feed URLs are encrypted at rest and excluded from browser logs and portable backups.
 - [x] The Worker fetch path validates every redirect and DNS answer, connects to a literal validated address with TLS hostname verification, bounds time/response size, and parses stable recurrence identities, including moved and cancelled exceptions.
 - [ ] Verify actual Worker DNS/TLS socket behavior and OIDC/ICS integration against provisioned Cloudflare resources before enabling production feed refresh.
-- [ ] Desktop, iPhone/iPad installed-web-app, multi-device conflict, and offline/online journeys still need manual supported-device validation.
+- [ ] Desktop, iPhone/iPad installed-web-app, multi-device conflict, and offline/online journeys require supported-device validation.
 
 ### Phase 12 — Portability, Attachments & Lifecycle (`v2.03`)
 
-- [x] Versioned local JSON backup/restore is size-bounded and fully validated before replacement. It deliberately excludes attachment bytes/metadata and ICS URLs/event caches; attachments are downloaded separately, and feed URLs are never exported unencrypted.
+- [x] Versioned local JSON backup/restore is size-bounded and fully validated before replacement. It excludes attachment bytes/metadata and ICS URLs/event caches; attachments are downloaded separately, and feed URLs are never exported unencrypted.
 - [x] Private account-scoped attachment APIs use D1 metadata and R2 bytes, enforce task ownership and content/size limits, support durable offline upload retries, and enqueue failed object deletions for cleanup.
-- [x] Account-scoped session listing/revocation, device inactivity retirement, cursor-aware journal/tombstone retention, account deletion, paged R2 cleanup, and orphan reconciliation are implemented with failure-path tests. App session revocation does not revoke the user's session at the identity provider.
-- [x] Sharing/collaboration is explicitly deferred from the initial v3.00 release; it requires a separately designed membership/role model and is not implied by object identifiers.
-- [ ] Run production backup-restore, account-deletion, R2 reconciliation, and retention drills after resource provisioning.
+- [x] Account-scoped session listing/revocation, device inactivity retirement, cursor-aware journal/tombstone retention, account deletion, paged R2 cleanup, and orphan reconciliation have failure-path tests. App session revocation does not revoke a user's session at the identity provider.
+- [x] Sharing/collaboration is explicitly deferred from the initial v3.00 release; object identifiers do not imply a membership/role model.
+- [ ] Run production backup-restore, account-deletion, R2 reconciliation, and retention drills after Cloudflare resource provisioning.
 - [ ] Complete accessibility, performance, migration, supported-device, and production security/recovery reviews.
 
-## Local verification
+## Automated verification
 
-The final local verification passed: 151 tests, TypeScript typecheck, ESLint, Vinext production build, and the dependency audit. The dependency audit allows only its documented, unpatched development-only `braces` advisory; the production dependency audit is clean. `git diff --check` and the local `v2.01` branch-flow validation also pass.
+Local validation on the implementation tree passed: 151 tests, TypeScript typecheck, ESLint, Vinext production build, and dependency audit. The production dependency audit is clean; one documented unpatched development-only `braces` advisory remains allowed. On the merged `v2.01` commit, GitHub Actions `web` and `docs` checks both passed.
 
-## Release audit
+## Remaining release gates
 
-**Completed locally:** Phase 10–12 code and automated behavior tests.
+**Requires Cloudflare/user-side configuration and live validation:** production D1, R2, Durable Object and rate-limit bindings; OIDC provider settings and secrets; production migrations/connectivity; TLS/DNS pinning in the live Worker; cross-device and supported-device journeys; backup restore, account deletion, retention, attachment recovery, and orphan-cleanup drills.
 
-**Requires manual validation:** Cloudflare production bindings/secrets/provider configuration; production migrations/connectivity; TLS/DNS pinning in the live Worker; multi-device and supported-device UI journeys; backup restore, deletion, retention, attachment-recovery and orphan-cleanup drills.
-
-**Incomplete release operations:** Open and merge the implementation PR to `v2.01`; wait for version-branch CI; create and validate `v2.02` and `v2.03` checkpoints; create and merge the `v3.00`-to-`main` PR; verify Cloudflare's main-branch deployment. Until those complete, deployed `main` remains the previous v2 behavior.
+**Still in progress:** merge and validate the `v2.02` and `v2.03` cumulative checkpoints; create the `v3.00` release branch and PR to `main`; verify Cloudflare Workers Builds production deployment. No production deployment has been verified yet.
