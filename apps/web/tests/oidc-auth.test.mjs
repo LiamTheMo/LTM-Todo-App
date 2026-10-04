@@ -90,6 +90,21 @@ test("refreshes unknown signing keys once and rejects bad signatures", async () 
   })), undefined);
 });
 
+test("rejects issuer signing-key redirects without following them", async () => {
+  const { pair } = await keys();
+  let fetchOptions;
+  const auth = new OidcJwtAuthenticator({ issuer, audience, jwksUri, now: () => now,
+    fetcher: async (_url, options = {}) => {
+      fetchOptions = options;
+      return new Response(null, { status: 302, headers: { Location: "https://attacker.example/keys" } });
+    } });
+  const token = await jwt(pair.privateKey, claims());
+  await assert.rejects(() => auth.authenticate(new Request("https://app.test", {
+    headers: { Authorization: `Bearer ${token}` }
+  })), /signing keys/);
+  assert.equal(fetchOptions.redirect, "manual");
+});
+
 test("fails closed and reports issuer-key outages without exposing token data", async () => {
   const auth = new OidcJwtAuthenticator({ issuer, audience, jwksUri, now: () => now,
     fetcher: async () => new Response("upstream diagnostic secret", { status: 503 }) });
