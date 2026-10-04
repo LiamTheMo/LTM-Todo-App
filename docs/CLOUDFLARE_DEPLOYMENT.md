@@ -17,12 +17,18 @@ Connect the GitHub repository to the existing Worker and set `main` as the produ
 
 Workers Builds installs dependencies automatically. Its API token must be allowed to edit Workers Scripts and D1 databases. Keep the token in Cloudflare's build settings; never put it in the repository.
 
-Add these production-only entries under **Settings → Builds → Build variables and secrets** as secrets:
+Add these production-only entries under **Settings → Builds → Build variables and secrets**. Database IDs may be build variables; all runtime values must be build secrets so the deployment command can install them as Worker secrets:
 
 - `D1_DATABASE_ID` — the UUID of the production D1 database. It is a database identifier, not an access credential, but this public repository keeps it out of Git by injecting it into temporary Wrangler config files during deployment.
+- `SYNC_D1_DATABASE_ID` — the UUID of the separate account-sync D1 database.
 - `VAPID_PRIVATE_KEY` — the private half of the dedicated Web Push VAPID key pair.
+- `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URI`, `OIDC_CLIENT_ID`, and `OIDC_REDIRECT_URI` — the identity provider configuration. Use the exact callback `<app-origin>/api/v1/auth/callback`.
+- `OIDC_CLIENT_SECRET` — optional; only needed for a confidential OIDC client.
+- `AUTH_SESSION_SECRET`, `SYNC_CURSOR_SECRET`, and `ICS_FEED_ENCRYPTION_KEY` — three distinct, stable, independently generated 32-byte base64url secrets. Do not rotate them casually: rotation invalidates browser sessions/cursors or makes stored feed URLs undecryptable.
 
-The deploy script requires Cloudflare's `WORKERS_CI=1` and `WORKERS_CI_BRANCH=main` values, applies remote D1 migrations, passes the private VAPID key to Wrangler as a runtime Worker secret, then deploys. Temporary config/secret files are removed afterwards. Do not replace this with `wrangler secret put` from a developer machine: that command deploys immediately and bypasses the main-only deployment flow.
+The deploy script requires Cloudflare's `WORKERS_CI=1` and `WORKERS_CI_BRANCH=main` values, validates the runtime configuration and 32-byte keys, applies remote D1 migrations, passes the Worker secrets to Wrangler, then deploys. Temporary config/secret files are removed afterwards. Do not replace this with `wrangler secret put` from a developer machine: that command deploys immediately and bypasses the main-only deployment flow.
+
+Production deployment still occurs only from `main`, after the temporary implementation branch has passed validation and been promoted through its v2.0x phase checkpoint(s) and v3.00 release PR. The deploy script applies all pending migrations for the two D1 databases before publishing. Create the `ltm-todo-sync` database and `ltm-todo-attachments` R2 bucket, and configure valid unique Cloudflare rate-limit namespace IDs in `wrangler.jsonc` before the first deployment of these bindings.
 
 ## Related commands
 
@@ -48,4 +54,4 @@ The web app stores tasks locally. When push is enabled, it sends reminder titles
 
 
 ## Data boundary
-The Worker also serves the Web Push API, but this is not a task-data backend. Task and calendar data remains in each browser's IndexedDB. D1 stores per-install push subscription and queued reminder-delivery data (including reminder title and scheduled instant); it does not synchronize user tasks between devices. Account-based task sync is planned for v3.
+The currently deployed `main` still uses the Web Push API without account task sync: task and calendar data remains in each browser's IndexedDB, while the notifications D1 stores per-install push subscription and queued reminder-delivery data (including reminder title and scheduled instant). The v3 work branch adds a separate sync D1 and R2 attachment store; those bindings are not active in production until the versioned release is promoted through `main`.

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ltm-todo.com/schemas/sync-v1.schema.json",
+  "title": "LTM Todo Sync Push Protocol v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "mutations"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "mutations": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/mutation" }
+    }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "entityType": {
+      "enum": ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews"]
+    },
+    "common": {
+      "type": "object",
+      "required": ["entityType", "entityId", "baseRevision", "operation", "clientMutationId", "clientSchemaVersion"],
+      "properties": {
+        "entityType": { "$ref": "#/$defs/entityType" },
+        "entityId": { "$ref": "#/$defs/uuid" },
+        "baseRevision": { "type": "integer", "minimum": 0 },
+        "clientMutationId": { "$ref": "#/$defs/uuid" },
+        "clientSchemaVersion": { "const": 4 }
+      }
+    },
+    "mutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entityType", "entityId", "baseRevision", "operation", "clientMutationId", "clientSchemaVersion"],
+      "properties": {
+        "entityType": { "$ref": "#/$defs/entityType" },
+        "entityId": { "$ref": "#/$defs/uuid" },
+        "baseRevision": { "type": "integer", "minimum": 0 },
+        "operation": { "enum": ["upsert", "delete"] },
+        "clientMutationId": { "$ref": "#/$defs/uuid" },
+        "clientSchemaVersion": { "const": 4 },
+        "payload": { "type": "object", "maxProperties": 100 }
+      },
+      "allOf": [
+        { "if": { "properties": { "operation": { "const": "upsert" } }, "required": ["operation"] },
+          "then": { "required": ["payload"], "properties": { "payload": { "type": "object" } } }, "else": { "not": { "required": ["payload"] } } },
+        { "if": { "properties": { "entityType": { "const": "tasks" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/taskPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "projects" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/projectPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "sections" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/sectionPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "tags" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/tagPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "blocks" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/blockPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "calendars" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/calendarPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "calendarEvents" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/calendarEventPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "taskTemplates" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/taskTemplatePayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "eventTemplates" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/eventTemplatePayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "routines" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/routinePayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "reminders" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/reminderPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "completions" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/completionPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "savedViews" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/savedViewPayload" } } } }
+      ]
+    },
+    "date": { "type": "string", "format": "date", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "instant": { "type": "string", "format": "date-time" },
+    "entityBase": {
+      "type": "object",
+      "required": ["id", "createdAt", "updatedAt", "revision"],
+      "properties": { "id": { "$ref": "#/$defs/uuid" }, "createdAt": { "$ref": "#/$defs/instant" },
+        "updatedAt": { "$ref": "#/$defs/instant" }, "revision": { "type": "integer", "minimum": 1 }, "deletedAt": { "$ref": "#/$defs/instant" } }
+    },
+    "taskRecurrence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["frequency", "interval", "anchorDate", "occurrences"],
+      "properties": {
+        "frequency": { "enum": ["daily", "weekly", "monthly", "yearly"] }, "interval": { "type": "integer", "minimum": 1 },
+        "weekdays": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 6 } }, "until": { "$ref": "#/$defs/date" },
+        "count": { "type": "integer", "minimum": 1 }, "anchorDate": { "$ref": "#/$defs/date" }, "occurrences": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "eventRecurrence": {
+      "type": "object", "additionalProperties": false, "required": ["frequency", "interval"],
+      "properties": {
+        "frequency": { "enum": ["daily", "weekly", "monthly", "yearly"] }, "interval": { "type": "integer", "minimum": 1 },
+        "weekdays": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 6 } },
+        "until": { "$ref": "#/$defs/date" }, "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "taskPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["title", "notes", "priority", "tagIds", "sortKey"], "properties": {
+      "title": { "type": "string", "minLength": 1 }, "notes": { "type": "string" }, "priority": { "enum": ["none", "low", "medium", "high"] },
+      "projectId": { "$ref": "#/$defs/uuid" }, "sectionId": { "$ref": "#/$defs/uuid" }, "tagIds": { "type": "array", "items": { "$ref": "#/$defs/uuid" } },
+      "sortKey": { "type": "number" }, "dueDate": { "$ref": "#/$defs/date" }, "dueTime": { "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$" },
+      "dueTimeZone": { "type": "string" }, "completedAt": { "$ref": "#/$defs/instant" }, "recurrence": { "$ref": "#/$defs/taskRecurrence" }
+    } } ], "unevaluatedProperties": false },
+    "projectPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "color", "sortKey"], "properties": { "name": { "type": "string", "minLength": 1 }, "color": { "type": "string" }, "sortKey": { "type": "number" }, "archivedAt": { "$ref": "#/$defs/instant" } } } ], "unevaluatedProperties": false },
+    "sectionPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["projectId", "name", "sortKey"], "properties": { "projectId": { "$ref": "#/$defs/uuid" }, "name": { "type": "string", "minLength": 1 }, "sortKey": { "type": "number" } } } ], "unevaluatedProperties": false },
+    "tagPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "color"], "properties": { "name": { "type": "string", "minLength": 1 }, "color": { "type": "string" } } } ], "unevaluatedProperties": false },
+    "blockPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["taskId", "startInstant", "endInstant", "timeZone"], "properties": { "taskId": { "$ref": "#/$defs/uuid" }, "startInstant": { "$ref": "#/$defs/instant" }, "endInstant": { "$ref": "#/$defs/instant" }, "timeZone": { "type": "string" } } } ], "unevaluatedProperties": false },
+    "calendarPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "color", "visible", "sortKey"], "properties": { "name": { "type": "string", "minLength": 1 }, "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }, "visible": { "type": "boolean" }, "sortKey": { "type": "number" } } } ], "unevaluatedProperties": false },
+    "calendarEventPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["calendarId", "title", "notes", "allDay"], "properties": {
+      "calendarId": { "$ref": "#/$defs/uuid" }, "title": { "type": "string", "minLength": 1 }, "notes": { "type": "string" }, "recurrence": { "$ref": "#/$defs/eventRecurrence" },
+      "allDay": { "type": "boolean" }, "startDate": { "$ref": "#/$defs/date" }, "endDate": { "$ref": "#/$defs/date" },
+      "startInstant": { "$ref": "#/$defs/instant" }, "endInstant": { "$ref": "#/$defs/instant" }, "timeZone": { "type": "string" }
+    } } ], "unevaluatedProperties": false, "oneOf": [
+      { "properties": { "allDay": { "const": true } }, "required": ["startDate", "endDate"], "not": { "anyOf": [{ "required": ["startInstant"] }, { "required": ["endInstant"] }, { "required": ["timeZone"] }] } },
+      { "properties": { "allDay": { "const": false } }, "required": ["startInstant", "endInstant", "timeZone"], "not": { "anyOf": [{ "required": ["startDate"] }, { "required": ["endDate"] }] } }
+    ] },
+    "taskTemplatePayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "title", "notes", "priority", "tagIds"], "properties": { "name": { "type": "string", "minLength": 1 }, "title": { "type": "string", "minLength": 1 }, "notes": { "type": "string" }, "priority": { "enum": ["none", "low", "medium", "high"] }, "projectId": { "$ref": "#/$defs/uuid" }, "sectionId": { "$ref": "#/$defs/uuid" }, "tagIds": { "type": "array", "items": { "$ref": "#/$defs/uuid" } } } } ], "unevaluatedProperties": false },
+    "eventTemplatePayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "calendarId", "title", "notes", "allDay", "duration"], "properties": { "name": { "type": "string", "minLength": 1 }, "calendarId": { "$ref": "#/$defs/uuid" }, "title": { "type": "string", "minLength": 1 }, "notes": { "type": "string" }, "allDay": { "type": "boolean" }, "duration": { "type": "integer", "minimum": 1 }, "timeZone": { "type": "string" }, "startTime": { "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$" } } } ], "unevaluatedProperties": false },
+    "routinePayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "templateId", "taskId", "enabled", "startDate", "recurrence"], "properties": { "name": { "type": "string", "minLength": 1 }, "templateId": { "$ref": "#/$defs/uuid" }, "taskId": { "$ref": "#/$defs/uuid" }, "enabled": { "type": "boolean" }, "startDate": { "$ref": "#/$defs/date" }, "recurrence": { "$ref": "#/$defs/taskRecurrence" } } } ], "unevaluatedProperties": false },
+    "reminderPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["taskId", "minutesBefore", "enabled"], "properties": { "taskId": { "$ref": "#/$defs/uuid" }, "minutesBefore": { "type": "integer", "minimum": 0 }, "enabled": { "type": "boolean" } } } ], "unevaluatedProperties": false },
+    "completionPayload": { "type": "object", "additionalProperties": false, "required": ["id", "taskId", "completedAt"], "properties": { "id": { "$ref": "#/$defs/uuid" }, "taskId": { "$ref": "#/$defs/uuid" }, "occurrenceDate": { "$ref": "#/$defs/date" }, "completedAt": { "$ref": "#/$defs/instant" }, "clearedBlockIds": { "type": "array", "items": { "$ref": "#/$defs/uuid" } } } },
+    "savedViewPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "query"], "properties": { "name": { "type": "string", "minLength": 1 }, "query": { "type": "string" }, "projectId": { "anyOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] }, "priority": { "enum": ["all", "none", "low", "medium", "high"] }, "tagId": { "$ref": "#/$defs/uuid" }, "dateScope": { "enum": ["all", "overdue", "today", "upcoming", "undated"] }, "completed": { "anyOf": [{ "type": "boolean" }, { "const": "all" }] } } } ], "unevaluatedProperties": false }
+  }
+}

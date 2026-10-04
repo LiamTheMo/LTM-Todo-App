@@ -1,0 +1,32 @@
+{
+  "protocolVersion": 1,
+  "mutations": [
+    {
+      "entityType": "tasks",
+      "entityId": "4fef5e72-f114-4ea5-8d40-9d8069654f40",
+      "baseRevision": 0,
+      "operation": "upsert",
+      "clientMutationId": "4e731b4e-c82c-4df6-a26a-847a2c115414",
+      "clientSchemaVersion": 4,
+      "payload": {
+        "id": "4fef5e72-f114-4ea5-8d40-9d8069654f40",
+        "title": "Fixture task",
+        "notes": "",
+        "priority": "none",
+        "tagIds": [],
+        "sortKey": 0,
+        "createdAt": "2026-10-03T12:00:00.000Z",
+        "updatedAt": "2026-10-03T12:00:00.000Z",
+        "revision": 1
+      }
+    },
+    {
+      "entityType": "projects",
+      "entityId": "d4bf1428-baae-4cd5-9852-6c79344aa139",
+      "baseRevision": 4,
+      "operation": "delete",
+      "clientMutationId": "d6c46fc1-8bf8-49aa-ae77-2d036e2e4fd1",
+      "clientSchemaVersion": 4
+    }
+  ]
+}

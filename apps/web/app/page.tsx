@@ -1,14 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type UIEvent } from "react";
 import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, undoCompletion, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
-import { defaultCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, updateCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
-import { readData, writeData } from "../lib/storage";
+import { defaultCalendarColor, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, updateCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
+import { acknowledgeSyncMutation, applyRemoteSyncChanges, bindSyncAccount, getSyncCursor, getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, persistIcsCalendarCache, readData, readIcsCalendarCache, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData, type CachedIcsCalendar, type SyncConflict } from "../lib/storage";
+import { getLocalSyncDeviceId, SyncClient, type SyncStatus } from "../lib/sync-client";
+import type { SyncDevice } from "../lib/device-registry";
+import { createBackup, parseBackup, MAX_BACKUP_BYTES } from "../lib/backup";
+import type { AttachmentRecord } from "../lib/attachment-api";
+import { syncPendingAttachmentUploads } from "../lib/attachment-client";
+import { queueAttachmentUpload, readPendingAttachmentUploads, type PendingAttachmentUpload } from "../lib/storage";
 import { dueTimeCaption, overdueDueCaption } from "../lib/date-labels";
 import { TabIcon, type NavigationSection } from "../components/TabIcon";
 import { CalendarTimeline, type CalendarTimelineItem } from "../components/CalendarTimeline";
 import { CustomSelect, DateField, TimeField } from "../components/CustomFields";
 import { CalendarColorPicker } from "../components/CalendarColorPicker";
+import { toReadOnlyCalendarEvent } from "../lib/ics-calendar-view";
 
 type View = NavigationSection;
 const views: View[] = ["Dashboard", "Tasks", "Projects", "Calendar", "Settings"];
@@ -104,6 +111,13 @@ export default function Home() {
   const [calendarEditingId, setCalendarEditingId] = useState<string | null>(null);
   const [calendarName, setCalendarName] = useState("");
   const [calendarColor, setCalendarColor] = useState<CalendarColor>(defaultCalendarColor);
+  const [icsCalendarCache, setIcsCalendarCache] = useState<CachedIcsCalendar[]>([]);
+  const [icsSubscribeOpen, setIcsSubscribeOpen] = useState(false);
+  const [icsFeedUrl, setIcsFeedUrl] = useState("");
+  const [icsFeedName, setIcsFeedName] = useState("");
+  const [icsFeedColor, setIcsFeedColor] = useState<CalendarColor>(defaultCalendarColor);
+  const [icsFeedBusy, setIcsFeedBusy] = useState(false);
+  const [icsFeedStatus, setIcsFeedStatus] = useState("");
   const [scheduleEditing, setScheduleEditing] = useState<{ taskId: string; blockId?: string; date: string } | null>(null);
   const [scheduleUndo, setScheduleUndo] = useState<ScheduledBlock[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -122,6 +136,21 @@ export default function Home() {
   const [pushStatus, setPushStatus] = useState("Checking push notification support…");
   const [pushSyncRevision, setPushSyncRevision] = useState(0);
   const pushSyncQueue = useRef(Promise.resolve());
+  const syncClient = useRef<SyncClient | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: "idle" });
+  const accountSyncAvailable = Boolean(syncStatus.authenticated && syncStatus.state !== "account_mismatch");
+  const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
+  const [syncDevices, setSyncDevices] = useState<SyncDevice[]>([]);
+  const [deviceStatus, setDeviceStatus] = useState("");
+  const [authSessions, setAuthSessions] = useState<Array<{ sessionKey: string; createdAt: string; expiresAt: string; lastSeenAt: string; current: boolean }>>([]);
+  const [authSessionStatus, setAuthSessionStatus] = useState("");
+  const [accountStatus, setAccountStatus] = useState("");
+  const [currentSyncDeviceId, setCurrentSyncDeviceId] = useState("");
+  const [backupStatus, setBackupStatus] = useState("");
+  const [attachments, setAttachments] = useState<AttachmentRecord[]>([]);
+  const [attachmentTaskId, setAttachmentTaskId] = useState("");
+  const [attachmentStatus, setAttachmentStatus] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachmentUpload[]>([]);
   const [today, setToday] = useState(() => localDate(new Date()));
   const [dayStart, setDayStart] = useState(() => historyStart(localDate(new Date())));
   const earliestDay = historyStart(today);
@@ -131,8 +160,82 @@ export default function Home() {
   const pendingAnchor = useRef<{ day: string; top: number } | null>(null);
   const windowShiftLock = useRef(false);
   const initialScrollPending = useRef(true);
-  useEffect(() => { readData().then(value => { current.current = value; setData(value); setReady(true); })
+  useEffect(() => { readData().then(value => { setCurrentSyncDeviceId(getLocalSyncDeviceId()); current.current = value; setData(value); setReady(true); })
     .catch(() => { setError("Local storage could not be opened. Changes are disabled."); setReady(true); }); }, []);
+  useEffect(() => { void readIcsCalendarCache().then(setIcsCalendarCache).catch(() => undefined); }, []);
+  useEffect(() => { void readPendingAttachmentUploads().then(setPendingAttachments).catch(() => setAttachmentStatus("Local attachment queue could not be opened.")); }, []);
+  useEffect(() => {
+    if (!syncStatus.authenticated) return;
+    let cancelled = false;
+    void fetch("/api/v1/devices", { credentials: "same-origin", cache: "no-store" }).then(async response => {
+      if (!response.ok) throw new Error("Registered devices are unavailable.");
+      const result = await response.json() as { devices?: SyncDevice[] };
+      if (!cancelled) setSyncDevices(Array.isArray(result.devices) ? result.devices : []);
+    }).catch(() => setDeviceStatus("Registered devices could not be loaded."));
+    return () => { cancelled = true; };
+  }, [syncStatus.authenticated]);
+  useEffect(() => {
+    if (!syncStatus.authenticated) return;
+    let cancelled = false;
+    void fetch("/api/v1/auth/sessions", { credentials: "same-origin", cache: "no-store" }).then(async response => {
+      if (!response.ok) throw new Error("Active sessions are unavailable.");
+      const result = await response.json() as { sessions?: typeof authSessions };
+      if (!cancelled) setAuthSessions(Array.isArray(result.sessions) ? result.sessions : []);
+    }).catch(() => { if (!cancelled) setAuthSessionStatus("Active sessions could not be loaded."); });
+    return () => { cancelled = true; };
+  }, [syncStatus.authenticated]);
+  useEffect(() => {
+    if (!ready || error) return;
+    const client = new SyncClient({ deviceName: `Web · ${navigator.platform || "browser"}`, outbox: {
+      bindAccount: bindSyncAccount,
+      pending: readPendingSyncMutations,
+      acknowledge: acknowledgeSyncMutation,
+      recordConflict: recordSyncConflict,
+      cursor: getSyncCursor,
+      setCursor: persistSyncCursor,
+      snapshotCursor: getSyncSnapshotCursor,
+      setSnapshotCursor: persistSyncSnapshotCursor,
+      applyRemote: async changes => {
+        const apply = writes.current.catch(() => undefined).then(async () => {
+          if (writeFailed.current) throw new Error("Local writes are paused");
+          await applyRemoteSyncChanges(changes);
+          const latest = await readData();
+          current.current = latest;
+          setData(latest);
+        });
+        writes.current = apply.catch(() => undefined);
+        await apply;
+      },
+      hasConflicts: hasSyncConflicts
+    }, onStatus: status => {
+      setSyncStatus(status);
+      if (status.state === "conflict") void readSyncConflicts().then(setSyncConflicts);
+    } });
+    syncClient.current = client;
+    const retry = () => {
+      void client.syncNow();
+      void syncPendingAttachmentUploads().then(async result => {
+        setPendingAttachments(await readPendingAttachmentUploads());
+        if (result.uploaded) {
+          setAttachmentStatus(`${result.uploaded} attachment${result.uploaded === 1 ? "" : "s"} uploaded.`);
+          void fetch("/api/v1/attachments", { credentials: "same-origin", cache: "no-store" }).then(response => response.ok ? response.json() as Promise<{ attachments?: AttachmentRecord[] }> : undefined)
+            .then(result => { if (result?.attachments) setAttachments(result.attachments); }).catch(() => undefined);
+        }
+      }).catch(() => undefined);
+    };
+    const visible = () => { if (document.visibilityState === "visible") retry(); };
+    window.addEventListener("online", retry);
+    document.addEventListener("visibilitychange", visible);
+    const timer = window.setInterval(retry, 60_000);
+    void client.syncNow();
+    return () => {
+      window.removeEventListener("online", retry);
+      document.removeEventListener("visibilitychange", visible);
+      window.clearInterval(timer);
+      client.dispose();
+      if (syncClient.current === client) syncClient.current = null;
+    };
+  }, [ready, error]);
   useEffect(() => {
     const refreshToday = () => {
       const day = localDate(new Date());
@@ -245,13 +348,242 @@ export default function Home() {
     const next = { ...changed, generation: previous.generation + 1 };
     current.current = next; setData(next);
     writes.current = writes.current.then(() => {
-      if (!writeFailed.current) return writeData(next, previous.generation);
+      if (!writeFailed.current) return writeData(next, previous.generation).then(() => { void syncClient.current?.syncNow(); });
     }).catch((cause) => {
       writeFailed.current = true;
       setError(cause instanceof Error && cause.message.includes("another tab") ? cause.message :
-        "Changes could not be saved. Download an unsaved backup from Settings before reloading this tab.");
+      "Changes could not be saved. Download an unsaved backup from Settings before reloading this tab.");
     });
   }, [error, today]);
+  useEffect(() => {
+    if (!accountSyncAvailable) return;
+    let cancelled = false;
+    void fetch("/api/v1/calendars/subscriptions", { credentials: "same-origin", cache: "no-store" }).then(async response => {
+      if (!response.ok) throw new Error("Calendar subscriptions are unavailable.");
+      const result = await response.json() as { subscriptions?: CachedIcsCalendar[] };
+      if (!Array.isArray(result.subscriptions)) throw new Error("Calendar subscriptions are invalid.");
+      if (cancelled) return;
+      const subscriptions = result.subscriptions;
+      const previousSubscriptions = await readIcsCalendarCache().catch(() => []);
+      if (cancelled) return;
+      setIcsCalendarCache(subscriptions);
+      await persistIcsCalendarCache(subscriptions);
+      const byCalendar = new Map(subscriptions.map(subscription => [subscription.calendarId, subscription]));
+      const currentCalendarIds = new Set(byCalendar.keys());
+      const removedCalendarIds = new Set(previousSubscriptions.filter(subscription => !currentCalendarIds.has(subscription.calendarId)).map(subscription => subscription.calendarId));
+      mutate(value => {
+        let changed = false;
+        const now = new Date().toISOString();
+        const calendars = value.calendars.map(calendar => {
+          if (removedCalendarIds.has(calendar.id) && !calendar.deletedAt) {
+            changed = true;
+            return { ...calendar, deletedAt: now, updatedAt: now, revision: calendar.revision + 1 };
+          }
+          const subscription = byCalendar.get(calendar.id);
+          const color = subscription && normalizeCalendarColor(subscription.color);
+          if (!subscription || !color || calendar.deletedAt ||
+              calendar.name === subscription.name && calendar.color === color && calendar.visible === subscription.visible) return calendar;
+          changed = true;
+          return { ...calendar, name: subscription.name, color, visible: subscription.visible,
+            updatedAt: now, revision: calendar.revision + 1 };
+        });
+        const known = new Set(calendars.map(calendar => calendar.id));
+        for (const subscription of subscriptions) {
+          if (known.has(subscription.calendarId)) continue;
+          const color = normalizeCalendarColor(subscription.color) ?? defaultCalendarColor;
+          calendars.push({ ...newEntity(), id: subscription.calendarId, name: subscription.name, color,
+            visible: subscription.visible, sortKey: Date.now() + calendars.length });
+          changed = true;
+        }
+        if (!changed) return value;
+        return { ...value, calendars,
+          calendarEvents: value.calendarEvents.map(item => removedCalendarIds.has(item.calendarId) && !item.deletedAt
+            ? { ...item, deletedAt: now, updatedAt: now, revision: item.revision + 1 } : item),
+          eventTemplates: value.eventTemplates.map(item => removedCalendarIds.has(item.calendarId) && !item.deletedAt
+            ? { ...item, deletedAt: now, updatedAt: now, revision: item.revision + 1 } : item)
+        };
+      });
+    }).catch(() => { if (!cancelled) setIcsFeedStatus("Subscribed calendars could not be refreshed. Cached events remain available offline."); });
+    return () => { cancelled = true; };
+  }, [accountSyncAvailable, mutate]);
+  const saveIcsSubscriptionCache = async (subscription: CachedIcsCalendar) => {
+    const next = [...icsCalendarCache.filter(item => item.subscriptionId !== subscription.subscriptionId), subscription];
+    await persistIcsCalendarCache(next);
+    setIcsCalendarCache(next);
+  };
+  const subscribeIcsCalendar = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!syncStatus.authenticated || syncStatus.state === "account_mismatch") { setIcsFeedStatus("Sign in with the account linked to this local profile before subscribing to a calendar."); return; }
+    const calendar = createCalendar(icsFeedName, icsFeedColor);
+    if (!calendar || !icsFeedUrl.trim()) { setIcsFeedStatus("Enter a calendar name and HTTPS feed URL."); return; }
+    setIcsFeedBusy(true);
+    setIcsFeedStatus("Adding calendar and securely checking its feed…");
+    try {
+      const response = await fetch("/api/v1/calendars/subscriptions", { method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calendarId: calendar.id, name: calendar.name, color: calendar.color, visible: true, url: icsFeedUrl.trim() }) });
+      const result = await response.json().catch(() => ({})) as { subscription?: CachedIcsCalendar; error?: string };
+      if (!response.ok || !result.subscription) throw new Error(result.error === "invalid_subscription"
+        ? "Use a public HTTPS calendar feed URL and a valid name/color." : "The calendar feed could not be added. Check the URL and try again.");
+      const subscription = result.subscription;
+      const color = normalizeCalendarColor(subscription.color) ?? calendar.color;
+      mutate(value => ({ ...value, calendars: [...value.calendars, { ...calendar, name: subscription.name, color, visible: subscription.visible }] }));
+      await saveIcsSubscriptionCache(subscription);
+      setIcsSubscribeOpen(false);
+      setIcsFeedUrl("");
+      setIcsFeedName("");
+      setIcsFeedStatus(subscription.lastError
+        ? "Calendar added. Its first refresh failed; cached events will appear when the feed is reachable."
+        : `Calendar added${subscription.events.length ? ` · ${subscription.events.length} events loaded` : ""}.`);
+    } catch (cause) { setIcsFeedStatus(cause instanceof Error ? cause.message : "Calendar feed could not be added."); }
+    finally { setIcsFeedBusy(false); }
+  };
+  const refreshIcsCalendar = async (subscription: CachedIcsCalendar) => {
+    if (!accountSyncAvailable) { setIcsFeedStatus("Sign in and reconnect to refresh this calendar. Cached events remain available offline."); return false; }
+    if (icsFeedBusy) return false;
+    setIcsFeedBusy(true);
+    setIcsFeedStatus(`Refreshing ${subscription.name}…`);
+    try {
+      const response = await fetch(`/api/v1/calendars/subscriptions/${subscription.subscriptionId}/refresh`, {
+        method: "POST", credentials: "same-origin", cache: "no-store" });
+      const result = await response.json().catch(() => ({})) as { subscription?: CachedIcsCalendar; error?: string };
+      if (!response.ok || !result.subscription) throw new Error(result.error === "refresh_throttled"
+        ? "This calendar was refreshed recently. Try again in a few minutes." : "The calendar could not be refreshed; cached events are unchanged.");
+      await saveIcsSubscriptionCache(result.subscription);
+      setIcsFeedStatus(result.subscription.lastError
+        ? `${subscription.name} could not be refreshed; showing its last cached events.`
+        : `${subscription.name} refreshed · ${result.subscription.events.length} events.`);
+      return true;
+    } catch (cause) { setIcsFeedStatus(cause instanceof Error ? cause.message : "The calendar could not be refreshed."); return false; }
+    finally { setIcsFeedBusy(false); }
+  };
+  const updateIcsCalendar = async (calendarId: string, patch: { name?: string; color?: CalendarColor; visible?: boolean }) => {
+    const subscription = icsCalendarCache.find(item => item.calendarId === calendarId);
+    if (!subscription || icsFeedBusy) return false;
+    if (!accountSyncAvailable) {
+      if (patch.visible === undefined || Object.keys(patch).length !== 1) {
+        setIcsFeedStatus("Sign in and reconnect to change this subscribed calendar's settings.");
+        return false;
+      }
+      const updated = { ...subscription, visible: patch.visible };
+      try {
+        await saveIcsSubscriptionCache(updated);
+        const stamp = new Date().toISOString();
+        mutate(value => ({ ...value, calendars: value.calendars.map(calendar => calendar.id === calendarId
+          ? { ...calendar, visible: patch.visible!, updatedAt: stamp, revision: calendar.revision + 1 } : calendar) }));
+        setIcsFeedStatus("Visibility changed on this device; sign in while online to save it to your account.");
+        return true;
+      } catch { setIcsFeedStatus("Calendar visibility could not be saved on this device."); return false; }
+    }
+    setIcsFeedBusy(true);
+    try {
+      const response = await fetch(`/api/v1/calendars/subscriptions/${subscription.subscriptionId}`, {
+        method: "PATCH", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch) });
+      const result = await response.json().catch(() => ({})) as { subscription?: CachedIcsCalendar };
+      if (!response.ok || !result.subscription) throw new Error("Calendar settings could not be saved.");
+      const updated = result.subscription;
+      await saveIcsSubscriptionCache(updated);
+      const color = normalizeCalendarColor(updated.color);
+      if (!color) throw new Error("Calendar settings returned an invalid color.");
+      mutate(value => ({ ...value, calendars: value.calendars.map(calendar => calendar.id === calendarId ? {
+        ...calendar, name: updated.name, color, visible: updated.visible,
+        updatedAt: new Date().toISOString(), revision: calendar.revision + 1
+      } : calendar) }));
+      setIcsFeedStatus(`${updated.name} settings saved.`);
+      return true;
+    } catch (cause) { setIcsFeedStatus(cause instanceof Error ? cause.message : "Calendar settings could not be saved."); return false; }
+    finally { setIcsFeedBusy(false); }
+  };
+  const unsubscribeIcsCalendar = async (subscription: CachedIcsCalendar) => {
+    if (!accountSyncAvailable) { setIcsFeedStatus("Sign in and reconnect to unsubscribe from this calendar."); return false; }
+    if (icsFeedBusy) return false;
+    setIcsFeedBusy(true);
+    try {
+      const response = await fetch(`/api/v1/calendars/subscriptions/${subscription.subscriptionId}`, {
+        method: "DELETE", credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) throw new Error("Calendar subscription could not be removed.");
+      const next = icsCalendarCache.filter(item => item.subscriptionId !== subscription.subscriptionId);
+      await persistIcsCalendarCache(next);
+      setIcsCalendarCache(next);
+      const stamp = new Date().toISOString();
+      mutate(value => ({ ...value,
+        calendars: value.calendars.map(calendar => calendar.id === subscription.calendarId
+          ? { ...calendar, deletedAt: stamp, updatedAt: stamp, revision: calendar.revision + 1 } : calendar),
+        calendarEvents: value.calendarEvents.map(item => item.calendarId === subscription.calendarId && !item.deletedAt
+          ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item),
+        eventTemplates: value.eventTemplates.map(item => item.calendarId === subscription.calendarId && !item.deletedAt
+          ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item)
+      }));
+      setIcsFeedStatus(`${subscription.name} was unsubscribed.`);
+      return true;
+    } catch (cause) { setIcsFeedStatus(cause instanceof Error ? cause.message : "Calendar subscription could not be removed."); return false; }
+    finally { setIcsFeedBusy(false); }
+  };
+  const resolveConflict = (conflict: SyncConflict, choice: "local" | "remote") => {
+    const resolve = writes.current.catch(() => undefined).then(async () => {
+      await resolveSyncConflict(conflict.key, choice);
+      if (choice === "remote") {
+        const latest = await readData();
+        current.current = latest;
+        setData(latest);
+      }
+      setSyncConflicts(items => items.filter(item => item.key !== conflict.key));
+      void syncClient.current?.syncNow();
+    });
+    writes.current = resolve.catch(() => undefined);
+  };
+  const retireSyncDevice = async (device: SyncDevice) => {
+    if (device.deviceId === getLocalSyncDeviceId()) { setDeviceStatus("This browser is the current sync device and cannot remove itself."); return; }
+    if (!confirm(`Remove ${device.displayName} from this account? That install will need to sign in and register again.`)) return;
+    try {
+      const response = await fetch(`/api/v1/devices/${device.deviceId}`, { method: "DELETE", credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) throw new Error("Device could not be removed.");
+      setSyncDevices(items => items.map(item => item.deviceId === device.deviceId ? { ...item, retiredAt: new Date().toISOString() } : item));
+      setDeviceStatus("Device removed from this account.");
+    } catch (cause) { setDeviceStatus(cause instanceof Error ? cause.message : "Device could not be removed."); }
+  };
+  const refreshAttachments = async () => {
+    try {
+      const response = await fetch("/api/v1/attachments", { credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in to manage attachments." : "Attachments are unavailable right now.");
+      const result = await response.json() as { attachments?: AttachmentRecord[] };
+      setAttachments(Array.isArray(result.attachments) ? result.attachments : []);
+      setAttachmentStatus("");
+    } catch (cause) { setAttachmentStatus(cause instanceof Error ? cause.message : "Attachments are unavailable right now."); }
+  };
+  const uploadAttachment = async (file: File) => {
+    if (!attachmentTaskId) { setAttachmentStatus("Choose a task before uploading a file."); return; }
+    try {
+      await queueAttachmentUpload({ taskId: attachmentTaskId, fileName: file.name, mediaType: file.type, blob: file });
+      setPendingAttachments(await readPendingAttachmentUploads());
+      setAttachmentStatus("Attachment saved on this device. It will upload when a connection and sign-in are available.");
+      if (navigator.onLine) {
+        const result = await syncPendingAttachmentUploads();
+        setPendingAttachments(await readPendingAttachmentUploads());
+        if (result.uploaded) { setAttachmentStatus("Attachment uploaded."); await refreshAttachments(); }
+        else if (result.blocked === "service") setAttachmentStatus("Attachment is saved locally; the service will be retried later.");
+      }
+    } catch (cause) { setAttachmentStatus(cause instanceof Error ? cause.message : "The attachment could not be uploaded."); }
+  };
+  const downloadAttachment = async (attachment: AttachmentRecord) => {
+    try {
+      const response = await fetch(`/api/v1/attachments/${attachment.id}`, { credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) throw new Error("The attachment could not be downloaded.");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a"); link.href = url; link.download = attachment.fileName; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause) { setAttachmentStatus(cause instanceof Error ? cause.message : "The attachment could not be downloaded."); }
+  };
+  const deleteAttachment = async (attachment: AttachmentRecord) => {
+    if (!confirm(`Delete ${attachment.fileName}?`)) return;
+    try {
+      const response = await fetch(`/api/v1/attachments/${attachment.id}`, { method: "DELETE", credentials: "same-origin" });
+      if (!response.ok) throw new Error("The attachment could not be deleted.");
+      setAttachments(items => items.filter(item => item.id !== attachment.id));
+      setAttachmentStatus("Attachment deleted.");
+    } catch (cause) { setAttachmentStatus(cause instanceof Error ? cause.message : "The attachment could not be deleted."); }
+  };
   useEffect(() => {
     if (ready) mutate(value => pruneExpiredHistory(value, today));
   }, [ready, today, mutate]);
@@ -332,9 +664,15 @@ export default function Home() {
     date: calendarSelectedDate, due: [], scheduled: [], completed: []
   };
   const activeCalendars = data.calendars.filter(calendar => !calendar.deletedAt).sort((a, b) => a.sortKey - b.sortKey);
-  const calendarEvents = calendarEventsForDay(data, calendarSelectedDate);
+  const externalEvents = icsCalendarCache.filter(subscription => subscription && Array.isArray(subscription.events)).flatMap(subscription => subscription.events.flatMap(event => {
+    const item = toReadOnlyCalendarEvent(subscription, event);
+    return item ? [item] : [];
+  }));
+  const externalEventIds = new Set(externalEvents.map(event => event.id));
+  const calendarViewData: Data = externalEvents.length ? { ...data, calendarEvents: [...data.calendarEvents, ...externalEvents] } : data;
+  const calendarEvents = calendarEventsForDay(calendarViewData, calendarSelectedDate);
   const monthEventsByDay = new Map<string, ReturnType<typeof calendarEventsForDay>>();
-  for (const item of calendarEventOccurrences(data, calendarGridStart, addDays(calendarGridStart, 42))) {
+  for (const item of calendarEventOccurrences(calendarViewData, calendarGridStart, addDays(calendarGridStart, 42))) {
     const end = item.allDay ? item.endDate! : addDays(item.occurrenceDate, 1);
     for (let day = item.occurrenceDate; day < end; day = addDays(day, 1)) {
       monthEventsByDay.set(day, [...(monthEventsByDay.get(day) ?? []), item]);
@@ -428,13 +766,46 @@ export default function Home() {
             <div className="calendarActions"><button type="button" className="calendarToday" onClick={goCalendarToday}>Today</button><button type="button" className="calendarToday" onClick={() => setEventEditing({ date: calendarSelectedDate })}>+ Event</button></div>
           </div>
           {scheduleUndo && <div className="scheduleUndo" role="status"><span>Planning change saved.</span><button type="button" onClick={() => { const blocks = scheduleUndo; mutate(value => ({ ...value, blocks })); setScheduleUndo(null); }}>Undo</button></div>}
-          <div className="calendarManagement"><div className="calendarToggles" aria-label="Visible calendars">{activeCalendars.map(calendar => <div className="calendarToggle" key={calendar.id}><label><input type="checkbox" checked={calendar.visible} onChange={e => mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: e.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }))} /><span className="calendarColor" style={{ backgroundColor: calendar.color }} />{calendar.name}</label><button type="button" className="calendarEditButton" aria-label={`Edit ${calendar.name} calendar`} onClick={() => { setCalendarName(calendar.name); setCalendarColor(calendar.color); setCalendarEditingId(calendar.id); setCalendarCreating(true); }}>Edit</button></div>)}</div><button type="button" onClick={() => { setCalendarEditingId(null); setCalendarName(""); setCalendarColor(defaultCalendarColor); setCalendarCreating(true); }}>+ Calendar</button></div>
-          {calendarCreating && <form className="calendarCreateForm" aria-label={calendarEditingId ? "Edit calendar" : "Create calendar"} onSubmit={event => { event.preventDefault(); if (calendarEditingId) mutate(value => updateCalendar(value, calendarEditingId, calendarName, calendarColor)); else { const calendar = createCalendar(calendarName, calendarColor); if (!calendar) return; mutate(value => ({ ...value, calendars: [...value.calendars, calendar] })); } setCalendarCreating(false); setCalendarEditingId(null); setCalendarName(""); }}>
+          <div className="calendarManagement">
+            <div className="calendarToggles" aria-label="Visible calendars">
+              {activeCalendars.map(calendar => {
+                const subscription = icsCalendarCache.find(item => item.calendarId === calendar.id);
+                return <div className="calendarToggle" key={calendar.id}>
+                  <label><input type="checkbox" checked={subscription?.visible ?? calendar.visible} disabled={Boolean(subscription && icsFeedBusy)} onChange={event => {
+                    if (subscription) void updateIcsCalendar(calendar.id, { visible: event.target.checked });
+                    else mutate(value => ({ ...value, calendars: value.calendars.map(item => item.id === calendar.id ? { ...item, visible: event.target.checked, updatedAt: new Date().toISOString(), revision: item.revision + 1 } : item) }));
+                  }} /><span className="calendarColor" style={{ backgroundColor: calendar.color }} />{calendar.name}{subscription && <small> · read-only feed</small>}</label>
+                  <div className="calendarEditActions"><button type="button" className="calendarEditButton" aria-label={`Edit ${calendar.name} calendar`} disabled={Boolean(subscription && !accountSyncAvailable)} onClick={() => { setCalendarName(calendar.name); setCalendarColor(calendar.color); setCalendarEditingId(calendar.id); setCalendarCreating(true); }}>Edit</button>
+                    {subscription && <button type="button" disabled={icsFeedBusy || !accountSyncAvailable} onClick={() => { void refreshIcsCalendar(subscription); }}>Refresh</button>}
+                  </div>
+                </div>;
+              })}
+            </div>
+            <div className="calendarManagementActions"><button type="button" onClick={() => { setCalendarEditingId(null); setCalendarName(""); setCalendarColor(defaultCalendarColor); setCalendarCreating(true); }}>+ Calendar</button><button type="button" disabled={icsFeedBusy} onClick={() => {
+              if (!accountSyncAvailable) { setIcsFeedStatus("Sign in from Settings before subscribing to an external calendar."); return; }
+              setIcsSubscribeOpen(value => !value);
+            }}>+ Subscribe</button></div>
+          </div>
+          {icsSubscribeOpen && <form className="calendarCreateForm" aria-label="Subscribe to calendar" onSubmit={subscribeIcsCalendar}>
+            <label>Calendar name<input value={icsFeedName} onChange={event => setIcsFeedName(event.target.value)} maxLength={100} required placeholder="e.g. Family calendar" /></label>
+            <label>HTTPS calendar feed URL<input type="url" value={icsFeedUrl} onChange={event => setIcsFeedUrl(event.target.value)} maxLength={2048} autoComplete="off" spellCheck={false} required placeholder="https://…" /></label>
+            <p>Only public HTTPS feeds are accepted. The source URL is encrypted at rest; imported events are read-only and cached on this device.</p>
+            <fieldset className="calendarColorField"><legend>Color</legend><CalendarColorPicker value={icsFeedColor} onChange={setIcsFeedColor} /></fieldset>
+            <div className="calendarCreateActions"><button type="button" onClick={() => setIcsSubscribeOpen(false)}>Cancel</button><button className="add" disabled={icsFeedBusy || !accountSyncAvailable || !icsFeedName.trim() || !icsFeedUrl.trim()}>{icsFeedBusy ? "Checking feed…" : "Subscribe"}</button></div>
+          </form>}
+          {icsCalendarCache.map(subscription => <div className="tagLine" key={subscription.subscriptionId}><span><strong>{subscription.name}</strong><small> · {subscription.lastRefreshAt ? `Updated ${new Date(subscription.lastRefreshAt).toLocaleString()}` : "Waiting for first refresh"}{subscription.lastError ? " · refresh failed; showing cached events" : ` · ${subscription.events.length} events cached`}</small></span><button type="button" disabled={icsFeedBusy || !accountSyncAvailable} onClick={() => { void refreshIcsCalendar(subscription); }}>Refresh feed</button><button type="button" className="danger" disabled={icsFeedBusy || !accountSyncAvailable} onClick={() => { if (confirm(`Unsubscribe from ${subscription.name}? Its imported events will disappear from this device.`)) void unsubscribeIcsCalendar(subscription); }}>Unsubscribe</button></div>)}
+          {icsFeedStatus && <p role="status" aria-live="polite">{icsFeedStatus}</p>}
+          {calendarCreating && <form className="calendarCreateForm" aria-label={calendarEditingId ? "Edit calendar" : "Create calendar"} onSubmit={event => { event.preventDefault(); if (calendarEditingId) {
+            const subscription = icsCalendarCache.find(item => item.calendarId === calendarEditingId);
+            if (subscription) { void updateIcsCalendar(calendarEditingId, { name: calendarName, color: calendarColor }).then(saved => { if (saved) { setCalendarCreating(false); setCalendarEditingId(null); setCalendarName(""); } }); return; }
+            mutate(value => updateCalendar(value, calendarEditingId, calendarName, calendarColor));
+          } else { const calendar = createCalendar(calendarName, calendarColor); if (!calendar) return; mutate(value => ({ ...value, calendars: [...value.calendars, calendar] })); }
+            setCalendarCreating(false); setCalendarEditingId(null); setCalendarName(""); }}>
             <label>Calendar name<input aria-label="Calendar name" value={calendarName} onChange={event => setCalendarName(event.target.value)} maxLength={60} required placeholder="e.g. School" /></label>
             <fieldset className="calendarColorField"><legend>Color</legend><CalendarColorPicker value={calendarColor} onChange={setCalendarColor} /></fieldset>
-            <div className="calendarCreateActions">{calendarEditingId && calendarEditingId !== "00000000-0000-4000-8000-000000000001" && <button type="button" className="danger" onClick={() => setCalendarDeleteConfirm(calendarEditingId)}>Delete</button>}<button type="button" onClick={() => { setCalendarCreating(false); setCalendarEditingId(null); }}>Cancel</button><button className="add" disabled={!calendarName.trim()}>{calendarEditingId ? "Save changes" : "Create calendar"}</button></div>
+            <div className="calendarCreateActions">{calendarEditingId && calendarEditingId !== "00000000-0000-4000-8000-000000000001" && <button type="button" className="danger" onClick={() => setCalendarDeleteConfirm(calendarEditingId)}>{icsCalendarCache.some(item => item.calendarId === calendarEditingId) ? "Unsubscribe" : "Delete"}</button>}<button type="button" onClick={() => { setCalendarCreating(false); setCalendarEditingId(null); }}>Cancel</button><button className="add" disabled={icsFeedBusy || !calendarName.trim()}>{calendarEditingId ? "Save changes" : "Create calendar"}</button></div>
           </form>}
-          {calendarDeleteConfirm && <div className="modalBackdrop" style={{ zIndex: 20 }} onMouseDown={event => { if (event.target === event.currentTarget) setCalendarDeleteConfirm(null); }}><section className="editor" role="alertdialog" aria-modal="true" aria-labelledby="delete-calendar-title"><h2 id="delete-calendar-title">Delete calendar?</h2><p>This will remove “{data.calendars.find(calendar => calendar.id === calendarDeleteConfirm)?.name}”, including its events and event templates. This cannot be undone.</p><div className="editorActions"><button type="button" onClick={() => setCalendarDeleteConfirm(null)}>Cancel</button><button type="button" className="danger" onClick={() => { const id = calendarDeleteConfirm; const stamp = new Date().toISOString(); mutate(value => ({ ...value, calendars: value.calendars.map(calendar => calendar.id === id ? { ...calendar, deletedAt: stamp, updatedAt: stamp, revision: calendar.revision + 1 } : calendar), calendarEvents: value.calendarEvents.map(item => item.calendarId === id && !item.deletedAt ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item), eventTemplates: value.eventTemplates.map(item => item.calendarId === id && !item.deletedAt ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item) })); setCalendarDeleteConfirm(null); setCalendarCreating(false); setCalendarEditingId(null); }}>Delete</button></div></section></div>}
+          {calendarDeleteConfirm && <div className="modalBackdrop" style={{ zIndex: 20 }} onMouseDown={event => { if (event.target === event.currentTarget) setCalendarDeleteConfirm(null); }}><section className="editor" role="alertdialog" aria-modal="true" aria-labelledby="delete-calendar-title"><h2 id="delete-calendar-title">{icsCalendarCache.some(item => item.calendarId === calendarDeleteConfirm) ? "Unsubscribe from calendar?" : "Delete calendar?"}</h2><p>{icsCalendarCache.some(item => item.calendarId === calendarDeleteConfirm) ? "This removes the subscribed feed and its cached events from this device. Events from the source are read-only." : `This will remove “${data.calendars.find(calendar => calendar.id === calendarDeleteConfirm)?.name}”, including its events and event templates. This cannot be undone.`}</p><div className="editorActions"><button type="button" onClick={() => setCalendarDeleteConfirm(null)}>Cancel</button><button type="button" className="danger" disabled={icsFeedBusy} onClick={() => { const id = calendarDeleteConfirm; const subscription = icsCalendarCache.find(item => item.calendarId === id); if (subscription) { void unsubscribeIcsCalendar(subscription).then(removed => { if (removed) { setCalendarDeleteConfirm(null); setCalendarCreating(false); setCalendarEditingId(null); } }); return; } const stamp = new Date().toISOString(); mutate(value => ({ ...value, calendars: value.calendars.map(calendar => calendar.id === id ? { ...calendar, deletedAt: stamp, updatedAt: stamp, revision: calendar.revision + 1 } : calendar), calendarEvents: value.calendarEvents.map(item => item.calendarId === id && !item.deletedAt ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item), eventTemplates: value.eventTemplates.map(item => item.calendarId === id && !item.deletedAt ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item) })); setCalendarDeleteConfirm(null); setCalendarCreating(false); setCalendarEditingId(null); }}>{icsCalendarCache.some(item => item.calendarId === calendarDeleteConfirm) ? "Unsubscribe" : "Delete"}</button></div></section></div>}
           <div className="calendarLayout">
             <div>
               <div className="calendarWeekdays" aria-hidden="true">{calendarWeekdays.map(day => <span key={day}>{day}</span>)}</div>
@@ -470,7 +841,13 @@ export default function Home() {
               {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => <div className="plannedRow" key={`calendar-block:${block.id}`}>{taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block-task:${block.id}`)}<button type="button" className="scheduleAction" aria-label={`Edit scheduled block for ${task.title}`} onClick={() => setScheduleEditing({ taskId: task.id, blockId: block.id, date: calendarSelectedDate })}>Edit time</button><button type="button" className="scheduleAction" aria-label={`Unschedule ${task.title}`} onClick={() => { setScheduleUndo(data.blocks); mutate(value => deleteScheduledBlock(value, block.id)); }}>Remove</button></div>)}</div>}
               {!!calendarAgenda.due.length && <div className="group"><h4>DUE</h4>{calendarAgenda.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : ""))}</div>}
               {!!calendarAgenda.completed.length && <div className="group"><h4>COMPLETED</h4>{calendarAgenda.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `calendar-completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
-              {!!calendarEvents.length && <div className="group"><h4>EVENTS</h4>{calendarEvents.map(item => <div className="eventRow" key={`${item.event.id}:${item.occurrenceDate}`}><span className="calendarColor" style={{ backgroundColor: activeCalendars.find(c => c.id === item.event.calendarId)?.color ?? defaultCalendarColor }} /><button type="button" className="eventTitle" onClick={() => setEventEditing({ id: item.event.id, date: item.occurrenceDate })}><strong>{item.event.title}</strong><small>{item.allDay ? "All day" : `${timeLabel(item.startInstant!)} – ${timeLabel(item.endInstant!)}`} · {activeCalendars.find(c => c.id === item.event.calendarId)?.name ?? "Calendar"}</small></button></div>)}</div>}
+              {!!calendarEvents.length && <div className="group"><h4>EVENTS</h4>{calendarEvents.map(item => {
+                const calendar = activeCalendars.find(candidate => candidate.id === item.event.calendarId);
+                const label = <><strong>{item.event.title}</strong><small>{item.allDay ? "All day" : `${timeLabel(item.startInstant!)} – ${timeLabel(item.endInstant!)}`} · {calendar?.name ?? "Calendar"}{externalEventIds.has(item.event.id) ? " · Read only" : ""}</small></>;
+                return <div className="eventRow" key={`${item.event.id}:${item.occurrenceDate}`}><span className="calendarColor" style={{ backgroundColor: calendar?.color ?? defaultCalendarColor }} />{externalEventIds.has(item.event.id)
+                  ? <div className="eventTitle" aria-label={`${item.event.title}, read-only subscribed event`}>{label}</div>
+                  : <button type="button" className="eventTitle" onClick={() => setEventEditing({ id: item.event.id, date: item.occurrenceDate })}>{label}</button>}</div>;
+              })}</div>}
               {!calendarAgenda.scheduled.length && !calendarAgenda.due.length && !calendarAgenda.completed.length && !calendarEvents.length && <p className="calendarEmpty">Nothing planned for this day.</p>}
               <button className="linkButton" type="button" onClick={() => setEditing(`new:${calendarSelectedDate}`)}>+ Add task for this day</button>
             </div>
@@ -493,7 +870,31 @@ export default function Home() {
             <button className="linkButton" onClick={() => { if (!confirm("Archive this project? Its tasks will leave active views until restored in Settings.")) return; mutate(value => { const stamp = new Date().toISOString(); return { ...value, projects: value.projects.map(p => p.id === projectId ? { ...p, archivedAt: stamp, updatedAt: stamp, revision: p.revision + 1 } : p) }; }); setProjectId(""); }}>Archive project</button>
           </>}
         </>}
-        {view === "Settings" && <div className="settingsPanel"><h3>Local and private</h3><p>Your tasks are stored on this device. To deliver reminders while the app is closed, reminder titles and scheduled times are sent to LTM Todo&apos;s Cloudflare reminder service. Each device has its own notification subscription.</p><button onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = `ltm-todo-${today}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Download backup JSON</button>
+        {view === "Settings" && <div className="settingsPanel"><h3>Account sync</h3><p>Local changes save on this device first. When signed in, encrypted-in-transit sync runs in the background across your web and Home Screen installs. Your data remains available offline.</p><p role="status" aria-live="polite">{syncStatus.state === "idle" ? "Sync is up to date." : syncStatus.state === "checking" ? "Checking account…" : syncStatus.state === "syncing" ? "Syncing changes…" : syncStatus.state === "signed_out" ? "Sign in to sync across devices." : syncStatus.state === "account_mismatch" ? "This local profile is already linked to a different account. To protect your data, sync is paused; use a separate browser profile for another account." : syncStatus.state === "conflict" ? "Some changes need attention before they can sync." : syncStatus.state === "offline" ? "Offline. Local changes are saved and will retry when connected." : `Sync paused; retrying${syncStatus.retryAt ? ` at ${new Date(syncStatus.retryAt).toLocaleTimeString()}` : ""}.`}</p><div className="settingsActions">{syncStatus.authenticated ? <button type="button" onClick={() => { void fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" }).then(response => { if (response.ok) setSyncStatus({ state: "signed_out" }); else setSyncStatus({ state: "error", authenticated: true }); }).catch(() => setSyncStatus({ state: "error", authenticated: true })); }}>Sign out</button> : <form action="/api/v1/auth/login" method="get"><input type="hidden" name="returnTo" value="/" /><button type="submit">Sign in</button></form>}<button type="button" onClick={() => { void syncClient.current?.syncNow(); }}>Sync now</button>{syncStatus.authenticated && <button type="button" onClick={() => { if (!confirm("Sign out every active LTM Todo session? You will need to sign in again on this device too.")) return; void fetch("/api/v1/auth/logout-all", { method: "POST", credentials: "same-origin" }).then(response => { if (response.ok) { setSyncStatus({ state: "signed_out" }); setAuthSessions([]); setAuthSessionStatus("All LTM Todo sessions were revoked."); } else setAuthSessionStatus("Sessions could not be revoked. Please retry."); }).catch(() => setAuthSessionStatus("Sessions could not be revoked. Please retry.")); }}>Sign out all sessions</button>}</div>{syncConflicts.map(conflict => <div className="tagLine" key={conflict.key}><span><strong>{String(conflict.mutation.payload?.title ?? conflict.current?.payload?.title ?? conflict.mutation.entityType)}</strong><small> · changed on another device</small></span><div><button type="button" onClick={() => resolveConflict(conflict, "local")}>Keep this device</button><button type="button" onClick={() => resolveConflict(conflict, "remote")}>Use other device</button></div></div>)}
+          <h3>Data storage</h3><p>Task and calendar changes save on this device first. When signed in, supported records also sync to your account through Cloudflare. To deliver reminders while the app is closed, reminder titles and scheduled times are sent to the separate Cloudflare reminder service. Each device has its own notification subscription.</p>
+          <p>Backups include local tasks and calendars. They exclude attachment bytes, ICS feed URLs, and cached read-only feed events; download attachments separately. Feed URLs can grant access to a private calendar and are never exported unencrypted.</p>
+          <div className="settingsActions">
+            <button type="button" onClick={() => {
+              try {
+                const backup = createBackup(data);
+                const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
+                const link = document.createElement("a"); link.href = url; link.download = `ltm-todo-backup-${today}.json`; link.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                setBackupStatus("Versioned backup downloaded.");
+              } catch (cause) { setBackupStatus(cause instanceof Error ? cause.message : "Backup could not be created."); }
+            }}>Download versioned backup</button>
+            <label>Restore backup JSON<input type="file" accept="application/json,.json" onChange={event => {
+              const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (!file) return;
+              if (file.size > MAX_BACKUP_BYTES) { setBackupStatus("Backup file is larger than 16 MB."); return; }
+              void file.text().then(text => {
+                const restored = parseBackup(text);
+                if (!confirm(`Restore ${restored.tasks.length} tasks and replace the current local data? This can be undone only with a backup.`)) return;
+                mutate(currentData => ({ ...restored, generation: currentData.generation + 1 }));
+                setBackupStatus("Backup validated. Local restore is being saved.");
+              }).catch(cause => setBackupStatus(cause instanceof Error ? cause.message : "Backup could not be restored."));
+            }} /></label>
+          </div><p role="status" aria-live="polite">{backupStatus}</p>
+          <h3>Protected attachments</h3><p>Attachments are private to your account and linked to one of your tasks. Supported types: JPEG, PNG, WebP, PDF, and plain text, up to 10 MiB. Offline uploads remain in this device&apos;s private IndexedDB queue and retry after reconnecting.</p><div className="settingsActions"><label>Attach to task<select aria-label="Attach to task" value={attachmentTaskId} onChange={event => setAttachmentTaskId(event.target.value)}><option value="">Choose a task</option>{data.tasks.filter(task => !task.deletedAt).map(task => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label><label>Upload file<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" disabled={!attachmentTaskId} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void uploadAttachment(file); }} /></label><button type="button" onClick={() => { void refreshAttachments(); }}>Refresh attachments</button></div>{pendingAttachments.map(attachment => <div className="tagLine" key={attachment.id}><span><strong>{attachment.fileName}</strong><small> · Saved on this device · {data.tasks.find(task => task.id === attachment.taskId)?.title ?? "Task"}</small></span></div>)}{attachments.map(attachment => <div className="tagLine" key={attachment.id}><span><strong>{attachment.fileName}</strong><small> · {Math.ceil(attachment.size / 1024).toLocaleString()} KiB · {data.tasks.find(task => task.id === attachment.taskId)?.title ?? "Task"}</small></span><div><button type="button" onClick={() => { void downloadAttachment(attachment); }}>Download</button><button type="button" className="danger" onClick={() => { void deleteAttachment(attachment); }}>Delete</button></div></div>)}<p role="status" aria-live="polite">{attachmentStatus}</p>
           <h3>Task templates</h3><p>Templates create fresh tasks with their own IDs and completion history.</p>{data.taskTemplates.filter(template => !template.deletedAt).map(template => <div className="tagLine" key={template.id}><span><strong>{template.name}</strong><small> · {template.title}</small></span><button type="button" onClick={() => mutate(value => instantiateTaskTemplate(value, template.id))}>Create task</button></div>)}{!data.taskTemplates.some(template => !template.deletedAt) && <p>No templates yet. Select tasks in Tasks and choose “Save selected as templates.”</p>}
           <h3>Event templates</h3><p>Start a new calendar event from a saved event pattern.</p>{data.eventTemplates.filter(template => !template.deletedAt).map(template => <div className="tagLine" key={template.id}><span><strong>{template.name}</strong><small> · {template.title}</small></span><button type="button" onClick={() => mutate(value => instantiateEventTemplate(value, template.id, calendarSelectedDate))}>Create event on {calendarSelectedDate}</button></div>)}{!data.eventTemplates.some(template => !template.deletedAt) && <p>No event templates yet. Save an existing event as a template in its editor.</p>}
            <h3>Routines</h3><p>A routine starts a recurring task from a template. Completing that task advances its next due date.</p><form className="routineForm" onSubmit={e => { e.preventDefault(); if (!routineTemplateId) return; const form = e.currentTarget; const name = (form.elements.namedItem("routineName") as HTMLInputElement).value.trim(); if (!name) return; mutate(value => createRoutine(value, routineTemplateId, name, routineStartDate, { frequency: routineFrequency, interval: Math.max(1, routineInterval) })); (form.elements.namedItem("routineName") as HTMLInputElement).value = ""; }}><label>Routine name<input name="routineName" required placeholder="Weekly review" /></label><label>Template<CustomSelect aria-label="Routine template" value={routineTemplateId} onChange={e => setRoutineTemplateId(e.target.value)}><option value="">Choose template…</option>{data.taskTemplates.filter(template => !template.deletedAt).map(template => <option key={template.id} value={template.id}>{template.name}</option>)}</CustomSelect></label><div className="fieldPair"><label>First due date<DateField value={routineStartDate} min={historyStart(today)} onChange={setRoutineStartDate} /></label><label>Repeat<CustomSelect value={routineFrequency} onChange={e => setRoutineFrequency(e.target.value as typeof routineFrequency)}>{["daily", "weekly", "monthly", "yearly"].map(frequency => <option key={frequency} value={frequency}>{frequency[0].toUpperCase() + frequency.slice(1)}</option>)}</CustomSelect></label></div><label>Every<input type="number" min="1" max="365" value={routineInterval} onChange={e => setRoutineInterval(Number(e.target.value))} /></label><button disabled={!routineTemplateId}>Create routine</button></form>{data.routines.filter(routine => !routine.deletedAt).map(routine => <div className="tagLine" key={routine.id}><span>{routine.name} · {routine.recurrence.frequency}</span><button type="button" onClick={() => mutate(value => setRoutineEnabled(value, routine.id, !routine.enabled))}>{routine.enabled ? "Pause" : "Resume"}</button></div>)}
@@ -534,6 +935,12 @@ export default function Home() {
           </div>}
           <h3>Tags</h3><form className="quickAdd" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("tag") as HTMLInputElement; if (!input.value.trim()) return; mutate(value => ({ ...value, tags: [...value.tags, { ...newEntity(), name: input.value.trim(), color: "#c86b24" }] })); input.value = ""; }}><input name="tag" aria-label="New tag name" placeholder="New tag name…" /><button>Add tag</button></form>{tags.map(t => <div className="tagLine" key={t.id}><span>#{t.name}</span><div><button onClick={() => { const name = prompt("Rename tag", t.name)?.trim(); if (name) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, name, revision: item.revision + 1, updatedAt: new Date().toISOString() } : item) })); }}>Rename</button><button type="button" className="danger" onClick={() => { if (confirm(`Delete tag ${t.name}?`)) mutate(value => ({ ...value, tags: value.tags.map(item => item.id === t.id ? { ...item, deletedAt: new Date().toISOString(), revision: item.revision + 1 } : item), tasks: value.tasks.map(item => item.tagIds.includes(t.id) ? { ...item, tagIds: item.tagIds.filter(id => id !== t.id), revision: item.revision + 1 } : item) })); }}>Delete</button></div></div>)}
           <h3>Archived projects</h3>{data.projects.filter(p => p.archivedAt && !p.deletedAt).map(p => <div className="tagLine" key={p.id}><span>{p.name}</span><button onClick={() => mutate(value => { const stamp = new Date().toISOString(); return { ...value, projects: value.projects.map(item => item.id === p.id ? { ...item, archivedAt: undefined, updatedAt: stamp, revision: item.revision + 1 } : item) }; })}>Restore</button></div>)}
+          <h3>Sessions</h3><p>Revoking a session immediately blocks that browser session from LTM Todo. It does not sign you out of the identity provider itself.</p>{authSessions.map(session => <div className="tagLine" key={session.sessionKey}><span><strong>{session.current ? "This browser" : "Signed-in session"}</strong><small> · Last used {new Date(session.lastSeenAt).toLocaleString()} · Expires {new Date(session.expiresAt).toLocaleString()}</small></span>{!session.current && <button type="button" className="danger" onClick={() => { void fetch(`/api/v1/auth/sessions/${session.sessionKey}`, { method: "POST", credentials: "same-origin" }).then(response => { if (!response.ok) throw new Error(); setAuthSessions(current => current.filter(item => item.sessionKey !== session.sessionKey)); setAuthSessionStatus("Session revoked."); }).catch(() => setAuthSessionStatus("Session could not be revoked. Please retry.")); }}>Revoke</button>}</div>)}<p role="status" aria-live="polite">{authSessionStatus}</p>
+          {syncStatus.authenticated && <div className="settingsActions"><button type="button" className="danger" onClick={() => { if (prompt("This deletes account sync data and attachments. Type DELETE to continue.") !== "DELETE") return; void fetch("/api/v1/account/delete", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmation: "DELETE" }) }).then(async response => { const result = await response.json() as { attachmentCleanup?: string }; if (!response.ok) throw new Error(); setSyncStatus({ state: "signed_out" }); setAuthSessions([]); setAttachments([]); setAccountStatus(result.attachmentCleanup === "pending" ? "Account data was deleted. Private attachment bytes are queued for Cloudflare cleanup. Local offline data on this device remains." : "Account data was deleted. Local offline data on this device remains."); }).catch(() => setAccountStatus("Account deletion could not be completed. Please retry.")); }}>Delete account and synced data</button></div>}{accountStatus && <p role="status" aria-live="polite">{accountStatus}</p>}
+          <h3>Sync devices</h3><p>Devices keep their last acknowledged sync position. Devices inactive for 180 days are automatically retired; you can explicitly re-register this browser without changing its local task data.</p>
+          {syncStatus.authenticated && syncDevices.filter(device => !device.retiredAt).map(device => <div className="tagLine" key={device.deviceId}><span><strong>{device.displayName}</strong><small> · Last active {new Date(device.lastSeenAt).toLocaleString()}</small></span>{device.deviceId === currentSyncDeviceId ? <span>This device</span> : <button type="button" className="danger" onClick={() => { void retireSyncDevice(device); }}>Remove</button>}</div>)}
+          <p role="status" aria-live="polite">{deviceStatus}</p>
+          {syncStatus.state === "device_retired" && <><p>This browser was removed from the account. You can register it again without changing local task data.</p><button type="button" onClick={() => { void syncClient.current?.reRegisterRetiredDevice(); }}>Register this browser again</button></>}
         </div>}
       </>}
     </section>
@@ -673,7 +1080,7 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
     <label>Title<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
     <div className="fieldPair dateTimePair"><label>Date<DateField value={dueDate} min={earliestDate} onChange={setDueDate} /></label><label>Time<TimeField value={dueTime} disabled={!dueDate} onChange={setDueTime} /></label></div>
-    {expiredDueDate && <p className="hint">Choose a date within the seven-day history window.</p>}
+    {expiredDueDate && <p className="hint">Choose a date within the 31-day history window.</p>}
     <div className="fieldPair"><label>Priority<CustomSelect value={priority} onChange={e => setPriority(e.target.value as Priority)}>{priorities.map(p => <option key={p} value={p}>{priorityLabel(p)}</option>)}</CustomSelect></label><label>Project<CustomSelect value={projectId} onChange={e => { setProjectId(e.target.value); setSectionId(""); }}><option value="">Inbox</option>{data.projects.filter(p => !p.deletedAt && !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</CustomSelect></label></div>
     {projectId && <label>Section<CustomSelect value={sectionId} onChange={e => setSectionId(e.target.value)}><option value="">Project root</option>{data.sections.filter(s => s.projectId === projectId && !s.deletedAt).map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</CustomSelect></label>}
     {!!data.tags.length && <fieldset><legend>Tags</legend>{data.tags.filter(t => !t.deletedAt).map(t => <label className="checkLabel" key={t.id}><input type="checkbox" checked={tagIds.includes(t.id)} onChange={e => setTagIds(e.target.checked ? [...tagIds, t.id] : tagIds.filter(id => id !== t.id))} /> {t.name}</label>)}</fieldset>}

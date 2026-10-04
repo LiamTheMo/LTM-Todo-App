@@ -429,7 +429,7 @@ export function overdueTasks(data: Data, today = localDate(new Date())): Task[] 
     .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || taskOrder(a, b));
 }
 
-/** Permanently remove task history older than the rolling seven calendar days kept on the Dashboard. */
+/** Permanently remove task history older than the rolling 31 calendar days kept on the Dashboard. */
 export function pruneExpiredHistory(data: Data, today = localDate(new Date())): Data {
   const cutoff = historyStart(today);
   const expiredTaskIds = new Set(data.tasks.filter(task => {
