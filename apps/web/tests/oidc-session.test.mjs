@@ -80,6 +80,7 @@ test("OIDC code flow uses PKCE/state/nonce and creates an encrypted same-origin 
   assert.equal(authorization.origin, issuer);
   assert.equal(authorization.searchParams.get("code_challenge_method"), "S256");
   assert.equal(authorization.searchParams.get("scope"), "openid");
+  assert.equal(authorization.searchParams.get("audience"), audience);
   const flowCookie = login.headers.get("Set-Cookie").split(";")[0];
   const codec = new AuthCookieCodec(secret);
   const flow = await codec.open(flowCookie.slice(flowCookie.indexOf("=") + 1), "flow");
