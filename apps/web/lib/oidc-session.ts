@@ -51,6 +51,7 @@ export type OidcAuthenticationDiagnosticCode =
   | "callback_token_response_invalid"
   | "callback_id_token_invalid"
   | "callback_access_token_invalid"
+  | "callback_token_verification_failed"
   | "callback_identity_mismatch"
   | "callback_session_cookie_too_large"
   | "unexpected_error";
@@ -277,7 +278,7 @@ export class OidcSessionService {
         this.accessTokenVerifier.verifyToken(tokens.access_token)
       ]);
     } catch {
-      throw new OidcCallbackFailure("callback_token_exchange_failed");
+      throw new OidcCallbackFailure("callback_token_verification_failed");
     }
     if (!identity) return this.authFailure("callback_id_token_invalid");
     if (!accessPrincipal) return this.authFailure("callback_access_token_invalid");
