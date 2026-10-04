@@ -22,7 +22,7 @@ Add these production-only entries under **Settings → Builds → Build variable
 - `D1_DATABASE_ID` — the UUID of the production D1 database. It is a database identifier, not an access credential, but this public repository keeps it out of Git by injecting it into temporary Wrangler config files during deployment.
 - `SYNC_D1_DATABASE_ID` — the UUID of the separate account-sync D1 database.
 - `VAPID_PRIVATE_KEY` — the private half of the dedicated Web Push VAPID key pair.
-- `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URI`, `OIDC_CLIENT_ID`, and `OIDC_REDIRECT_URI` — the identity provider configuration. Use the exact callback `<app-origin>/api/v1/auth/callback`.
+- `OIDC_ISSUER` and `OIDC_JWKS_URI` — copy the exact `issuer` and `jwks_uri` values from the provider's `/.well-known/openid-configuration` document. `OIDC_AUDIENCE` — the API/resource identifier expected in access-token `aud`; the app sends it as the authorization `audience` parameter for providers that support that convention, including Auth0. `OIDC_CLIENT_ID` — the registered app's client ID. `OIDC_REDIRECT_URI` — the exact callback `<app-origin>/api/v1/auth/callback` registered with the provider.
 - `OIDC_CLIENT_SECRET` — optional; only needed for a confidential OIDC client.
 - `AUTH_SESSION_SECRET`, `SYNC_CURSOR_SECRET`, and `ICS_FEED_ENCRYPTION_KEY` — three distinct, stable, independently generated 32-byte base64url secrets. Do not rotate them casually: rotation invalidates browser sessions/cursors or makes stored feed URLs undecryptable.
 
