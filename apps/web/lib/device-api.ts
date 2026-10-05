@@ -1,5 +1,6 @@
 import { SyncDeviceError, type DeviceRegistry } from "./device-registry.ts";
 import type { SyncAuthenticator } from "./sync-api.ts";
+import { logSyncBackendFailure } from "./sync-diagnostics.ts";
 
 const maxBodyBytes = 4_096;
 const deviceIdPath = /^\/api\/v1\/devices\/([0-9a-f-]{36})$/i;
@@ -20,7 +21,8 @@ export async function handleDeviceRequest(request: Request, auth: SyncAuthentica
 
   let principal;
   try { principal = await auth.authenticate(request); }
-  catch { return json({ error: "authentication_unavailable" }, 503); }
+  catch (error) { const code = logSyncBackendFailure("device_authentication", error);
+    return json({ error: code === "sync_unavailable" ? "authentication_unavailable" : code }, 503); }
   if (!principal) return json({ error: "unauthorized" }, 401);
 
   try {
@@ -46,7 +48,8 @@ export async function handleDeviceRequest(request: Request, auth: SyncAuthentica
         error.code === "device_retired" ? 410 : 409;
       return json({ error: error.code }, status);
     }
-    return json({ error: "devices_unavailable" }, 503);
+    const code = logSyncBackendFailure("device_registration", error);
+    return json({ error: code === "sync_unavailable" ? "devices_unavailable" : code }, 503);
   }
 }
 

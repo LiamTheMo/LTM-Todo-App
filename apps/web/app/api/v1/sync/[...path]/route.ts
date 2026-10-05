@@ -8,6 +8,7 @@ import { DeviceRegistry } from "../../../../../lib/device-registry.ts";
 import type { SyncSnapshotResponse } from "../../../../../lib/d1-sync-store.ts";
 import { SyncCursorCodec } from "../../../../../lib/sync-cursor.ts";
 import type { SyncPushBatch } from "../../../../../lib/sync-protocol.ts";
+import { logSyncBackendFailure, safeSyncFailureCode, SyncBackendError } from "../../../../../lib/sync-diagnostics.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ class CoordinatorStore implements SyncStore {
       if (body.error === "invalid_relationship") throw new InvalidSyncRelationshipError();
       if (body.error === "rate_limited") throw new SyncRateLimitError();
       if (body.error === "invalid_cursor") throw new InvalidSyncCursorError();
-      throw new Error("Sync coordinator unavailable");
+      throw new SyncBackendError(safeSyncFailureCode(body.error) ?? "coordinator_unavailable");
     }
     return body as PushResponse | PullResponse;
   }
@@ -72,8 +73,10 @@ async function dispatch(request: Request) {
     return new URL(request.url).pathname === "/api/v1/sync/snapshot"
       ? await handleSyncSnapshotRequest(request, auth, store)
       : await handleSyncRequest(request, auth, store);
-  } catch {
-    return unavailable();
+  } catch (error) {
+    return Response.json({ error: logSyncBackendFailure("sync_dispatch", error) }, {
+      status: 503, headers: { "Cache-Control": "no-store" }
+    });
   }
 }
 

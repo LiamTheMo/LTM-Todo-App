@@ -5,6 +5,7 @@ import { DeviceRegistry } from "../../../../../lib/device-registry.ts";
 import { handleDeviceRequest } from "../../../../../lib/device-api.ts";
 import { SyncCursorCodec } from "../../../../../lib/sync-cursor.ts";
 import { enforceEdgeRateLimit } from "../../../../../lib/edge-rate-limit.ts";
+import { logSyncBackendFailure } from "../../../../../lib/sync-diagnostics.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +23,11 @@ async function dispatch(request: Request) {
       sessionRegistry: new D1AuthSessionRegistry(env.SYNC_DB) });
     const registry = new DeviceRegistry(env.SYNC_DB, new SyncCursorCodec(cursorSecret));
     return await handleDeviceRequest(request, auth, registry);
-  } catch {
-    return Response.json({ error: "devices_unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    const code = logSyncBackendFailure("devices_dispatch", error);
+    return Response.json({ error: code === "sync_unavailable" ? "devices_unavailable" : code }, {
+      status: 503, headers: { "Cache-Control": "no-store" }
+    });
   }
 }
 

@@ -1,4 +1,5 @@
 import { SyncCursorCodec } from "./sync-cursor.ts";
+import { logSyncBackendFailure } from "./sync-diagnostics.ts";
 import { D1SyncStore, type SyncD1Database } from "./d1-sync-store.ts";
 import { InvalidSyncCursorError, InvalidSyncRelationshipError, SyncMutationConflictError, SyncRateLimitError,
   type SyncPrincipal } from "./sync-api.ts";
@@ -36,7 +37,7 @@ export class AccountSyncCoordinator {
         const code = error instanceof SyncMutationConflictError ? "mutation_id_reused" :
           error instanceof InvalidSyncRelationshipError ? "invalid_relationship" :
           error instanceof SyncRateLimitError ? "rate_limited" :
-          error instanceof InvalidSyncCursorError ? "invalid_cursor" : "sync_unavailable";
+          error instanceof InvalidSyncCursorError ? "invalid_cursor" : logSyncBackendFailure(operation.kind, error);
         const status = code === "mutation_id_reused" || code === "invalid_relationship" ? 409 :
           code === "rate_limited" ? 429 : code === "invalid_cursor" ? 410 : 503;
         return Response.json({ error: code }, { status, headers: { "Cache-Control": "no-store" } });

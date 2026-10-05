@@ -9,6 +9,15 @@ import { SyncCursorCodec } from "../lib/sync-cursor.ts";
 import { InvalidSyncRelationshipError, SyncMutationConflictError } from "../lib/sync-api.ts";
 import { InvalidSyncCursorError } from "../lib/sync-api.ts";
 import { maintainSyncRetention } from "../lib/sync-retention.ts";
+import { IDBFactory } from "fake-indexeddb";
+import { emptyData } from "../lib/domain.ts";
+import { normalizeData, prepareInitialSyncUpload, readData, readPendingSyncMutations, writeData,
+  bindSyncAccount, acknowledgeSyncMutation, recordSyncConflict, getSyncCursor, persistSyncCursor,
+  getSyncSnapshotCursor, persistSyncSnapshotCursor, applyRemoteSyncChanges, hasSyncConflicts } from "../lib/storage.ts";
+import { SyncClient } from "../lib/sync-client.ts";
+import { DeviceRegistry } from "../lib/device-registry.ts";
+import { handleDeviceRequest } from "../lib/device-api.ts";
+import { handleSyncRequest, handleSyncSnapshotRequest } from "../lib/sync-api.ts";
 
 function mockD1() {
   const db = new DatabaseSync(":memory:");
@@ -178,4 +187,89 @@ test("per-account Durable Object serializes concurrent writes against the same b
     assert.deepEqual(bodies.map(body => body.results[0].status).sort(), ["accepted", "conflict"]);
     assert.equal((await store.pull(accountA, undefined, 10)).changes.length, 2);
   } finally { d1.db.close(); }
+});
+
+test("legacy data uploads once and a second device downloads paged relationships, then saves changes back", async () => {
+  const stamp = "2026-10-03T12:00:00.000Z";
+  const { d1, store } = await setup();
+  const originalIndexedDB = globalThis.indexedDB;
+  const firstDevice = new IDBFactory();
+  const secondDevice = new IDBFactory();
+  const auth = { authenticate: async () => accountA };
+  const devices = new DeviceRegistry(d1, new SyncCursorCodec(Buffer.alloc(32, 17).toString("base64url")));
+  const requests = [];
+  const fetcher = async (input, init) => {
+    const request = new Request(`https://sync.example.test${input}`, init);
+    requests.push(new URL(request.url).pathname);
+    if (String(input).includes("auth/session")) return Response.json({ authenticated: true, accountKey: "a".repeat(43) });
+    if (String(input).includes("/devices")) return handleDeviceRequest(request, auth, devices);
+    if (String(input).includes("/snapshot")) return handleSyncSnapshotRequest(request, auth, store);
+    return handleSyncRequest(request, auth, store);
+  };
+  const outbox = { bindAccount: bindSyncAccount, prepareUpload: prepareInitialSyncUpload, pending: readPendingSyncMutations,
+    acknowledge: acknowledgeSyncMutation, recordConflict: recordSyncConflict, cursor: getSyncCursor, setCursor: persistSyncCursor,
+    snapshotCursor: getSyncSnapshotCursor, setSnapshotCursor: persistSyncSnapshotCursor,
+    applyRemote: applyRemoteSyncChanges, hasConflicts: hasSyncConflicts };
+  const first = new SyncClient({ fetcher, outbox, deviceId: crypto.randomUUID(), online: () => true });
+  const second = new SyncClient({ fetcher, outbox, deviceId: crypto.randomUUID(), online: () => true });
+  try {
+    globalThis.indexedDB = firstDevice;
+    await readData();
+    const legacy = emptyData();
+    legacy.schemaVersion = 3;
+    legacy.projects.push(project);
+    legacy.tasks.push(task);
+    for (let i = 0; i < 15; i++) legacy.calendars.push({ ...legacy.calendars[0], id: crypto.randomUUID(), name: `Calendar ${i}` });
+    // These sort before their parents alphabetically and cross a 12-record snapshot page boundary.
+    legacy.calendarEvents.push({ id: crypto.randomUUID(), calendarId: legacy.calendars[15].id,
+      title: "School event", notes: "", allDay: true, startDate: "2026-10-15", endDate: "2026-10-16",
+      createdAt: stamp, updatedAt: stamp, revision: 1 });
+    legacy.blocks.push({ id: crypto.randomUUID(), taskId, startInstant: "2026-10-15T12:00:00.000Z",
+      endInstant: "2026-10-15T13:00:00.000Z", timeZone: "UTC", createdAt: stamp, updatedAt: stamp, revision: 1 });
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("ltm-todo", 4);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction("state", "readwrite");
+      transaction.objectStore("state").put(legacy, "local");
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+    });
+    db.close();
+    assert.deepEqual(await readPendingSyncMutations(12), []);
+    await first.syncNow();
+    assert.equal(first.getStatus().state, "idle", JSON.stringify(first.getStatus()));
+    assert.deepEqual(await readPendingSyncMutations(12), []);
+    const initialCount = d1.db.prepare("SELECT count(*) AS count FROM sync_journal").get().count;
+    assert.equal(initialCount, 20);
+    await first.syncNow();
+    assert.equal(d1.db.prepare("SELECT count(*) AS count FROM sync_journal").get().count, initialCount);
+
+    globalThis.indexedDB = secondDevice;
+    await second.syncNow();
+    assert.equal(second.getStatus().state, "idle", JSON.stringify(second.getStatus()));
+    let downloaded = await readData("2026-10-15");
+    assert.equal(downloaded.tasks[0].title, "Initial");
+    assert.equal(downloaded.calendars.length, 16);
+    assert.equal(downloaded.calendarEvents[0].title, "School event");
+    assert.equal(downloaded.blocks[0].taskId, taskId);
+    normalizeData(downloaded);
+    assert.equal(d1.db.prepare("SELECT count(*) AS count FROM sync_journal").get().count, initialCount);
+    downloaded.tasks[0].title = "Edited on second device";
+    downloaded.tasks[0].revision += 1;
+    await writeData({ ...downloaded, generation: downloaded.generation + 1 }, downloaded.generation);
+    await second.syncNow();
+    assert.equal(second.getStatus().state, "idle", JSON.stringify(second.getStatus()));
+    globalThis.indexedDB = firstDevice;
+    await first.syncNow();
+    assert.equal(first.getStatus().state, "idle", JSON.stringify(first.getStatus()));
+    assert.equal((await readData("2026-10-15")).tasks[0].title, "Edited on second device");
+    assert.ok(requests.filter(path => path.endsWith("/snapshot")).length >= 3);
+  } finally {
+    first.dispose(); second.dispose();
+    globalThis.indexedDB = originalIndexedDB;
+    d1.db.close();
+  }
 });
