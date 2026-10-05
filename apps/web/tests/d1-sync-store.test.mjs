@@ -55,7 +55,7 @@ function mutation(entityType, entityId, payload, baseRevision = 0) {
     clientSchemaVersion: 4, operation: "upsert" };
 }
 const project = { id: projectId, name: "Personal", color: "orange", sortKey: 0, createdAt: "2026-10-03T12:00:00.000Z", updatedAt: "2026-10-03T12:00:00.000Z", revision: 1 };
-const task = { id: taskId, title: "Initial", notes: "", priority: "none", projectId, tagIds: [], sortKey: 0,
+const task = { id: taskId, title: "Initial", notes: "", priority: "low", projectId, tagIds: [], sortKey: 0,
   createdAt: "2026-10-03T12:00:00.000Z", updatedAt: "2026-10-03T12:00:00.000Z", revision: 1 };
 
 async function setup() {

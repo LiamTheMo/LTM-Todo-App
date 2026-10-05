@@ -29,6 +29,6 @@ test("backup restore rejects unsupported versions, malformed relationships, and 
   assert.throws(() => parseBackup(JSON.stringify(badRelationship)), /missing project/);
   assert.throws(() => parseBackup("x".repeat(MAX_BACKUP_BYTES + 1)), /16 MB/);
   const tooLarge = emptyData();
-  tooLarge.tasks.push({ ...newEntity(), title: "x".repeat(MAX_BACKUP_BYTES + 1), notes: "", priority: "none", tagIds: [], sortKey: 0 });
+  tooLarge.tasks.push({ ...newEntity(), title: "x".repeat(MAX_BACKUP_BYTES + 1), notes: "", priority: "low", tagIds: [], sortKey: 0 });
   assert.throws(() => createBackup(tooLarge), /16 MB/);
 });

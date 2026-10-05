@@ -1,4 +1,4 @@
-export type Priority = "none" | "low" | "medium" | "high";
+export type Priority = "low" | "medium" | "high";
 export type Frequency = "daily" | "weekly" | "monthly" | "yearly";
 export type Recurrence = {
   frequency: Frequency;
@@ -294,7 +294,7 @@ export function setRoutineEnabled(data: Data, id: string, enabled: boolean): Dat
 }
 export function bulkSetPriority(data: Data, ids: string[], priority: Priority): Data {
   const selected = new Set(ids);
-  if (!(["none", "low", "medium", "high"] as Priority[]).includes(priority)) return data;
+  if (!(["low", "medium", "high"] as Priority[]).includes(priority)) return data;
   const stamp = new Date().toISOString();
   return { ...data, tasks: data.tasks.map(task => selected.has(task.id) && !task.deletedAt && !task.completedAt
     ? { ...task, priority, updatedAt: stamp, revision: task.revision + 1 } : task) };

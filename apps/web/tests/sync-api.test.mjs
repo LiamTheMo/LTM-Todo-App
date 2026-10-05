@@ -8,7 +8,7 @@ const mutationId = "4e731b4e-c82c-4df6-a26a-847a2c115414";
 const stamp = "2026-10-03T12:00:00.000Z";
 const input = { protocolVersion: 1, mutations: [{ entityType: "tasks", entityId: taskId, baseRevision: 0,
   operation: "upsert", clientMutationId: mutationId, clientSchemaVersion: 4, payload: { id: taskId, title: "Private",
-    notes: "", priority: "none", tagIds: [], sortKey: 0, createdAt: stamp, updatedAt: stamp, revision: 1 } }] };
+    notes: "", priority: "low", tagIds: [], sortKey: 0, createdAt: stamp, updatedAt: stamp, revision: 1 } }] };
 
 function dependencies(accountId) {
   const calls = [];
