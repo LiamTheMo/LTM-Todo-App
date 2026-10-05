@@ -4,6 +4,7 @@ import { OidcJwtAuthenticator } from "../lib/oidc-auth.ts";
 
 const issuer = "https://identity.example.test/";
 const audience = "ltm-todo-api";
+const clientId = "ltm-web-client";
 const jwksUri = "https://identity.example.test/.well-known/jwks.json";
 const now = Date.parse("2026-10-03T12:00:00.000Z");
 const encoder = new TextEncoder();
@@ -30,7 +31,7 @@ const claims = overrides => ({ iss: issuer, sub: "account-subject", aud: audienc
 test("verifies a signed OIDC access token and caches the issuer's key set", async () => {
   const { pair, publicKey } = await keys();
   let requests = 0;
-  const auth = new OidcJwtAuthenticator({ issuer, audience, jwksUri, now: () => now, fetcher: async () => {
+  const auth = new OidcJwtAuthenticator({ issuer, audience, clientId, jwksUri, now: () => now, fetcher: async () => {
     requests++;
     return Response.json({ keys: [publicKey] });
   } });
@@ -41,11 +42,27 @@ test("verifies a signed OIDC access token and caches the issuer's key set", asyn
   assert.equal(requests, 1);
 });
 
+test("validates an Auth0 multi-audience token's authorized party against the client ID", async () => {
+  const { pair, publicKey } = await keys();
+  const auth = new OidcJwtAuthenticator({ issuer, audience, clientId, jwksUri, now: () => now,
+    fetcher: async () => Response.json({ keys: [publicKey] }) });
+  const userinfo = `${new URL(issuer).origin}/userinfo`;
+  const valid = await jwt(pair.privateKey, claims({ aud: [audience, userinfo], azp: clientId }));
+  const wrongClient = await jwt(pair.privateKey, claims({ aud: [audience, userinfo], azp: "another-client" }));
+  const missingClient = await jwt(pair.privateKey, claims({ aud: [audience, userinfo] }));
+  const authenticate = value => auth.authenticate(new Request("https://app.test", {
+    headers: { Authorization: `Bearer ${value}` }
+  }));
+  assert.deepEqual(await authenticate(valid), { issuer, subject: "account-subject" });
+  assert.equal(await authenticate(wrongClient), undefined);
+  assert.equal(await authenticate(missingClient), undefined);
+});
+
 test("verifies the supported ES256 access-token profile", async () => {
   const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   const publicKey = await crypto.subtle.exportKey("jwk", pair.publicKey);
   Object.assign(publicKey, { kid: "ec-key", use: "sig", alg: "ES256" });
-  const auth = new OidcJwtAuthenticator({ issuer, audience, jwksUri, now: () => now,
+  const auth = new OidcJwtAuthenticator({ issuer, audience, clientId, jwksUri, now: () => now,
     fetcher: async () => Response.json({ keys: [publicKey] }) });
   const token = await jwt(pair.privateKey, claims(), { alg: "ES256", kid: "ec-key", typ: "at+jwt" },
     { name: "ECDSA", hash: "SHA-256" });
@@ -56,7 +73,7 @@ test("verifies the supported ES256 access-token profile", async () => {
 
 test("rejects wrong issuer, audience, expired, future, unsupported, and unsigned tokens", async () => {
   const { pair, publicKey } = await keys();
-  const auth = new OidcJwtAuthenticator({ issuer, audience, jwksUri, now: () => now,
+  const auth = new OidcJwtAuthenticator({ issuer, audience, clientId, jwksUri, now: () => now,
     fetcher: async () => Response.json({ keys: [publicKey] }) });
   const verify = async (payload, header) => auth.authenticate(new Request("https://app.test", {
     headers: { Authorization: `Bearer ${await jwt(pair.privateKey, payload, header)}` }
@@ -75,7 +92,7 @@ test("refreshes unknown signing keys once and rejects bad signatures", async () 
   const second = await keys();
   second.publicKey.kid = "key-2";
   let requests = 0;
-  const auth = new OidcJwtAuthenticator({ issuer, audience, jwksUri, now: () => now, fetcher: async () => {
+  const auth = new OidcJwtAuthenticator({ issuer, audience, clientId, jwksUri, now: () => now, fetcher: async () => {
     requests++;
     return Response.json({ keys: [requests === 1 ? first.publicKey : second.publicKey] });
   } });
@@ -93,7 +110,7 @@ test("refreshes unknown signing keys once and rejects bad signatures", async () 
 test("rejects issuer signing-key redirects without following them", async () => {
   const { pair } = await keys();
   let fetchOptions;
-  const auth = new OidcJwtAuthenticator({ issuer, audience, jwksUri, now: () => now,
+  const auth = new OidcJwtAuthenticator({ issuer, audience, clientId, jwksUri, now: () => now,
     fetcher: async (_url, options = {}) => {
       fetchOptions = options;
       return new Response(null, { status: 302, headers: { Location: "https://attacker.example/keys" } });
@@ -106,7 +123,7 @@ test("rejects issuer signing-key redirects without following them", async () => 
 });
 
 test("fails closed and reports issuer-key outages without exposing token data", async () => {
-  const auth = new OidcJwtAuthenticator({ issuer, audience, jwksUri, now: () => now,
+  const auth = new OidcJwtAuthenticator({ issuer, audience, clientId, jwksUri, now: () => now,
     fetcher: async () => new Response("upstream diagnostic secret", { status: 503 }) });
   const { pair } = await keys();
   const token = await jwt(pair.privateKey, claims());
