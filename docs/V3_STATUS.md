@@ -61,6 +61,7 @@ Local validation on the implementation tree passed: 151 tests, TypeScript typech
 - Uploads and snapshot pages share dependency ordering so calendars/projects/tasks arrive before their linked records. Old snapshot continuations restart under the new ordering; incremental cursors remain compatible.
 - Paused sync reports the failing operation and an allowlisted error category. Worker logs classify database/schema/quota failures without recording SQL, tokens, account identifiers, or user content.
 - An integration test covers an older local profile uploading 20 records, a second IndexedDB profile loading multiple snapshot pages, and an edit returning to the first device without duplicate uploads.
+- Native browser fetch and timeout functions retain their global receiver when used by the sync client. A regression test covers receiver-sensitive browser APIs; otherwise session checks can fail before any network request is sent while the separate sign-in indicator still succeeds.
 
 ### Requires Manual Validation
 
