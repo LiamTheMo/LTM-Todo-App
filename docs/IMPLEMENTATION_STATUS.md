@@ -1,44 +1,45 @@
 # Current Web App Implementation
 
-Last audited: 2026-10-04. The shipped-behavior section describes deployed `main`; the v3 work-in-progress section describes the current local implementation branch and is not deployed.
-
-This file records shipped behavior. Product specs and phase documents describe intended behavior and acceptance targets; when a target is not listed below as implemented, do not treat it as shipped.
+Last audited: 2026-10-05. This document describes the implemented v3.01 tree; production promotion is tracked in [V3_01_STATUS.md](V3_01_STATUS.md). Historical phase plans are targets, not independent evidence that every manual acceptance check has passed.
 
 ## Supported client and storage
 
-- The supported desktop, iPhone and iPad experience is the responsive web app at [ltm-todo-app.orangecheasy.workers.dev](https://ltm-todo-app.orangecheasy.workers.dev/), including install-to-Home-Screen on supported mobile browsers.
-- Task, project, calendar, event, planned-work, reminder, template, routine and saved-view data is stored locally in each browser's IndexedDB. There are no user accounts or task-data synchronization between browsers/devices.
-- The repository maintains the web application only; native Apple app source and native build/test workflows have been removed.
-- Web Push is a separate per-install reminder-delivery service. Cloudflare D1 stores push subscription and delivery-queue details (including reminder title and scheduled time), not the task database. Each browser reconciles its own queue from local data.
+- Responsive web app for desktop, iPhone, and iPad, including Home Screen installation where supported. Native Apple source/workflows are not maintained.
+- Local IndexedDB stores interactive task, project, calendar, event, block, reminder, template, routine, and saved-view data. Accounts and cross-device sync are implemented and normal production sign-in/sync were confirmed working on 2026-10-05.
+- Signed-in sync uses Cloudflare D1 and per-account Durable Objects, with offline queues, revisions, dependency ordering, tombstones, retry diagnostics, and explicit conflict decisions.
+- Notifications use a separate per-install Web Push queue; push delivery does not synchronize task data.
 
-## v3 work in progress (not deployed)
+## Workspace behavior
 
-- The implementation branch contains the OIDC account flow, versioned sync API, D1 account/entity/journal store serialized by a Durable Object, offline IndexedDB mutation queues, deterministic conflict choices, device/session controls, and account-scoped sync UI. It is pushed to `feat/v2.01-phase10-cloudflare-d1` as `bc73fec`, but is not merged to a version checkpoint or `main`, and has not been validated against provisioned production Cloudflare resources.
-- Versioned local JSON backup/restore and account-protected attachment APIs backed by D1 metadata and R2 objects are implemented and locally tested. Restore validates the data before replacing local state. Backups exclude attachment data and ICS feed URLs/event caches; attachments must be downloaded separately.
-- ICS subscriptions are implemented locally: encrypted account-scoped URLs, conditional refresh and backoff, bounded cache, SSRF/DNS/redirect checks, pinned-address TLS transport, read-only calendar rendering, and add/show-hide/recolor/refresh/unsubscribe controls. Production Worker networking and provider behavior still require live validation.
-- Session revocation, inactive-device expiry, journal/tombstone retention, account deletion, paged R2 cleanup, and orphan reconciliation are implemented and tested locally. Revoking the app's session does not revoke the user's session at the identity provider. Production recovery/deletion drills remain open.
-- Optional multi-user sharing/collaboration is explicitly deferred from the initial v3.00 release; no membership/role model is implemented.
+- Dashboard opens at Today, shows due tasks and planned work by day, keeps overdue deadlines separate, and retains Today plus the previous 30 days. Older history is pruned. Undated tasks stay in Tasks.
+- Tasks is a Kanban with text search. Priorities color the completion circle. Subtasks are not maintained.
+- Projects, sections, tags, ordering, archive/restore, structured recurrence, routines, and templates are implemented.
+- First-party calendars support full-spectrum colors, create/edit/delete, all-day/timed events, recurrence, month navigation, selected-day agenda/timeline, and planned-work blocks. Due dates and scheduled work remain separate.
+- Custom date/time fields work on mobile; task date/time fields remain side by side. The current-time marker refreshes every 15 seconds.
 
-## Shipped product behavior
+## Course-outline importing (v3.01)
 
-- Dashboard and task management include local persistence, projects/sections, tags, recurrence, reminders, routines and templates. Tasks is a status-based Kanban with text search; the Dashboard includes dated tasks and recent completion history, while open tasks without due dates remain in Tasks only; it retains up to 31 calendar days of history.
-- The first-party Calendar has local calendars and events, including all-day/timed events, recurrence, visibility, in-app creation, and calendar rename/recolor editing. The full-spectrum color wheel supports 8-bit RGB channels (0–255 each); hue selection matches the visible spectrum.
-- Selecting a date shows its agenda and chronological day timeline. Timed events and scheduled task blocks appear in the timeline; due dates remain separate from planned-work times.
-- The calendar has no Month/Week/Day/Agenda mode switch. Month navigation and selecting a date are the available calendar navigation controls.
-- Planned-work blocks can be created, edited and removed from task/calendar forms. Drag-and-drop scheduling and multiple blocks per task are not shipped.
-- The current-time marker on today's timeline refreshes every 15 seconds. It moves with elapsed time, but is not a frame-by-frame animation.
-- Task editor data selectors use in-app custom controls. Opening New Task does not focus the title field. The date picker opens to the current month and highlights today's date. Task date and time inputs stay side by side on phone layouts.
-- Due-time captions use compact 12-hour labels, for example `Due 9:15am` and `Due 5:30pm`.
+- The header opens a local browser importer for text-based PDF, DOCX, UTF-8 TXT/Markdown, or pasted text.
+- PDF extraction groups text by row and preserves page numbers; DOCX extraction reads headings, paragraphs, and table rows. Extraction and parsing have file/text/page/archive/candidate limits.
+- The deterministic parser uses date syntax, assessment/schedule words, nearby titles/headings, explicit times, date ranges, and bounded weekly class patterns.
+- Review edits titles, type, dates, times, destination project/calendar, time zone, and optional timed-task reminders. Invalid selected items block the batch; ambiguous dates/relative references need explicit context or correction.
+- All selected items are validated before creation. Existing and within-batch duplicates are skipped. Imported entities enter normal local persistence and background sync.
+- Source files are never uploaded or written to IndexedDB. Full source text and snippets are excluded from saved entities; temporary state is discarded on completion/close. Original files on the device remain intact.
+- Scanned PDFs need external OCR. Unusual layouts, holiday exclusions, and course week-number assumptions require review. See [V3_01_STATUS.md](V3_01_STATUS.md).
 
-## Delivery and validation
+## Accounts and ecosystem
 
-- Permanent phase checkpoints are `v1.00`, `v1.01`, `v1.02`, `v1.03`, `v2.00`, then v3 phase checkpoints `v2.01`, `v2.02`, and `v2.03`. Work uses temporary branches, merges to the active checkpoint after review, waits for its checks, then promotes a release to `main`. Cloudflare deploys from `main` only.
-- The current version-branch CI gate runs `web` and `docs`; it audits, tests, typechecks, lints and builds the web application. It has no Swift or native Apple jobs.
+- OIDC Authorization Code + PKCE, application-session status/revocation, device management, account ownership checks, origin/CSRF controls, rate limits, and account deletion are implemented.
+- Versioned JSON backup/restore validates before replacement and excludes attachment bytes/metadata, ICS URLs, and feed event caches.
+- Account-protected task attachment APIs use D1 metadata/private R2 objects and support durable offline retry, deletion compensation, and cleanup.
+- Read-only HTTPS ICS subscriptions support encrypted feed URLs, bounded cache, refresh/backoff, visibility/color, cancellation/exception handling, and unsubscribe. DNS/redirect checks and pinned-address TLS transport are implemented; live transport/provider acceptance remains open.
 
-## Not shipped in deployed `main`
+## Delivery and verification
 
-- v3 accounts, cross-device sync, backend authentication, sync conflict handling, backup/restore, attachment handling, and external ICS subscriptions (implemented locally on the work branch, not deployed).
-- Google/provider OAuth and writing changes back to external calendars are not shipped. v3 ICS feeds are read-only.
-- Drag-and-drop scheduling, multiple work blocks per task, and separate week/day/agenda calendar modes.
+Development uses temporary branches from permanent version checkpoints. Local checks run before merging to the version branch, GitHub Actions runs `web` and `docs` on version pushes, and Cloudflare production deploys from `main` only after promotion.
 
-See [V2_STATUS.md](V2_STATUS.md), [ROADMAP.md](ROADMAP.md) and [ARCHITECTURE.md](ARCHITECTURE.md) for release gates and future work.
+Normal v3.00 account sign-in/sync is confirmed in production. Advanced supported-device, offline/conflict, backup/restore, attachment, session/deletion, cleanup, and ICS drills remain in [V3_STATUS.md](V3_STATUS.md). v3.01 validation and promotion evidence belong in [V3_01_STATUS.md](V3_01_STATUS.md).
+
+## Deferred scope
+
+OCR/AI outline extraction, external-calendar write-back, sharing/collaboration, multiple planned blocks per task, and drag-and-drop planning are not part of this release. The Calendar has no separate Week/Day/Agenda modes. Native iOS/iPadOS apps are not maintained.

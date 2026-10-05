@@ -2,6 +2,7 @@
 apps/web/node_modules/
 apps/web/.next/
 apps/web/dist/
+apps/web/public/vendor/pdfjs-*.worker.min.mjs
 apps/web/.wrangler/
 apps/web/.wrangler.deploy-*
 apps/web/.wrangler.secrets-*
