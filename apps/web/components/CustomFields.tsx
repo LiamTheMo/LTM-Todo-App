@@ -38,6 +38,7 @@ export function CustomSelect({ children, value, onChange, disabled, className, "
   const currentValue = String(value ?? "");
   const current = options.find(option => option.value === currentValue) ?? options[0];
   const [open, setOpen] = useState(false);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const [placement, setPlacement] = useState({ top: 0, left: 0, width: 0, maxHeight: 300 });
   const root = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -51,7 +52,7 @@ export function CustomSelect({ children, value, onChange, disabled, className, "
       if (!root.current?.contains(target) && !menu.current?.contains(target)) setOpen(false);
     };
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.stopPropagation(); setOpen(false); root.current?.querySelector("button")?.focus(); }
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); root.current?.querySelector("button")?.focus(); }
       if (event.key === "Tab") setOpen(false);
     };
     document.addEventListener("pointerdown", dismiss);
@@ -62,7 +63,7 @@ export function CustomSelect({ children, value, onChange, disabled, className, "
   const show = () => {
     if (disabled) return;
     const anchor = root.current?.querySelector("button");
-    if (anchor) setPlacement(getPlacement(anchor, Math.min(options.length * 44 + 12, 300)));
+    if (anchor) { setPlacement(getPlacement(anchor, Math.min(options.length * 44 + 12, 300))); setPortalRoot(anchor.closest("dialog")); }
     setOpen(true);
   };
   const choose = (option: Option) => {
@@ -87,11 +88,12 @@ export function CustomSelect({ children, value, onChange, disabled, className, "
           items[(index + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
         }
       }}>{option.label}</button>)}
-    </div>, document.body)}
+    </div>, portalRoot ?? document.body)}
   </div>;
 }
 
 function usePicker(open: boolean, setOpen: (value: boolean) => void, root: React.RefObject<HTMLElement | null>) {
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const [placement, setPlacement] = useState({ top: 0, left: 0, width: 300, maxHeight: 300 });
   useEffect(() => {
     if (!open) return;
@@ -99,17 +101,17 @@ function usePicker(open: boolean, setOpen: (value: boolean) => void, root: React
       const target = event.target as Node;
       if (!root.current?.contains(target) && !document.getElementById("custom-field-picker")?.contains(target)) setOpen(false);
     };
-    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); root.current?.querySelector("button")?.focus(); } };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", keydown);
     return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", keydown); };
   }, [open, root, setOpen]);
   const show = (height: number) => {
     const anchor = root.current;
-    if (anchor) setPlacement(getPlacement(anchor, height));
+    if (anchor) { setPlacement(getPlacement(anchor, height)); setPortalRoot(anchor.closest("dialog")); }
     setOpen(true);
   };
-  return { placement, show };
+  return { placement, show, portalRoot };
 }
 
 function dayFromParts(year: number, month: number, day: number) {
@@ -125,7 +127,7 @@ export function DateField({ value, min, disabled, onChange, "aria-label": ariaLa
     const date = value ? new Date(`${value}T12:00:00`) : new Date();
     return new Date(date.getFullYear(), date.getMonth(), 1);
   });
-  const { placement, show } = usePicker(open, setOpen, root);
+  const { placement, show, portalRoot } = usePicker(open, setOpen, root);
   const selected = value ? new Date(`${value}T12:00:00`) : null;
   const today = dayFromParts(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
   const firstWeekday = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
@@ -147,7 +149,7 @@ export function DateField({ value, min, disabled, onChange, "aria-label": ariaLa
     {open && typeof document !== "undefined" && createPortal(<div id="custom-field-picker" className="datePickerPanel" role="dialog" aria-label="Choose date" style={{ top: placement.top, left: placement.left, width: placement.width, maxHeight: placement.maxHeight }}>
       <div className="datePickerHeader"><button type="button" aria-label="Previous month" onClick={() => setMonth(date => new Date(date.getFullYear(), date.getMonth() - 1, 1))}>‹</button><strong>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong><button type="button" aria-label="Next month" onClick={() => setMonth(date => new Date(date.getFullYear(), date.getMonth() + 1, 1))}>›</button></div>
       <div className="datePickerGrid" role="grid">{["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(day => <span role="columnheader" key={day}>{day}</span>)}{cells.map((day, index) => day ? <button type="button" role="gridcell" key={day} aria-label={new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} aria-selected={day === value} aria-current={day === today ? "date" : undefined} disabled={Boolean(min && day < min)} className={`${day === value ? "selected" : ""} ${day === today ? "today" : ""}`.trim()} onClick={() => { onChange(day); setOpen(false); }}>{Number(day.slice(-2))}</button> : <span aria-hidden="true" key={`blank-${index}`} />)}</div>
-    </div>, document.body)}
+    </div>, portalRoot ?? document.body)}
   </div>;
 }
 
@@ -163,7 +165,7 @@ export function TimeField({ value, disabled, onChange, "aria-label": ariaLabel }
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const { placement, show } = usePicker(open, setOpen, root);
+  const { placement, show, portalRoot } = usePicker(open, setOpen, root);
   const parts = clockParts(value || "09:00");
   const display = value ? new Date(`2000-01-01T${value}:00`).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "Choose time";
   const update = (hour: number, minute: number, period: string) => onChange(to24Hour(hour, minute, period));
@@ -181,6 +183,6 @@ export function TimeField({ value, disabled, onChange, "aria-label": ariaLabel }
       <div className="timePickerColumn" role="group" aria-label="Minute">{Array.from({ length: 60 }, (_, minute) => minute).map(minute => <button type="button" key={minute} aria-pressed={parts.minute === minute} className={parts.minute === minute ? "selected" : ""} onClick={() => update(parts.hour, minute, parts.period)}>{String(minute).padStart(2, "0")}</button>)}</div>
       <div className="timePickerColumn" role="group" aria-label="AM or PM">{["AM", "PM"].map(period => <button type="button" key={period} aria-pressed={parts.period === period} className={parts.period === period ? "selected" : ""} onClick={() => update(parts.hour, parts.minute, period)}>{period}</button>)}</div>
       <button type="button" className="timePickerDone" onClick={() => setOpen(false)}>Done</button>
-    </div>, document.body)}
+    </div>, portalRoot ?? document.body)}
   </div>;
 }

@@ -25,3 +25,7 @@ The deployed calendar has no Month/Week/Day/Agenda mode tabs. It uses month navi
 Phase 10 establishes the backend/auth ADR, ownership model, migrations, protocol tests and secure feed-ingestion design. Phase 11 implements offline-first device sync and read-only ICS subscriptions with separately managed calendars, visibility, recoloring, refresh, and unsubscribe controls. Subscribed events remain separate from editable LTM events and tasks. Google-account OAuth, write-back and two-way calendar synchronization are outside the initial v3 subscription scope. Web Push is not task synchronization.
 
 Each phase file contains scope, implementation guidance, tests, acceptance criteria and an AI execution prompt.
+
+## v3.01 — Course-outline importing
+
+The new checkpoint inherits the released v3.00 tree. A temporary implementation branch adds local PDF/DOCX/text extraction, deterministic deadline/schedule detection, editable review, destination and time-zone selection, duplicate-safe batch creation, and temporary-source cleanup. Imported items use normal local persistence/sync; source documents are never uploaded. OCR and AI interpretation are deferred. See [V3_01_STATUS.md](V3_01_STATUS.md) for implementation and acceptance evidence.
