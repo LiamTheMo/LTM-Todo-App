@@ -55,10 +55,25 @@ export type OidcAuthenticationDiagnosticCode =
   | "callback_identity_mismatch"
   | "callback_session_cookie_too_large"
   | "unexpected_error";
+export type OidcAuthenticationProviderError =
+  | "access_denied"
+  | "invalid_client"
+  | "invalid_grant"
+  | "invalid_request"
+  | "invalid_scope"
+  | "server_error"
+  | "temporarily_unavailable"
+  | "unauthorized_client"
+  | "unsupported_grant_type"
+  | "unsupported_response_type"
+  | "other"
+  | "unknown";
 export type OidcAuthenticationDiagnostic = {
   event: "oidc_authentication_failure";
   route: OidcAuthenticationDiagnosticRoute;
   code: OidcAuthenticationDiagnosticCode;
+  providerError?: OidcAuthenticationProviderError;
+  providerStatus?: number;
 };
 
 class OidcDiscoveryFailure extends Error {
@@ -82,6 +97,15 @@ class OidcCallbackFailure extends Error {
 }
 
 const isObject = (value: unknown): value is JsonObject => value !== null && typeof value === "object" && !Array.isArray(value);
+const PROVIDER_OAUTH_ERRORS = new Set<string>([
+  "access_denied", "invalid_client", "invalid_grant", "invalid_request", "invalid_scope",
+  "server_error", "temporarily_unavailable", "unauthorized_client", "unsupported_grant_type",
+  "unsupported_response_type"
+]);
+const normalizeProviderError = (value: unknown): OidcAuthenticationProviderError => {
+  if (typeof value !== "string" || value.length === 0) return "unknown";
+  return PROVIDER_OAUTH_ERRORS.has(value) ? value as OidcAuthenticationProviderError : "other";
+};
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
@@ -263,7 +287,19 @@ export class OidcSessionService {
     } catch {
       throw new OidcCallbackFailure("callback_token_exchange_failed");
     }
-    if (!tokenResponse.ok) return this.authFailure("callback_token_exchange_rejected");
+    if (!tokenResponse.ok) {
+      let responseError: unknown;
+      try {
+        const errorResponse = await readJsonBounded(tokenResponse);
+        if (isObject(errorResponse)) responseError = errorResponse.error;
+      } catch {
+        // Keep the generic rejection diagnostic if the provider body is malformed or unavailable.
+      }
+      return this.authFailure("callback_token_exchange_rejected", {
+        providerError: normalizeProviderError(responseError),
+        providerStatus: tokenResponse.status
+      });
+    }
     const tokens = await readJsonBounded(tokenResponse);
     if (!isObject(tokens) || typeof tokens.access_token !== "string" ||
         typeof tokens.id_token !== "string" || typeof tokens.expires_in !== "number" || !Number.isInteger(tokens.expires_in) ||
@@ -347,8 +383,11 @@ export class OidcSessionService {
     return new Response(null, { status: 204, headers });
   }
 
-  private authFailure(code: OidcAuthenticationDiagnosticCode): Response {
-    this.logDiagnostic({ event: "oidc_authentication_failure", route: "callback", code });
+  private authFailure(
+    code: OidcAuthenticationDiagnosticCode,
+    details?: { providerError: OidcAuthenticationProviderError; providerStatus: number }
+  ): Response {
+    this.logDiagnostic({ event: "oidc_authentication_failure", route: "callback", code, ...(details ?? {}) });
     const headers = new Headers({ "Cache-Control": "no-store" });
     headers.append("Set-Cookie", cookieHeader(FLOW_COOKIE, "", 0));
     return new Response("Authentication failed. Please try signing in again.", { status: 401, headers });
