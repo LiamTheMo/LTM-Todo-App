@@ -4,6 +4,13 @@
   "main": "./worker.ts",
   "compatibility_date": "2026-09-29",
   "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "invocation_logs": false
+    }
+  },
   "preview_urls": true,
   "assets": {
     "directory": "dist/client",

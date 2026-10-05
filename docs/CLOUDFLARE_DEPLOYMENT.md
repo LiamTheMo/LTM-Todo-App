@@ -45,6 +45,8 @@ The Worker name is fixed by `wrangler.jsonc` as `ltm-todo-app`.
 
 The auth API keeps provider failures generic for browsers and emits a redacted Worker log event named `oidc_authentication_failure`. It contains only a fixed route label and one diagnostic code; it never logs the exception text, query string, cookies, tokens, or configured secret values. Review the `ltm-todo-app` Worker logs in Cloudflare after reproducing a sign-in failure.
 
+`apps/web/wrangler.jsonc` enables Workers Logs with full sampling and disables invocation logs so raw request URLs do not capture Auth0 callback `code` and `state` query values. The redacted `oidc_authentication_failure` custom event remains available after the `main` deployment. Keep invocation logs disabled while diagnosing sign-in.
+
 Diagnostic codes:
 
 - `provider_discovery_fetch_failed`, `provider_discovery_http_error`, `provider_discovery_invalid_document`, `provider_issuer_mismatch`, `provider_jwks_uri_mismatch`, and `provider_endpoint_invalid` identify discovery fetch, HTTP, document, or configuration failures.
