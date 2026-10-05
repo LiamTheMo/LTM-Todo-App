@@ -12,7 +12,6 @@ const MAX_SESSION_SECONDS = 24 * 60 * 60;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 export type OidcSessionOptions = OidcVerifierOptions & {
-  clientId: string;
   clientSecret?: string;
   redirectUri: string;
   cookieSecret: string;

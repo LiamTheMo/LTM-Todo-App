@@ -84,7 +84,8 @@ test("OIDC code flow uses PKCE/state/nonce and creates an encrypted same-origin 
     async revoke(_principal, sessionId) { revokedSessions.add(sessionId); issuedSessions.delete(sessionId); return true; },
     async revokeAll() { for (const id of issuedSessions) revokedSessions.add(id); issuedSessions.clear(); return revokedSessions.size; }
   };
-  const access = await token(pair.privateKey, { iss: issuer, sub: "account-42", aud: audience, exp: now / 1000 + 3600 });
+  const access = await token(pair.privateKey, { iss: issuer, sub: "account-42",
+    aud: [audience, `${issuer}/userinfo`], azp: clientId, exp: now / 1000 + 3600 });
   const fetcher = async (input, init = {}) => {
     assert.equal(init.redirect, "manual");
     const url = String(input);
