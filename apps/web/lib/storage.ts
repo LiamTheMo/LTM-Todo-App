@@ -2,6 +2,7 @@ import { normalizeCalendarColor, validEvent } from "./calendar-domain.ts";
 import { emptyData, localDate, pruneExpiredHistory, type Data } from "./domain.ts";
 import { SYNC_CLIENT_SCHEMA_VERSION, type SyncEntityType, type SyncMutation } from "./sync-protocol.ts";
 import type { SyncChange } from "./sync-api.ts";
+import { syncEntityPriority } from "./sync-entity-order.ts";
 
 const DB_NAME = "ltm-todo";
 const STORE = "state";
@@ -16,7 +17,6 @@ const builtInCalendarId = "00000000-0000-4000-8000-000000000001";
 type JournalEntry = { key: string; mutation: SyncMutation; queuedAt: number };
 export type SyncConflict = { key: string; mutation: SyncMutation; current?: SyncChange; foundAt: string };
 const entityKey = (type: string, id: string) => `${type}:${id}`;
-const priorityByType: Record<string, number> = { projects: 0, calendars: 0, tags: 0, sections: 1, tasks: 2, taskTemplates: 2, eventTemplates: 2, routines: 3, blocks: 3, reminders: 3, calendarEvents: 3, completions: 4, savedViews: 4 };
 function sameSyncValue(type: typeof collectionTypes[number], id: string, before: unknown, after: unknown): boolean {
   if (type !== "calendars" || id !== builtInCalendarId || !before || !after) return JSON.stringify(before) === JSON.stringify(after);
   const stable = (value: Record<string, unknown>) => Object.fromEntries(Object.entries(value).filter(([key]) =>
@@ -329,7 +329,7 @@ export async function readPendingSyncMutations(limit: number): Promise<SyncMutat
       const request = transaction.objectStore(JOURNAL).getAll();
       request.onsuccess = () => {
         const entries = (request.result as JournalEntry[]).sort((left, right) =>
-          (priorityByType[left.mutation.entityType] ?? 9) - (priorityByType[right.mutation.entityType] ?? 9) || left.queuedAt - right.queuedAt);
+          (syncEntityPriority[left.mutation.entityType] ?? 99) - (syncEntityPriority[right.mutation.entityType] ?? 99) || left.queuedAt - right.queuedAt);
         resolve(entries.slice(0, limit).map(entry => entry.mutation));
       };
       request.onerror = () => reject(request.error);
@@ -353,6 +353,46 @@ export async function bindSyncAccount(accountKey: string): Promise<boolean> {
       };
       transaction.oncomplete = () => resolve(allowed);
       transaction.onabort = () => reject(transaction.error);
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } finally { db.close(); }
+}
+
+/** After the initial cloud snapshot, queue records that predate the sync journal, including the default calendar. */
+export async function prepareInitialSyncUpload(): Promise<void> {
+  const db = await openDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction([STORE, JOURNAL, SYNC_META, CONFLICTS], "readwrite");
+      const journal = transaction.objectStore(JOURNAL);
+      const metadata = transaction.objectStore(SYNC_META);
+      const conflicts = transaction.objectStore(CONFLICTS);
+      const state = transaction.objectStore(STORE).get(KEY);
+      let failure: unknown;
+      state.onsuccess = () => {
+        try {
+          const data = normalizeData(state.result);
+          for (const type of collectionTypes) for (const item of data[type]) {
+            if ("deletedAt" in item && item.deletedAt) continue;
+            const key = entityKey(type, item.id);
+            const revision = metadata.get(`revision:${key}`);
+            const pending = journal.get(key);
+            const conflict = conflicts.get(key);
+            const queueIfReady = () => {
+              if ([revision, pending, conflict].some(request => request.readyState !== "done")) return;
+              if (revision.result !== undefined || pending.result || conflict.result) return;
+              journal.put({ key, queuedAt: Date.now(), mutation: {
+                entityType: type, entityId: item.id, operation: "upsert", baseRevision: 0,
+                clientMutationId: crypto.randomUUID(), clientSchemaVersion: SYNC_CLIENT_SCHEMA_VERSION,
+                payload: item
+              } } satisfies JournalEntry);
+            };
+            revision.onsuccess = pending.onsuccess = conflict.onsuccess = queueIfReady;
+          }
+        } catch (error) { failure = error; transaction.abort(); }
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(failure ?? transaction.error);
       transaction.onerror = () => reject(transaction.error);
     });
   } finally { db.close(); }

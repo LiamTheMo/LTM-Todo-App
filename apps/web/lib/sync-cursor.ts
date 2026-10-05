@@ -60,20 +60,20 @@ export class SyncCursorCodec {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const payload: SnapshotCursorPayload = { ...value, expiresAt: this.now() + lifetimeMilliseconds };
     const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv,
-      additionalData: encoder.encode("ltm-sync-snapshot:v1") }, await this.key, encoder.encode(JSON.stringify(payload))));
+      additionalData: encoder.encode("ltm-sync-snapshot:v2") }, await this.key, encoder.encode(JSON.stringify(payload))));
     const combined = new Uint8Array(iv.byteLength + encrypted.byteLength);
     combined.set(iv);
     combined.set(encrypted, iv.byteLength);
-    return `s1.${toBase64Url(combined)}`;
+    return `s2.${toBase64Url(combined)}`;
   }
 
   async decodeSnapshot(cursor: string, accountId: string): Promise<Omit<SnapshotCursorPayload, "expiresAt">> {
-    if (!cursor.startsWith("s1.") || cursor.length > 1024) throw new Error("Invalid snapshot cursor");
+    if (!cursor.startsWith("s2.") || cursor.length > 1024) throw new Error("Invalid snapshot cursor");
     try {
       const combined = fromBase64Url(cursor.slice(3));
       if (combined.byteLength < 29) throw new Error("Invalid snapshot cursor");
       const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: combined.slice(0, 12),
-        additionalData: encoder.encode("ltm-sync-snapshot:v1") }, await this.key, combined.slice(12));
+        additionalData: encoder.encode("ltm-sync-snapshot:v2") }, await this.key, combined.slice(12));
       const payload: unknown = JSON.parse(decoder.decode(plaintext));
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Invalid snapshot cursor");
       const value = payload as Partial<SnapshotCursorPayload>;

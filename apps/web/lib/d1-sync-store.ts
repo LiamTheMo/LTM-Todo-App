@@ -2,6 +2,7 @@ import { InvalidSyncCursorError, InvalidSyncRelationshipError, SyncMutationConfl
   type PullResponse, type PushResponse, type SyncChange, type SyncPrincipal, type SyncStore } from "./sync-api.ts";
 import type { SyncEntityType, SyncMutation, SyncPushBatch } from "./sync-protocol.ts";
 import { SyncCursorCodec } from "./sync-cursor.ts";
+import { syncEntityOrderSql, syncEntityPriority } from "./sync-entity-order.ts";
 
 type D1Statement = { bind(...values: unknown[]): D1Statement; first<T = Record<string, unknown>>(): Promise<T | null>;
   all<T = Record<string, unknown>>(): Promise<{ results?: T[] }>; run(): Promise<unknown> };
@@ -141,19 +142,23 @@ export class D1SyncStore implements SyncStore {
     let sequence = account.change_sequence;
     let afterType = "";
     let afterId = "";
+    let afterPriority = -1;
     if (snapshotCursor) {
       try {
         const state = await this.cursors.decodeSnapshot(snapshotCursor, account.account_id);
         sequence = state.sequence;
         afterType = state.entityType;
         afterId = state.entityId;
+        afterPriority = syncEntityPriority[afterType];
+        if (afterPriority === undefined) throw new InvalidSyncCursorError();
       } catch { throw new InvalidSyncCursorError(); }
       if (sequence > account.change_sequence) throw new InvalidSyncCursorError();
     }
     const page = await this.db.prepare(`SELECT entity_type,entity_id,revision,payload,deleted_at,updated_at,updated_sequence
       FROM sync_entities WHERE account_id=? AND updated_sequence<=? AND
-      (entity_type>? OR (entity_type=? AND entity_id>?)) ORDER BY entity_type,entity_id LIMIT ?`)
-      .bind(account.account_id, sequence, afterType, afterType, afterId, limit + 1).all<{
+      (${syncEntityOrderSql}>? OR (${syncEntityOrderSql}=? AND entity_id>?))
+      ORDER BY ${syncEntityOrderSql},entity_id LIMIT ?`)
+      .bind(account.account_id, sequence, afterPriority, afterPriority, afterId, limit + 1).all<{
         entity_type: string; entity_id: string; revision: number; payload: string | null; deleted_at: string | null;
         updated_at: string; updated_sequence: number;
       }>();
