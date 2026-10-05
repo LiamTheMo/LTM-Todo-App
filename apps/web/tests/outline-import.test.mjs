@@ -132,10 +132,16 @@ test("read-only calendars, bad zones, archived projects and invalid reminders ca
 test("DST boundary recurrence keeps local class times and changes UTC offset", () => {
   const data = emptyData();
   const item = parse("Lectures every Monday 2:30–3:50 PM", { termStart: "2026-10-26", termEnd: "2026-11-09" })[0];
-  const imported = importOutlineItems(data, [item], destination(data), options.today).data;
+  const imported = importOutlineItems(data, [item], { ...destination(data), timeZone: "America/New_York" }, options.today).data;
   const occurrences = calendarEventOccurrences(imported, "2026-10-26", "2026-11-10");
-  assert.equal(occurrences[0].startInstant, "2026-10-26T20:30:00.000Z");
-  assert.equal(occurrences[1].startInstant, "2026-11-02T21:30:00.000Z");
+  assert.equal(occurrences[0].startInstant, "2026-10-26T18:30:00.000Z");
+  assert.equal(occurrences[1].startInstant, "2026-11-02T19:30:00.000Z");
+  // Edmonton rules differ across shipped ICU databases; the contract is local wall-clock time.
+  const edmonton = importOutlineItems(data, [item], destination(data), options.today).data;
+  const formatter = new Intl.DateTimeFormat("en", { timeZone: "America/Edmonton", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  for (const occurrence of calendarEventOccurrences(edmonton, "2026-10-26", "2026-11-10")) {
+    assert.equal(formatter.format(new Date(occurrence.startInstant)), "14:30");
+  }
 });
 
 test("weekly series re-imported later and reordered recurrence fields still skip duplicates", () => {

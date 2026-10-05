@@ -155,7 +155,8 @@ export function DateField({ value, min, disabled, onChange, "aria-label": ariaLa
 
 const clockParts = (value: string) => {
   const [rawHour = "09", rawMinute = "00"] = value.split(":");
-  const hour = Number(rawHour) || 9;
+  const parsedHour = Number(rawHour);
+  const hour = Number.isFinite(parsedHour) && parsedHour >= 0 && parsedHour <= 23 ? parsedHour : 9;
   return { hour: hour % 12 || 12, minute: Number(rawMinute) || 0, period: hour >= 12 ? "PM" : "AM" };
 };
 const to24Hour = (hour: number, minute: number, period: string) => `${String(hour % 12 + (period === "PM" ? 12 : 0)).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;

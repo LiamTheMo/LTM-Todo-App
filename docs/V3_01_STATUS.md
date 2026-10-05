@@ -16,11 +16,11 @@ Build from the released v3.00/main tree using `v3.01 -> feat/v3.01-course-outlin
 
 ## Automated validation and delivery
 
-Local validation passed: 179 Node tests, TypeScript typecheck, ESLint, Vinext production build, and the dependency audit gate. The production dependency audit found zero vulnerabilities; the existing lockfile-checked development-only exception remains documented.
+Local validation passed: 179 Node tests on both Node 22.23.3 and Node 24, TypeScript typecheck, ESLint, Vinext production build, and the dependency audit gate. The production dependency audit found zero vulnerabilities; the existing lockfile-checked development-only exception remains documented.
 
-A headless Chromium smoke test passed pasted-text import/save/reload, duplicate re-import, real text PDF and DOCX table extraction, empty-PDF handling, source-state cleanup after close, modal dropdown/date-picker interaction, and a 390px viewport. No browser page errors or external file uploads were observed. The same-origin PDF worker is present in the production asset output. Local frontend testing used an unsigned-in session; account API acceptance remains separate.
+A headless Chromium smoke test passed pasted-text import/save/reload, duplicate re-import, real text PDF and DOCX table extraction, empty-PDF handling, source-state cleanup after close, modal dropdown/date-picker interaction, midnight time-picker selection, and a 390px viewport. No browser page errors or external file uploads were observed. The same-origin PDF worker is present in the production asset output. Local frontend testing used an unsigned-in session; account API acceptance remains separate.
 
-Version-branch CI and production promotion are pending at this commit.
+The first version CI run exposed a test that assumed a specific future Edmonton UTC offset. The follow-up uses a New York DST boundary and checks Edmonton wall-clock preservation against the runtime time-zone database. It also fixes midnight editing in the shared time picker. Version CI must pass before production promotion. PR #175 contains the importer; the follow-up time-boundary fix is tracked separately in GitHub.
 
 ## Requires Manual Validation
 
