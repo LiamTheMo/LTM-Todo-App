@@ -28,11 +28,11 @@ Full desktop/iPhone/iPad responsive-web matrix; offline/online transitions; larg
 ## Acceptance criteria
 Users can recover/export their data. No known critical data-loss/security issue. v1/v2 functionality remains intact across synchronized clients. Remaining manual checks are documented and completed before declaring v3.00 production-ready.
 
-## Current local implementation status (2026-10-04)
+## Current implementation status (2026-10-05)
 
-Versioned, bounded JSON backup/restore; account-protected attachments with offline retry and R2 cleanup; app-session revocation; inactive-device expiry; journal/tombstone retention; account deletion; and cleanup/reconciliation workers are implemented with automated failure-path coverage on the local v3 branch. Backups exclude attachment bytes and metadata plus ICS URLs/event caches; attachments are downloaded separately, and bearer feed URLs are never exported unencrypted. Sharing/collaboration is explicitly deferred from the initial v3.00 release rather than implemented without a membership/role contract.
+Versioned, bounded JSON backup/restore; account-protected attachments with offline retry and R2 cleanup; app-session revocation; inactive-device expiry; journal/tombstone retention; account deletion; and cleanup/reconciliation workers are implemented with automated failure-path coverage and deployed through `v3.00` into `main`. Backups exclude attachment bytes and metadata plus ICS URLs/event caches; attachments are downloaded separately, and bearer feed URLs are never exported unencrypted. Sharing/collaboration is explicitly deferred from the initial v3.00 release rather than implemented without a membership/role contract.
 
-The full recovery, deletion, retention, restore, cross-device, accessibility, and supported-device drills have not been run against provisioned production Cloudflare resources. Code implementation is therefore distinct from release acceptance.
+Normal production sign-in and cross-device sync were confirmed working by the user on 2026-10-05. The full recovery, deletion, retention, restore, attachment, accessibility, and supported-device drills remain manual acceptance work against the provisioned Cloudflare resources. Code implementation and a successful deployment are therefore distinct from full release acceptance; see `../V3_STATUS.md` for the final audit checklist.
 
 ## AI execution prompt
 Treat Phase 12 as an ecosystem/reliability audit, not a feature dump. Implement data portability and security-sensitive attachment/sharing behavior with failure tests. Repeat the CI/review loop until actionable issues are exhausted, then produce a release audit classified as Passed, Manual Validation, or Needs Work.
