@@ -21,6 +21,7 @@ import { OutlineImporter } from "../components/OutlineImporter";
 import { importOutlineItems } from "../lib/outline-import";
 import { toReadOnlyCalendarEvent } from "../lib/ics-calendar-view";
 import { defaultWeekdaysForRepeat, recurrenceForRepeat, repeatLabelFor, repeatOptionsFor, repeatSelectionFor, repeatUsesWeekdayPicker, type RepeatSelection } from "../lib/recurrence-presets";
+import { availableWorkSlots, type BusyTimeRange } from "../lib/schedule-slots";
 
 type View = NavigationSection;
 const views: View[] = ["Dashboard", "Tasks", "Projects", "Calendar", "Settings"];
@@ -125,6 +126,8 @@ export default function Home() {
   const [icsFeedStatus, setIcsFeedStatus] = useState("");
   const [scheduleEditing, setScheduleEditing] = useState<{ taskId: string; blockId?: string; date: string } | null>(null);
   const [scheduleUndo, setScheduleUndo] = useState<ScheduledBlock[] | null>(null);
+  const [dashboardComposerOpen, setDashboardComposerOpen] = useState(false);
+  const [dashboardComposerTab, setDashboardComposerTab] = useState<"task" | "event">("task");
   const [editing, setEditing] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
   const [quickTitle, setQuickTitle] = useState("");
@@ -629,13 +632,13 @@ export default function Home() {
   });
   const projects = data.projects.filter(p => !p.deletedAt && !p.archivedAt).sort((a, b) => a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const tags = data.tags.filter(t => !t.deletedAt);
-  const taskRow = (task: Task, caption?: string, completionId?: string, key = task.id) => {
+  const taskRow = (task: Task, caption?: string, completionId?: string, key = task.id, scheduleDate = task.dueDate && task.dueDate >= today ? task.dueDate : today) => {
     const isComplete = Boolean(completionId || task.completedAt);
     const latestCompletion = completionId && data.completions.filter(item => item.taskId === task.id).at(-1)?.id === completionId;
     return <div className={`taskRow priority-${task.priority} ${isComplete ? "completed" : ""}`} key={key}>
       <button className="complete" disabled={completionId ? !latestCompletion : false} onClick={() => completionId ? latestCompletion && mutate(value => undoCompletion(value, completionId)) : toggle(task)} aria-label={isComplete ? `Reopen ${task.title}` : `Complete ${task.title}`}>{isComplete ? "✓" : "○"}</button>
       <button className="taskText" draggable={!isComplete} onDragStart={e => { if (isComplete) return; e.dataTransfer.setData("application/x-ltm-task", task.id); e.dataTransfer.effectAllowed = "copy"; }} onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "low" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
-      {!isComplete && <button className="scheduleAction" onClick={() => setScheduleEditing({ taskId: task.id, date: calendarSelectedDate })} aria-label={`Schedule work for ${task.title}`} title="Schedule work">◷</button>}
+      {!isComplete && <button className="scheduleAction" onClick={() => setScheduleEditing({ taskId: task.id, date: scheduleDate })} aria-label={`Schedule work for ${task.title}`} title="Schedule work">◷</button>}
       <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
     </div>;
   };
@@ -767,9 +770,9 @@ export default function Home() {
     }}><span className="navigationIcon"><TabIcon section={item} /></span>{item === "Settings" ? null : ` ${item}`}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
     <section className={`dashboard ${view === "Dashboard" ? "dashboardHome" : ""}`}>{error && <div className="error" role="alert">{error}</div>}
       {!ready ? <p>Opening your local tasks…</p> : <>
-        <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : ""}</p></div><div className="pageHeaderActions"><button type="button" className="outlineOpen" disabled={Boolean(error)} onClick={() => setOutlineImportOpen(true)}>Import outline</button><button className="add" onClick={() => setEditing(view === "Calendar" ? `new:${calendarSelectedDate}` : "new")}>+ Add task</button></div></header>
+        <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : ""}</p></div><div className="pageHeaderActions"><button type="button" className="outlineOpen" disabled={Boolean(error)} onClick={() => setOutlineImportOpen(true)}>Import outline</button>{view !== "Dashboard" && <button className="add" onClick={() => setEditing(view === "Calendar" ? `new:${calendarSelectedDate}` : "new")}>+ Add task</button>}</div></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
-          <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today))) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
+          <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today), undefined, task.id, today)) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
           {otherDashboardTasks.length > 0 && <section className="stream otherTasksPanel" aria-label="Other tasks"><div className="group"><h4>OTHER TASKS <span>{otherDashboardTasks.length}</span></h4><p className="hint">Tasks without a visible day in the current dashboard range.</p>{otherDashboardTasks.map(task => taskRow(task, task.completedAt ? new Date(task.completedAt).toLocaleDateString() : task.dueDate ? `Due ${dateLabel(task.dueDate)}` : "No date assigned"))}</div></section>}
           <div className="stream dayScroller" ref={dayScrollRef} onScroll={handleDayScroll} role="region" aria-label="Days">
             <button className="loadMore" onClick={() => shiftDays(-1)} disabled={visibleDayStart <= earliestDay}>Earlier days ↑</button>
@@ -779,8 +782,8 @@ export default function Home() {
             const label = day.date === today ? "TODAY" : day.date === addDays(today, 1) ? "TOMORROW" : dateLabel(day.date);
             return <article className={`day ${past ? "dayPast" : ""} ${empty ? "emptyDaySection" : ""}`} data-day={day.date} key={day.date} ref={day.date === today ? todayRef : undefined}>
             <div className="dayHeader"><h3 aria-label={`${label} ${day.date}`}>{label}</h3><time dateTime={day.date}>{day.date}</time></div>
-            {!!day.scheduled.length && <div className="group"><h4>SCHEDULED</h4>{day.scheduled.map(({ block, task, completionId }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === day.date ? " · Also due today" : ""}`, completionId, `block:${block.id}`))}</div>}
-            {!!day.due.length && <div className="group"><h4>DUE</h4>{day.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : ""))}</div>}
+            {!!day.scheduled.length && <div className="group"><h4>SCHEDULED</h4>{day.scheduled.map(({ block, task, completionId }) => taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === day.date ? " · Also due today" : ""}`, completionId, `block:${block.id}`, day.date))}</div>}
+            {!!day.due.length && <div className="group"><h4>DUE</h4>{day.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : "", undefined, task.id, day.date))}</div>}
             {!!day.completed.length && <div className="group"><h4>COMPLETED</h4>{day.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
             {empty ? <div className={`emptyDay ${past ? "pastEmpty" : ""}`}><span>{past ? "No completed items" : "Nothing planned"}</span><button onClick={() => setEditing(`new:${day.date}`)}>+ Add</button></div> :
               <button className="dayAdd" onClick={() => setEditing(`new:${day.date}`)}>+ Add task for this day</button>}
@@ -866,8 +869,8 @@ export default function Home() {
               <div className="calendarAgendaHeader"><div><span className="eyebrow">SELECTED DAY</span><h3>{dateLabel(calendarSelectedDate)}</h3></div></div>
               <h4 className="calendarTimelineHeading">TIMELINE {calendarSelectedDate === today && <span>Now · {timeLabel(calendarNow.toISOString())}</span>}</h4>
               <CalendarTimeline day={calendarSelectedDate} items={timelineItems} now={calendarNow} />
-              {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => <div className="plannedRow" key={`calendar-block:${block.id}`}>{taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block-task:${block.id}`)}<button type="button" className="scheduleAction" aria-label={`Edit scheduled block for ${task.title}`} onClick={() => setScheduleEditing({ taskId: task.id, blockId: block.id, date: calendarSelectedDate })}>Edit time</button><button type="button" className="scheduleAction" aria-label={`Unschedule ${task.title}`} onClick={() => { setScheduleUndo(data.blocks); mutate(value => deleteScheduledBlock(value, block.id)); }}>Remove</button></div>)}</div>}
-              {!!calendarAgenda.due.length && <div className="group"><h4>DUE</h4>{calendarAgenda.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : ""))}</div>}
+              {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => <div className="plannedRow" key={`calendar-block:${block.id}`}>{taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block-task:${block.id}`, calendarSelectedDate)}<button type="button" className="scheduleAction" aria-label={`Edit scheduled block for ${task.title}`} onClick={() => setScheduleEditing({ taskId: task.id, blockId: block.id, date: calendarSelectedDate })}>Edit time</button><button type="button" className="scheduleAction" aria-label={`Unschedule ${task.title}`} onClick={() => { setScheduleUndo(data.blocks); mutate(value => deleteScheduledBlock(value, block.id)); }}>Remove</button></div>)}</div>}
+              {!!calendarAgenda.due.length && <div className="group"><h4>DUE</h4>{calendarAgenda.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : "", undefined, task.id, calendarSelectedDate))}</div>}
               {!!calendarAgenda.completed.length && <div className="group"><h4>COMPLETED</h4>{calendarAgenda.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `calendar-completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
               {!!calendarEvents.length && <div className="group"><h4>EVENTS</h4>{calendarEvents.map(item => {
                 const calendar = activeCalendars.find(candidate => candidate.id === item.event.calendarId);
@@ -986,6 +989,7 @@ export default function Home() {
           {syncStatus.state === "device_retired" && <><p>This browser was removed from the account. You can register it again without changing local task data.</p><button type="button" onClick={() => { void syncClient.current?.reRegisterRetiredDevice(); }}>Register this browser again</button></>}
         </div>}
       </>}
+      {view === "Dashboard" && ready && <button type="button" className="dashboardAddFab" aria-label="Add a task or calendar event" aria-haspopup="dialog" onClick={() => { setDashboardComposerTab("task"); setDashboardComposerOpen(true); }}>+</button>}
     </section>
     {editing && <TaskEditor key={editing} task={data.tasks.find(t => t.id === editing)} initialDate={editing.startsWith("new:") ? editing.slice(4) : undefined} initialProject={view === "Projects" ? projectId : undefined} data={data} earliestDate={historyStart(today)} onClose={() => setEditing(null)} onSave={(task, reminderMinutes) => {
       mutate(value => saveTask(value, task, reminderMinutes)); setEditing(null);
@@ -1002,14 +1006,26 @@ export default function Home() {
       if (writeFailed.current) throw new Error("Items could not be persisted. Download an unsaved backup from Settings before reloading.");
       return { added: result.added, skipped: result.skipped };
     }} />}
+    {dashboardComposerOpen && <div className="modalBackdrop dashboardComposerBackdrop" onMouseDown={event => { if (event.target === event.currentTarget) setDashboardComposerOpen(false); }}><section className="editor dashboardComposerModal" role="dialog" aria-modal="true" aria-labelledby="dashboard-composer-title" onKeyDown={event => { if (event.key === "Escape") setDashboardComposerOpen(false); }}>
+      <div className="editorHead"><h2 id="dashboard-composer-title">Add to your day</h2><button type="button" onClick={() => setDashboardComposerOpen(false)} aria-label="Close add menu">×</button></div>
+      <div className="dashboardComposerTabs" role="tablist" aria-label="Choose what to add">
+        <button type="button" role="tab" aria-selected={dashboardComposerTab === "task"} aria-controls="dashboard-composer-panel" onClick={() => setDashboardComposerTab("task")}>Task</button>
+        <button type="button" role="tab" aria-selected={dashboardComposerTab === "event"} aria-controls="dashboard-composer-panel" onClick={() => setDashboardComposerTab("event")}>Calendar event</button>
+      </div>
+      <div id="dashboard-composer-panel" role="tabpanel" aria-label={dashboardComposerTab === "task" ? "Add task" : "Add calendar event"}>
+        {dashboardComposerTab === "task" ? <TaskEditor key="dashboard-task" embedded initialDate={today} data={data} earliestDate={historyStart(today)} onClose={() => setDashboardComposerOpen(false)} onSave={(task, reminderMinutes) => { mutate(value => saveTask(value, task, reminderMinutes)); setDashboardComposerOpen(false); }} onDelete={() => {}} />
+          : <CalendarEventEditor key="dashboard-event" embedded date={today} calendars={activeCalendars} onClose={() => setDashboardComposerOpen(false)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setDashboardComposerOpen(false); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={() => {}} />}
+      </div>
+    </section></div>}
     {eventEditing && <CalendarEventEditor key={`${eventEditing.id ?? "new"}:${eventEditing.date}`} event={data.calendarEvents.find(item => item.id === eventEditing.id)} date={eventEditing.date} calendars={activeCalendars} onClose={() => setEventEditing(null)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setEventEditing(null); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={id => { const stamp = new Date().toISOString(); mutate(value => ({ ...value, calendarEvents: value.calendarEvents.map(event => event.id === id ? { ...event, deletedAt: stamp, updatedAt: stamp, revision: event.revision + 1 } : event) })); setEventEditing(null); }} />}
-    {scheduleEditing && <ScheduleEditor key={`${scheduleEditing.taskId}:${scheduleEditing.blockId ?? "new"}:${scheduleEditing.date}`} task={data.tasks.find(task => task.id === scheduleEditing.taskId)} block={data.blocks.find(item => item.id === scheduleEditing.blockId)} initialDate={scheduleEditing.date} onClose={() => setScheduleEditing(null)} onSave={block => { setScheduleUndo(data.blocks); mutate(value => saveScheduledBlock(value, block)); setScheduleEditing(null); }} />}
+    {scheduleEditing && <ScheduleEditor key={`${scheduleEditing.taskId}:${scheduleEditing.blockId ?? "new"}:${scheduleEditing.date}`} task={data.tasks.find(task => task.id === scheduleEditing.taskId)} block={data.blocks.find(item => item.id === scheduleEditing.blockId)} data={calendarViewData} initialDate={scheduleEditing.date} today={today} now={calendarNow} onClose={() => setScheduleEditing(null)} onSave={block => { setScheduleUndo(data.blocks); mutate(value => saveScheduledBlock(value, block)); setScheduleEditing(null); }} />}
   </main>;
 }
 
-function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTemplate, onDelete }: {
+function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTemplate, onDelete, embedded = false }: {
   event?: CalendarEvent; date: string; calendars: Data["calendars"]; onClose: () => void;
   onSave: (event: CalendarEvent) => void; onSaveTemplate: (event: CalendarEvent, name: string) => void; onDelete: (id: string) => void;
+  embedded?: boolean;
 }) {
   const timeZone = event && !event.allDay ? event.timeZone : zone();
   const parts = (instant?: string) => {
@@ -1035,7 +1051,7 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTe
   const endInstant = !allDay && endDate ? zonedDateTimeToInstant(endDate, endTime, timeZone) : undefined;
   const invalid = !title.trim() || !calendarId || (allDay ? endDate < startDate : !startInstant || !endInstant || endInstant <= startInstant) ||
     (Boolean(repeatSelection && until) && until < startDate) || (Boolean(repeatSelection && count) && Number(count) < 1);
-  return <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><form className="editor" onSubmit={e => {
+  const form = <form className={`editor${embedded ? " composerEditorEmbedded" : ""}`} onSubmit={e => {
     e.preventDefault(); if (invalid) return;
     const base = event ?? { ...newEntity(), calendarId, title, notes, recurrence: undefined };
     const repeatRule = recurrenceForRepeat(repeatSelection, weekdays);
@@ -1043,7 +1059,7 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTe
       recurrence: repeatRule ? { ...repeatRule, until: until || undefined, count: count ? Number(count) : undefined } : undefined };
     onSave(allDay ? { ...common, allDay: true, startDate, endDate: addDays(endDate, 1) } : { ...common, allDay: false, startInstant: startInstant!, endInstant: endInstant!, timeZone });
   }}>
-    <div className="editorHead"><h2>{event ? "Edit event" : "New event"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
+    {!embedded && <div className="editorHead"><h2>{event ? "Edit event" : "New event"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>}
     <label>Title<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
     <label>Calendar<CustomSelect value={calendarId} onChange={e => setCalendarId(e.target.value)}>{calendars.map(calendar => <option key={calendar.id} value={calendar.id}>{calendar.name}</option>)}</CustomSelect></label>
@@ -1060,44 +1076,104 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTe
       const base = { ...(event ?? newEntity()), calendarId, title: title.trim(), notes: notes.trim(), recurrence: undefined };
       onSaveTemplate(allDay ? { ...base, allDay: true, startDate, endDate: addDays(endDate, 1) } : { ...base, allDay: false, startInstant: startInstant!, endInstant: endInstant!, timeZone }, name.trim());
     }}>Save as template</button><button type="button" className="danger" onClick={() => { if (confirm("Delete this event series?")) onDelete(event.id); }}>Delete</button></>}<button type="button" onClick={onClose}>Cancel</button><button className="add" disabled={invalid}>Save event</button></div>
-  </form></div>;
+  </form>;
+  return embedded ? form : <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>{form}</div>;
 }
 
-function ScheduleEditor({ task, block, initialDate, onClose, onSave }: {
-  task?: Task; block?: ScheduledBlock; initialDate: string; onClose: () => void; onSave: (block: ScheduledBlock) => void;
+function ScheduleEditor({ task, block, data, initialDate, today, now, onClose, onSave }: {
+  task?: Task; block?: ScheduledBlock; data: Data; initialDate: string; today: string; now: Date;
+  onClose: () => void; onSave: (block: ScheduledBlock) => void;
 }) {
   const timeZone = block?.timeZone ?? zone();
-  const parts = (instant?: string) => {
-    if (!instant) return { date: initialDate, time: "09:00" };
-    const value = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(instant)).map(part => [part.type, part.value]));
-    return { date: `${value.year}-${value.month}-${value.day}`, time: `${value.hour}:${value.minute}` };
-  };
-  const start = parts(block?.startInstant);
-  const end = parts(block?.endInstant);
-  const [startDate, setStartDate] = useState(start.date);
-  const [endDate, setEndDate] = useState(end.date);
-  const [startTime, setStartTime] = useState(start.time);
-  const [endTime, setEndTime] = useState(block ? end.time : "10:00");
-  const startInstant = zonedDateTimeToInstant(startDate, startTime, timeZone);
-  const endInstant = zonedDateTimeToInstant(endDate, endTime, timeZone);
-  const invalid = !task || Boolean(task.completedAt || task.deletedAt) || !startInstant || !endInstant || endInstant <= startInstant;
-  return <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><form className="editor" onSubmit={e => {
-    e.preventDefault(); if (invalid || !task || !startInstant || !endInstant) return;
-    onSave({ ...(block ?? newEntity()), taskId: task.id, startInstant, endInstant, timeZone,
-      updatedAt: new Date().toISOString(), revision: block ? block.revision + 1 : 1 });
-  }}>
-    <div className="editorHead"><h2>{block ? "Edit planned work" : "Schedule work"}</h2><button type="button" onClick={onClose} aria-label="Close schedule editor">×</button></div>
-    <p className="hint"><strong>{task?.title ?? "Task unavailable"}</strong> · Scheduling work does not change its due date.</p>
-    <div className="fieldPair"><label>Starts<DateField value={startDate} onChange={setStartDate} /></label><label>Ends<DateField value={endDate} onChange={setEndDate} /></label></div>
-    <div className="fieldPair"><label>Start time<TimeField value={startTime} onChange={setStartTime} /></label><label>End time<TimeField value={endTime} onChange={setEndTime} /></label></div>
-    <p className="hint">Time zone: {timeZone}. Overlapping work blocks remain visible as separate planned items.</p>
-    <div className="editorActions"><button type="button" onClick={onClose}>Cancel</button><button className="add" disabled={invalid}>Save planned work</button></div>
-  </form></div>;
+  const measuredDuration = block ? Math.round((Date.parse(block.endInstant) - Date.parse(block.startInstant)) / 60_000) : 60;
+  const storedDuration = Number.isFinite(measuredDuration) && measuredDuration > 0 ? measuredDuration : 60;
+  const [selectedDate, setSelectedDate] = useState(initialDate);
+  const [durationMinutes, setDurationMinutes] = useState(storedDuration);
+  const durationOptions = [...new Set([30, 60, 90, 120, storedDuration])].sort((left, right) => left - right);
+  const [selectedSlot, setSelectedSlot] = useState<{ startInstant: string; endInstant: string } | null>(() =>
+    block ? { startInstant: block.startInstant, endInstant: block.endInstant } : null);
+  const dayAgenda = dashboardDays(data, selectedDate, 1, today)[0];
+  const allEvents = calendarEventsForDay(data, selectedDate, false);
+  const visibleEvents = calendarEventsForDay(data, selectedDate, true);
+  const visibleOccurrenceIds = new Set(visibleEvents.map(item => `${item.event.id}:${item.occurrenceDate}`));
+  const allDayEvents = visibleEvents.filter(item => item.allDay);
+  const hiddenEventCount = allEvents.filter(item => !visibleOccurrenceIds.has(`${item.event.id}:${item.occurrenceDate}`)).length;
+  const dayStart = zonedDateTimeToInstant(selectedDate, "00:00", timeZone);
+  const nextDayStart = zonedDateTimeToInstant(addDays(selectedDate, 1), "00:00", timeZone);
+  const hiddenOrVisibleEventRanges: BusyTimeRange[] = allEvents.flatMap(item => {
+    if (item.allDay || item.event.allDay) return dayStart && nextDayStart ? [{ startInstant: dayStart, endInstant: nextDayStart }] : [];
+    if (!item.startInstant || !item.endInstant) return [];
+    return [{ startInstant: item.startInstant, endInstant: item.endInstant }];
+  });
+  const plannedWork = dayAgenda?.scheduled ?? [];
+  const blockRanges: BusyTimeRange[] = plannedWork.flatMap(({ block: planned }) => planned.id === block?.id ? [] :
+    [{ startInstant: planned.startInstant, endInstant: planned.endInstant }]);
+  const dueRanges: BusyTimeRange[] = (dayAgenda?.due ?? []).filter(item => item.dueTime &&
+    !plannedWork.some(planned => planned.task.id === item.id)).flatMap(item => {
+    const startInstant = zonedDateTimeToInstant(selectedDate, item.dueTime!, item.dueTimeZone ?? timeZone);
+    return startInstant ? [{ startInstant, endInstant: new Date(Date.parse(startInstant) + 30 * 60_000).toISOString() }] : [];
+  });
+  const busyRanges = [...hiddenOrVisibleEventRanges, ...blockRanges, ...dueRanges];
+  const availableSlots = availableWorkSlots(selectedDate, timeZone, busyRanges, durationMinutes, now.getTime());
+  const timelineItems: CalendarTimelineItem[] = [
+    ...visibleEvents.flatMap(item => {
+      if (item.allDay || item.event.allDay || !item.startInstant || !item.endInstant) return [];
+      const event = item.event;
+      const eventStartDay = localDate(new Date(item.startInstant));
+      const eventEndDay = localDate(new Date(Date.parse(item.endInstant) - 1));
+      const start = eventStartDay < selectedDate
+        ? zonedDateTimeToInstant(selectedDate, "00:00", event.timeZone) ?? item.startInstant
+        : item.startInstant;
+      const end = eventEndDay > selectedDate
+        ? zonedDateTimeToInstant(addDays(selectedDate, 1), "00:00", event.timeZone) ?? item.endInstant
+        : item.endInstant;
+      return [{ id: `event:${event.id}:${item.occurrenceDate}`, title: event.title,
+        caption: `${timeLabel(start)} – ${timeLabel(end)} · Event`, start, end,
+        color: data.calendars.find(calendar => calendar.id === event.calendarId)?.color ?? defaultCalendarColor }];
+    }),
+    ...plannedWork.map(({ block: planned, task: plannedTask }) => ({ id: `block:${planned.id}`, title: plannedTask.title,
+      caption: `${timeLabel(planned.startInstant)} – ${timeLabel(planned.endInstant)} · Planned work`,
+      start: planned.startInstant, end: planned.endInstant, color: "#3982c4" })),
+    ...(dayAgenda?.due ?? []).filter(item => item.dueTime && !plannedWork.some(planned => planned.task.id === item.id)).flatMap(item => {
+      const start = zonedDateTimeToInstant(selectedDate, item.dueTime!, item.dueTimeZone ?? timeZone);
+      if (!start) return [];
+      const end = new Date(Date.parse(start) + 30 * 60_000).toISOString();
+      return [{ id: `deadline:${item.id}`, title: item.title, caption: "Task deadline", start, end, color: "#cf6d27" }];
+    })
+  ];
+  const invalid = !task || Boolean(task.completedAt || task.deletedAt) || !selectedSlot ||
+    Date.parse(selectedSlot.endInstant) <= Date.parse(selectedSlot.startInstant);
+  const changeDay = (date: string) => { setSelectedDate(date); setSelectedSlot(null); };
+  return <div className="modalBackdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section className="editor scheduleDayEditor" role="dialog" aria-modal="true" aria-labelledby="schedule-day-title">
+    <div className="editorHead"><div><span className="eyebrow">{block ? "EDIT PLANNED WORK" : "PLAN A WORK SESSION"}</span><h2 id="schedule-day-title">{task?.title ?? "Task unavailable"}</h2></div><button type="button" onClick={onClose} aria-label="Close schedule view">×</button></div>
+    <p className="hint">Scheduling work does not change this task’s due date.</p>
+    <div className="scheduleDayControls"><button type="button" aria-label="Previous day" disabled={addDays(selectedDate, -1) < historyStart(today)} onClick={() => changeDay(addDays(selectedDate, -1))}>‹</button><h3>{dateLabel(selectedDate)}</h3><button type="button" aria-label="Next day" onClick={() => changeDay(addDays(selectedDate, 1))}>›</button></div>
+    <div className="fieldPair scheduleDuration"><label>Session length<CustomSelect value={String(durationMinutes)} onChange={event => { setDurationMinutes(Number(event.target.value)); setSelectedSlot(null); }}>{durationOptions.map(minutes => <option key={minutes} value={minutes}>{minutes < 60 ? `${minutes} minutes` : minutes % 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : `${minutes / 60} hour${minutes === 60 ? "" : "s"}`}</option>)}</CustomSelect></label><p className="hint">Open starts are shown every 30 minutes, from 6:00 AM to 10:00 PM.</p></div>
+    {!!allDayEvents.length && <div className="scheduleAllDay" aria-label="All-day calendar events"><strong>All day</strong>{allDayEvents.map(item => <span key={`${item.event.id}:${item.occurrenceDate}`}>{item.event.title}</span>)}</div>}
+    {!!hiddenEventCount && <p className="hint">Items on hidden calendars also reserve time.</p>}
+    <h3 className="scheduleSectionHeading">Day view</h3>
+    <div className="scheduleDayTimeline"><CalendarTimeline day={selectedDate} items={timelineItems} now={now} /></div>
+    <div className="scheduleAvailability"><div className="scheduleAvailabilityHeader"><h3>Open time slots</h3><span>{availableSlots.length} available</span></div>
+      {availableSlots.length ? <div className="scheduleSlots" role="group" aria-label="Available work time slots">{availableSlots.map(slot => {
+        const selected = selectedSlot?.startInstant === slot.startInstant && selectedSlot.endInstant === slot.endInstant;
+        return <button key={slot.startInstant} type="button" className={selected ? "scheduleSlotSelected" : ""} aria-pressed={selected} onClick={() => setSelectedSlot(slot)}>
+          <span>{timeLabel(slot.startInstant)} – {timeLabel(slot.endInstant)}</span>{selected && <strong>Selected</strong>}
+        </button>;
+      })}</div> : <p className="scheduleNoSlots" role="status">{selectedDate < today ? "This day has passed. Choose today or a future day to book work." : "No open slots fit this session length."}</p>}
+    </div>
+    <p className="hint">Time zone: {timeZone}. Calendar events, planned work, and timed deadlines are treated as busy time.</p>
+    <div className="editorActions"><button type="button" onClick={onClose}>Cancel</button><button type="button" className="add" disabled={invalid} onClick={() => {
+      if (invalid || !task || !selectedSlot) return;
+      onSave({ ...(block ?? newEntity()), taskId: task.id, startInstant: selectedSlot.startInstant, endInstant: selectedSlot.endInstant,
+        timeZone, updatedAt: new Date().toISOString(), revision: block ? block.revision + 1 : 1 });
+    }}>{block ? "Save new time" : "Schedule work"}</button></div>
+  </section></div>;
 }
 
-function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onClose, onSave, onDelete }: {
+function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onClose, onSave, onDelete, embedded = false }: {
   task?: Task; initialDate?: string; initialProject?: string; data: Data; earliestDate: string; onClose: () => void;
   onSave: (task: Task, reminder: string) => void; onDelete: (id: string) => void;
+  embedded?: boolean;
 }) {
   const reminder = data.reminders.find(r => r.taskId === task?.id && !r.deletedAt);
   const [title, setTitle] = useState(task?.title ?? "");
@@ -1115,7 +1191,7 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
   const [repeatCount, setRepeatCount] = useState(task?.recurrence?.count ? String(task.recurrence.count) : "");
   const expiredDueDate = Boolean(dueDate && dueDate < earliestDate);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
-  return <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><form className="editor" onSubmit={e => {
+  const content = <><form className={`editor${embedded ? " composerEditorEmbedded" : ""}`} onSubmit={e => {
     e.preventDefault(); if (!title.trim() || expiredDueDate || (repeatSelection && (!dueDate || (repeatUntil && repeatUntil < dueDate) || (repeatCount !== "" && Number(repeatCount) < 1)))) return;
     const stamp = new Date().toISOString();
     const repeatRule = recurrenceForRepeat(repeatSelection, weekdays);
@@ -1128,7 +1204,7 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
         count: repeatCount ? Number(repeatCount) : undefined } : undefined
     }, reminderMinutes);
   }}>
-    <div className="editorHead"><h2>{task ? "Edit task" : "New task"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
+    {!embedded && <div className="editorHead"><h2>{task ? "Edit task" : "New task"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>}
     <label>Title<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing?" /></label>
     <label>Notes<textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></label>
     <div className="fieldPair dateTimePair"><label>Date<DateField value={dueDate} min={earliestDate} onChange={setDueDate} /></label><label>Time<TimeField value={dueTime} disabled={!dueDate} onChange={setDueTime} /></label></div>
@@ -1142,5 +1218,6 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
     <label>Reminder before deadline<CustomSelect value={reminderMinutes} onChange={e => setReminderMinutes(e.target.value)}><option value="">None</option><option value="0">At due time</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option></CustomSelect></label>
     {reminderMinutes !== "" && !dueTime && <p className="hint">Choose a due date and time for a timed reminder.</p>}
     <div className="editorActions">{task && <button type="button" className="danger" onClick={() => setDeleteConfirmationOpen(true)}>Delete</button>}<button type="button" onClick={onClose}>Cancel</button><button className="add" disabled={!title.trim() || expiredDueDate}>Save task</button></div>
-  </form>{deleteConfirmationOpen && <div className="modalBackdrop" style={{ zIndex: 20 }} onMouseDown={event => { if (event.target === event.currentTarget) setDeleteConfirmationOpen(false); }}><section className="editor" role="alertdialog" aria-modal="true" aria-labelledby="delete-task-title"><h2 id="delete-task-title">Delete task?</h2><p>“{task?.title}” and its scheduled work and reminders will be deleted. This cannot be undone.</p><div className="editorActions"><button type="button" onClick={() => setDeleteConfirmationOpen(false)}>Cancel</button><button type="button" className="danger" onClick={() => task && onDelete(task.id)}>Delete</button></div></section></div>}</div>;
+  </form>{deleteConfirmationOpen && <div className="modalBackdrop" style={{ zIndex: 20 }} onMouseDown={event => { if (event.target === event.currentTarget) setDeleteConfirmationOpen(false); }}><section className="editor" role="alertdialog" aria-modal="true" aria-labelledby="delete-task-title"><h2 id="delete-task-title">Delete task?</h2><p>“{task?.title}” and its scheduled work and reminders will be deleted. This cannot be undone.</p><div className="editorActions"><button type="button" onClick={() => setDeleteConfirmationOpen(false)}>Cancel</button><button type="button" className="danger" onClick={() => task && onDelete(task.id)}>Delete</button></div></section></div>}</>;
+  return embedded ? content : <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>{content}</div>;
 }
