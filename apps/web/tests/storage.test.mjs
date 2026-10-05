@@ -8,6 +8,7 @@ test("legacy v1 snapshots gain missing collections and a generation without losi
   const restored = normalizeData(legacy);
   assert.equal(restored.generation, 0);
   assert.equal(restored.tasks[0].title, "Keep me");
+  assert.equal(restored.tasks[0].priority, "low");
   assert.deepEqual(restored.sections, []);
   assert.deepEqual(restored.completions, []);
   assert.deepEqual(restored.savedViews, []);
@@ -15,6 +16,21 @@ test("legacy v1 snapshots gain missing collections and a generation without losi
   assert.deepEqual(restored.calendarEvents, []);
   assert.equal(restored.calendars[0].name, "Personal");
   assert.equal(normalizeData({ ...legacy, generation: 7 }).generation, 7);
+});
+
+test("legacy no-priority tasks, templates, and saved views migrate to Low", () => {
+  const entity = { createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", revision: 1 };
+  const oldTask = { ...entity, id: "old-task", title: "Old task", notes: "", priority: "none", tagIds: [], sortKey: 1 };
+  const defaultTask = { ...oldTask, id: "default-task", title: "Missing priority" };
+  delete defaultTask.priority;
+  const template = { ...entity, id: "template", name: "Template", title: "Template task", notes: "", priority: "none", tagIds: [] };
+  const view = { ...entity, id: "view", name: "Unprioritized", query: "", priority: "none" };
+  const restored = normalizeData({ schemaVersion: 4, tasks: [oldTask, defaultTask], taskTemplates: [template], savedViews: [view] });
+
+  assert.deepEqual(restored.tasks.map(task => task.priority), ["low", "low"]);
+  assert.equal(restored.taskTemplates[0].priority, "low");
+  assert.equal(restored.savedViews[0].priority, "low");
+  assert.throws(() => normalizeData({ schemaVersion: 4, tasks: [{ ...oldTask, priority: "urgent" }] }), /Invalid local task priority/);
 });
 
 test("legacy subtasks migrate to standalone tasks without losing task records", () => {

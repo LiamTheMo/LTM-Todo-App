@@ -73,7 +73,7 @@ export function importOutlineItems(data: Data, items: OutlineItem[], destination
   for (const item of selected) {
     if (isOutlineDuplicate(next, item, destination)) { skipped++; continue; }
     if (item.kind === "task") {
-      next = saveTask(next, { ...newEntity(now), title: item.title.trim(), notes: "", priority: "none", tagIds: [],
+      next = saveTask(next, { ...newEntity(now), title: item.title.trim(), notes: "", priority: "low", tagIds: [],
         sortKey: next.tasks.length, projectId: destination.projectId || undefined, dueDate: item.date,
         dueTime: item.time || undefined, dueTimeZone: item.time ? destination.timeZone : undefined }, destination.reminderMinutes || "", today);
     } else next = saveCalendarEvent(next, buildEvent(item, destination, now));

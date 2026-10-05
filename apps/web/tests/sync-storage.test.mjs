@@ -6,7 +6,7 @@ import { acknowledgeAttachmentUpload, acknowledgeSyncMutation, applyRemoteSyncCh
 
 const stamp = "2026-10-03T12:00:00.000Z";
 const taskId = "4fef5e72-f114-4ea5-8d40-9d8069654f40";
-const task = (title = "Local task", revision = 1) => ({ id: taskId, title, notes: "", priority: "none", tagIds: [], sortKey: 1,
+const task = (title = "Local task", revision = 1) => ({ id: taskId, title, notes: "", priority: "low", tagIds: [], sortKey: 1,
   createdAt: stamp, updatedAt: stamp, revision });
 
 beforeEach(async () => {

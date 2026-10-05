@@ -11,7 +11,7 @@ const mutationId = "4e731b4e-c82c-4df6-a26a-847a2c115414";
 const stamp = "2026-10-03T12:00:00.000Z";
 const validMutation = (overrides = {}) => ({
   entityType: "tasks", entityId: id, baseRevision: 0, operation: "upsert", clientMutationId: mutationId,
-  clientSchemaVersion: 4, payload: { id, title: "Test", notes: "", priority: "none", tagIds: [], sortKey: 0,
+  clientSchemaVersion: 4, payload: { id, title: "Test", notes: "", priority: "low", tagIds: [], sortKey: 0,
     createdAt: stamp, updatedAt: stamp, revision: 1 }, ...overrides
 });
 
@@ -19,6 +19,11 @@ test("accepts a versioned, bounded sync mutation", () => {
   const result = parseSyncPushBatch({ protocolVersion: 1, mutations: [validMutation()] });
   assert.equal(result.ok, true);
   assert.equal(result.value.mutations[0].entityId, id);
+});
+
+test("accepts legacy no-priority values from older clients", () => {
+  const payload = { ...validMutation().payload, priority: "none" };
+  assert.equal(parseSyncPushBatch({ protocolVersion: 1, mutations: [validMutation({ payload })] }).ok, true);
 });
 
 test("shared valid and invalid fixtures conform to the runtime protocol parser", () => {

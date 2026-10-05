@@ -20,10 +20,11 @@ import { CalendarColorPicker } from "../components/CalendarColorPicker";
 import { OutlineImporter } from "../components/OutlineImporter";
 import { importOutlineItems } from "../lib/outline-import";
 import { toReadOnlyCalendarEvent } from "../lib/ics-calendar-view";
+import { defaultWeekdaysForRepeat, recurrenceForRepeat, repeatLabelFor, repeatOptionsFor, repeatSelectionFor, repeatUsesWeekdayPicker, type RepeatSelection } from "../lib/recurrence-presets";
 
 type View = NavigationSection;
 const views: View[] = ["Dashboard", "Tasks", "Projects", "Calendar", "Settings"];
-const priorities: Priority[] = ["none", "low", "medium", "high"];
+const priorities: Priority[] = ["low", "medium", "high"];
 const priorityLabel = (priority: Priority) => priority.charAt(0).toUpperCase() + priority.slice(1);
 const calendarWeekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const dashboardStep = 28;
@@ -130,8 +131,8 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [routineTemplateId, setRoutineTemplateId] = useState("");
   const [routineStartDate, setRoutineStartDate] = useState(() => localDate(new Date()));
-  const [routineFrequency, setRoutineFrequency] = useState<"daily" | "weekly" | "monthly" | "yearly">("weekly");
-  const [routineInterval, setRoutineInterval] = useState(1);
+  const [routineRepeatSelection, setRoutineRepeatSelection] = useState<RepeatSelection>("weekly");
+  const [routineWeekdays, setRoutineWeekdays] = useState<number[]>([]);
   const [pushToken, setPushToken] = useState("");
   const [pushActive, setPushActive] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
@@ -616,7 +617,7 @@ export default function Home() {
   }, [ready, today, mutate]);
   const addTask = (title: string, project?: string, dueDate?: string) => {
     if (!title.trim()) return;
-    mutate(value => ({ ...value, tasks: [...value.tasks, { ...newEntity(), title: title.trim(), notes: "", priority: "none", projectId: project || undefined, tagIds: [], sortKey: Date.now(), dueDate }] }));
+    mutate(value => ({ ...value, tasks: [...value.tasks, { ...newEntity(), title: title.trim(), notes: "", priority: "low", projectId: project || undefined, tagIds: [], sortKey: Date.now(), dueDate }] }));
     setQuickTitle("");
   };
   const toggle = (task: Task) => mutate(value => {
@@ -633,7 +634,7 @@ export default function Home() {
     const latestCompletion = completionId && data.completions.filter(item => item.taskId === task.id).at(-1)?.id === completionId;
     return <div className={`taskRow priority-${task.priority} ${isComplete ? "completed" : ""}`} key={key}>
       <button className="complete" disabled={completionId ? !latestCompletion : false} onClick={() => completionId ? latestCompletion && mutate(value => undoCompletion(value, completionId)) : toggle(task)} aria-label={isComplete ? `Reopen ${task.title}` : `Complete ${task.title}`}>{isComplete ? "✓" : "○"}</button>
-      <button className="taskText" draggable={!isComplete} onDragStart={e => { if (isComplete) return; e.dataTransfer.setData("application/x-ltm-task", task.id); e.dataTransfer.effectAllowed = "copy"; }} onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "none" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
+      <button className="taskText" draggable={!isComplete} onDragStart={e => { if (isComplete) return; e.dataTransfer.setData("application/x-ltm-task", task.id); e.dataTransfer.effectAllowed = "copy"; }} onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "low" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
       {!isComplete && <button className="scheduleAction" onClick={() => setScheduleEditing({ taskId: task.id, date: calendarSelectedDate })} aria-label={`Schedule work for ${task.title}`} title="Schedule work">◷</button>}
       <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
     </div>;
@@ -924,7 +925,22 @@ export default function Home() {
           <h3>Protected attachments</h3><p>Attachments are private to your account and linked to one of your tasks. Supported types: JPEG, PNG, WebP, PDF, and plain text, up to 10 MiB. Offline uploads remain in this device&apos;s private IndexedDB queue and retry after reconnecting.</p><div className="settingsActions"><label>Attach to task<select aria-label="Attach to task" value={attachmentTaskId} onChange={event => setAttachmentTaskId(event.target.value)}><option value="">Choose a task</option>{data.tasks.filter(task => !task.deletedAt).map(task => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label><label>Upload file<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" disabled={!attachmentTaskId} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void uploadAttachment(file); }} /></label><button type="button" onClick={() => { void refreshAttachments(); }}>Refresh attachments</button></div>{pendingAttachments.map(attachment => <div className="tagLine" key={attachment.id}><span><strong>{attachment.fileName}</strong><small> · Saved on this device · {data.tasks.find(task => task.id === attachment.taskId)?.title ?? "Task"}</small></span></div>)}{attachments.map(attachment => <div className="tagLine" key={attachment.id}><span><strong>{attachment.fileName}</strong><small> · {Math.ceil(attachment.size / 1024).toLocaleString()} KiB · {data.tasks.find(task => task.id === attachment.taskId)?.title ?? "Task"}</small></span><div><button type="button" onClick={() => { void downloadAttachment(attachment); }}>Download</button><button type="button" className="danger" onClick={() => { void deleteAttachment(attachment); }}>Delete</button></div></div>)}<p role="status" aria-live="polite">{attachmentStatus}</p>
           <h3>Task templates</h3><p>Templates create fresh tasks with their own IDs and completion history.</p>{data.taskTemplates.filter(template => !template.deletedAt).map(template => <div className="tagLine" key={template.id}><span><strong>{template.name}</strong><small> · {template.title}</small></span><button type="button" onClick={() => mutate(value => instantiateTaskTemplate(value, template.id))}>Create task</button></div>)}{!data.taskTemplates.some(template => !template.deletedAt) && <p>No templates yet. Select tasks in Tasks and choose “Save selected as templates.”</p>}
           <h3>Event templates</h3><p>Start a new calendar event from a saved event pattern.</p>{data.eventTemplates.filter(template => !template.deletedAt).map(template => <div className="tagLine" key={template.id}><span><strong>{template.name}</strong><small> · {template.title}</small></span><button type="button" onClick={() => mutate(value => instantiateEventTemplate(value, template.id, calendarSelectedDate))}>Create event on {calendarSelectedDate}</button></div>)}{!data.eventTemplates.some(template => !template.deletedAt) && <p>No event templates yet. Save an existing event as a template in its editor.</p>}
-           <h3>Routines</h3><p>A routine starts a recurring task from a template. Completing that task advances its next due date.</p><form className="routineForm" onSubmit={e => { e.preventDefault(); if (!routineTemplateId) return; const form = e.currentTarget; const name = (form.elements.namedItem("routineName") as HTMLInputElement).value.trim(); if (!name) return; mutate(value => createRoutine(value, routineTemplateId, name, routineStartDate, { frequency: routineFrequency, interval: Math.max(1, routineInterval) })); (form.elements.namedItem("routineName") as HTMLInputElement).value = ""; }}><label>Routine name<input name="routineName" required placeholder="Weekly review" /></label><label>Template<CustomSelect aria-label="Routine template" value={routineTemplateId} onChange={e => setRoutineTemplateId(e.target.value)}><option value="">Choose template…</option>{data.taskTemplates.filter(template => !template.deletedAt).map(template => <option key={template.id} value={template.id}>{template.name}</option>)}</CustomSelect></label><div className="fieldPair"><label>First due date<DateField value={routineStartDate} min={historyStart(today)} onChange={setRoutineStartDate} /></label><label>Repeat<CustomSelect value={routineFrequency} onChange={e => setRoutineFrequency(e.target.value as typeof routineFrequency)}>{["daily", "weekly", "monthly", "yearly"].map(frequency => <option key={frequency} value={frequency}>{frequency[0].toUpperCase() + frequency.slice(1)}</option>)}</CustomSelect></label></div><label>Every<input type="number" min="1" max="365" value={routineInterval} onChange={e => setRoutineInterval(Number(e.target.value))} /></label><button disabled={!routineTemplateId}>Create routine</button></form>{data.routines.filter(routine => !routine.deletedAt).map(routine => <div className="tagLine" key={routine.id}><span>{routine.name} · {routine.recurrence.frequency}</span><button type="button" onClick={() => mutate(value => setRoutineEnabled(value, routine.id, !routine.enabled))}>{routine.enabled ? "Pause" : "Resume"}</button></div>)}
+          <h3>Routines</h3><p>A routine starts a recurring task from a template. Completing that task advances its next due date.</p><form className="routineForm" onSubmit={e => {
+            e.preventDefault();
+            const repeatRule = recurrenceForRepeat(routineRepeatSelection, routineWeekdays);
+            if (!routineTemplateId || !repeatRule) return;
+            const form = e.currentTarget;
+            const name = (form.elements.namedItem("routineName") as HTMLInputElement).value.trim();
+            if (!name) return;
+            mutate(value => createRoutine(value, routineTemplateId, name, routineStartDate, repeatRule));
+            (form.elements.namedItem("routineName") as HTMLInputElement).value = "";
+          }}>
+            <label>Routine name<input name="routineName" required placeholder="Weekly review" /></label>
+            <label>Template<CustomSelect aria-label="Routine template" value={routineTemplateId} onChange={e => setRoutineTemplateId(e.target.value)}><option value="">Choose template…</option>{data.taskTemplates.filter(template => !template.deletedAt).map(template => <option key={template.id} value={template.id}>{template.name}</option>)}</CustomSelect></label>
+            <div className="fieldPair"><label>First due date<DateField value={routineStartDate} min={historyStart(today)} onChange={setRoutineStartDate} /></label><label>Repeat<CustomSelect value={routineRepeatSelection} onChange={e => { const selection = e.target.value as RepeatSelection; setRoutineRepeatSelection(selection); const presetDays = defaultWeekdaysForRepeat(selection); if (presetDays) setRoutineWeekdays(presetDays); }}>{repeatOptionsFor().filter(option => option.value).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</CustomSelect></label></div>
+            {repeatUsesWeekdayPicker(routineRepeatSelection) && <fieldset><legend>Repeat on</legend>{calendarWeekdays.map((name, day) => <label className="checkLabel" key={name}><input type="checkbox" checked={routineWeekdays.includes(day)} onChange={e => setRoutineWeekdays(e.target.checked ? [...routineWeekdays, day] : routineWeekdays.filter(value => value !== day))} /> {name}</label>)}<p className="hint">If none are selected, repeat on the original weekday.</p></fieldset>}
+            <button disabled={!routineTemplateId}>Create routine</button>
+          </form>{data.routines.filter(routine => !routine.deletedAt).map(routine => <div className="tagLine" key={routine.id}><span>{routine.name} · {repeatLabelFor(routine.recurrence)}</span><button type="button" onClick={() => mutate(value => setRoutineEnabled(value, routine.id, !routine.enabled))}>{routine.enabled ? "Pause" : "Resume"}</button></div>)}
           <h3>Push reminders</h3><p>Enable push for notifications when LTM Todo is in the background or closed. On iPhone or iPad, open the Home Screen app copy to enable push. Push scheduling checks once per minute, so delivery can be slightly after the selected time.</p>
           <p>Browser permission: {pushPermission === "granted" ? "Allowed" : pushPermission === "denied" ? "Blocked in browser settings" : pushPermission === "unsupported" ? "Not supported" : "Not granted"}. Push subscription: {pushActive ? "Set up on this device" : "Not set up"}.</p>
           <p role="status" aria-live="polite">{pushStatus}</p>
@@ -1011,19 +1027,20 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTe
   const [endDate, setEndDate] = useState(endParts.day);
   const [startTime, setStartTime] = useState(startParts.time);
   const [endTime, setEndTime] = useState(endParts.time);
-  const [frequency, setFrequency] = useState(event?.recurrence?.frequency ?? "");
-  const [interval, setInterval] = useState(event?.recurrence?.interval ?? 1);
+  const [repeatSelection, setRepeatSelection] = useState<RepeatSelection>(() => repeatSelectionFor(event?.recurrence));
   const [weekdays, setWeekdays] = useState<number[]>(event?.recurrence?.weekdays ?? []);
   const [until, setUntil] = useState(event?.recurrence?.until ?? "");
   const [count, setCount] = useState(event?.recurrence?.count ? String(event.recurrence.count) : "");
   const startInstant = !allDay && startDate ? zonedDateTimeToInstant(startDate, startTime, timeZone) : undefined;
   const endInstant = !allDay && endDate ? zonedDateTimeToInstant(endDate, endTime, timeZone) : undefined;
-  const invalid = !title.trim() || !calendarId || (allDay ? endDate < startDate : !startInstant || !endInstant || endInstant <= startInstant) || (Boolean(until) && until < startDate) || (Boolean(count) && Number(count) < 1);
+  const invalid = !title.trim() || !calendarId || (allDay ? endDate < startDate : !startInstant || !endInstant || endInstant <= startInstant) ||
+    (Boolean(repeatSelection && until) && until < startDate) || (Boolean(repeatSelection && count) && Number(count) < 1);
   return <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><form className="editor" onSubmit={e => {
     e.preventDefault(); if (invalid) return;
     const base = event ?? { ...newEntity(), calendarId, title, notes, recurrence: undefined };
+    const repeatRule = recurrenceForRepeat(repeatSelection, weekdays);
     const common = { ...base, calendarId, title: title.trim(), notes, updatedAt: new Date().toISOString(), revision: event ? event.revision + 1 : 1,
-      recurrence: frequency ? { frequency: frequency as "daily" | "weekly" | "monthly" | "yearly", interval: Math.max(1, interval), weekdays: frequency === "weekly" ? weekdays : undefined, until: until || undefined, count: count ? Number(count) : undefined } : undefined };
+      recurrence: repeatRule ? { ...repeatRule, until: until || undefined, count: count ? Number(count) : undefined } : undefined };
     onSave(allDay ? { ...common, allDay: true, startDate, endDate: addDays(endDate, 1) } : { ...common, allDay: false, startInstant: startInstant!, endInstant: endInstant!, timeZone });
   }}>
     <div className="editorHead"><h2>{event ? "Edit event" : "New event"}</h2><button type="button" onClick={onClose} aria-label="Close editor">×</button></div>
@@ -1033,9 +1050,9 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTe
     <label className="checkLabel"><input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} /> All day</label>
     <div className="fieldPair"><label>Starts<DateField value={startDate} onChange={setStartDate} /></label><label>Ends {allDay ? "(inclusive)" : ""}<DateField value={endDate} onChange={setEndDate} /></label></div>
     {!allDay && <><div className="fieldPair"><label>Start time<TimeField value={startTime} onChange={setStartTime} /></label><label>End time<TimeField value={endTime} onChange={setEndTime} /></label></div><p className="hint">Time zone: {timeZone}. Repeated events keep this local wall time across daylight saving changes.</p></>}
-    <div className="fieldPair"><label>Repeat<CustomSelect value={frequency} onChange={e => setFrequency(e.target.value)}><option value="">Never</option>{["daily", "weekly", "monthly", "yearly"].map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</CustomSelect></label><label>Every<input type="number" min="1" max="365" disabled={!frequency} value={interval} onChange={e => setInterval(Number(e.target.value))} /></label></div>
-    {frequency === "weekly" && <fieldset><legend>Repeat on</legend>{calendarWeekdays.map((name, day) => <label className="checkLabel" key={name}><input type="checkbox" checked={weekdays.includes(day)} onChange={e => setWeekdays(e.target.checked ? [...weekdays, day] : weekdays.filter(value => value !== day))} /> {name}</label>)}</fieldset>}
-    {frequency && <div className="fieldPair"><label>Repeat until<DateField value={until} min={startDate} onChange={setUntil} /></label><label>End after occurrences<input type="number" min="1" value={count} onChange={e => setCount(e.target.value)} placeholder="No limit" /></label></div>}
+    <label>Repeat<CustomSelect value={repeatSelection} onChange={e => { const selection = e.target.value as RepeatSelection; setRepeatSelection(selection); const presetDays = defaultWeekdaysForRepeat(selection); if (presetDays) setWeekdays(presetDays); }}>{repeatOptionsFor(event?.recurrence).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</CustomSelect></label>
+    {repeatUsesWeekdayPicker(repeatSelection) && <fieldset><legend>Repeat on</legend>{calendarWeekdays.map((name, day) => <label className="checkLabel" key={name}><input type="checkbox" checked={weekdays.includes(day)} onChange={e => setWeekdays(e.target.checked ? [...weekdays, day] : weekdays.filter(value => value !== day))} /> {name}</label>)}</fieldset>}
+    {repeatSelection && <div className="fieldPair"><label>Repeat until<DateField value={until} min={startDate} onChange={setUntil} /></label><label>End after occurrences<input type="number" min="1" value={count} onChange={e => setCount(e.target.value)} placeholder="No limit" /></label></div>}
     <div className="editorActions">{event && <><button type="button" onClick={() => {
       if (invalid) return;
       const name = prompt("Template name", title.trim());
@@ -1087,27 +1104,27 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
   const [notes, setNotes] = useState(task?.notes ?? "");
   const [dueDate, setDueDate] = useState(task?.dueDate ?? initialDate ?? "");
   const [dueTime, setDueTime] = useState(task?.dueTime ?? "");
-  const [priority, setPriority] = useState<Priority>(task?.priority ?? "none");
+  const [priority, setPriority] = useState<Priority>(task?.priority ?? "low");
   const [projectId, setProjectId] = useState(task?.projectId ?? initialProject ?? "");
   const [sectionId, setSectionId] = useState(task?.sectionId ?? "");
   const [tagIds, setTagIds] = useState(task?.tagIds ?? []);
   const [reminderMinutes, setReminderMinutes] = useState(reminder ? String(reminder.minutesBefore) : "");
-  const [frequency, setFrequency] = useState(task?.recurrence?.frequency ?? "");
-  const [interval, setInterval] = useState(task?.recurrence?.interval ?? 1);
+  const [repeatSelection, setRepeatSelection] = useState<RepeatSelection>(() => repeatSelectionFor(task?.recurrence));
   const [weekdays, setWeekdays] = useState<number[]>(task?.recurrence?.weekdays ?? []);
   const [repeatUntil, setRepeatUntil] = useState(task?.recurrence?.until ?? "");
   const [repeatCount, setRepeatCount] = useState(task?.recurrence?.count ? String(task.recurrence.count) : "");
   const expiredDueDate = Boolean(dueDate && dueDate < earliestDate);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   return <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><form className="editor" onSubmit={e => {
-    e.preventDefault(); if (!title.trim() || expiredDueDate || (frequency && (!dueDate || (repeatUntil && repeatUntil < dueDate) || (repeatCount !== "" && Number(repeatCount) < 1)))) return;
+    e.preventDefault(); if (!title.trim() || expiredDueDate || (repeatSelection && (!dueDate || (repeatUntil && repeatUntil < dueDate) || (repeatCount !== "" && Number(repeatCount) < 1)))) return;
     const stamp = new Date().toISOString();
+    const repeatRule = recurrenceForRepeat(repeatSelection, weekdays);
     onSave({ ...(task ?? newEntity()), title: title.trim(), notes, priority, projectId: projectId || undefined, sectionId: projectId && sectionId ? sectionId : undefined,
       tagIds, sortKey: task?.sortKey ?? Date.now(), dueDate: dueDate || undefined,
       dueTime: dueDate && dueTime ? dueTime : undefined, dueTimeZone: dueDate && dueTime ? zone() : undefined, updatedAt: stamp, revision: task ? task.revision + 1 : 1,
-      recurrence: frequency && dueDate ? { frequency: frequency as "daily" | "weekly" | "monthly" | "yearly", interval: Math.max(1, interval),
+      recurrence: repeatRule && dueDate ? { ...repeatRule,
         anchorDate: task?.dueDate === dueDate ? task?.recurrence?.anchorDate ?? dueDate : dueDate, occurrences: task?.recurrence?.occurrences ?? 0,
-        weekdays: frequency === "weekly" ? weekdays : undefined, until: repeatUntil || undefined,
+        until: repeatUntil || undefined,
         count: repeatCount ? Number(repeatCount) : undefined } : undefined
     }, reminderMinutes);
   }}>
@@ -1119,9 +1136,9 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
     <div className="fieldPair"><label>Priority<CustomSelect value={priority} onChange={e => setPriority(e.target.value as Priority)}>{priorities.map(p => <option key={p} value={p}>{priorityLabel(p)}</option>)}</CustomSelect></label><label>Project<CustomSelect value={projectId} onChange={e => { setProjectId(e.target.value); setSectionId(""); }}><option value="">Inbox</option>{data.projects.filter(p => !p.deletedAt && !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</CustomSelect></label></div>
     {projectId && <label>Section<CustomSelect value={sectionId} onChange={e => setSectionId(e.target.value)}><option value="">Project root</option>{data.sections.filter(s => s.projectId === projectId && !s.deletedAt).map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</CustomSelect></label>}
     {!!data.tags.length && <fieldset><legend>Tags</legend>{data.tags.filter(t => !t.deletedAt).map(t => <label className="checkLabel" key={t.id}><input type="checkbox" checked={tagIds.includes(t.id)} onChange={e => setTagIds(e.target.checked ? [...tagIds, t.id] : tagIds.filter(id => id !== t.id))} /> {t.name}</label>)}</fieldset>}
-    <div className="fieldPair"><label>Repeat<CustomSelect value={frequency} onChange={e => setFrequency(e.target.value)}><option value="">Never</option>{["daily", "weekly", "monthly", "yearly"].map(f => <option key={f} value={f}>{f[0].toUpperCase() + f.slice(1)}</option>)}</CustomSelect></label><label>Every<input type="number" min="1" max="365" disabled={!frequency} value={interval} onChange={e => setInterval(Number(e.target.value))} /></label></div>
-    {frequency === "weekly" && <fieldset><legend>Repeat on</legend>{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((name, day) => <label className="checkLabel" key={day}><input type="checkbox" checked={weekdays.includes(day)} onChange={e => setWeekdays(e.target.checked ? [...weekdays, day] : weekdays.filter(value => value !== day))} /> {name}</label>)}<p className="hint">If none are selected, repeat on the original weekday.</p></fieldset>}
-    {frequency && <div className="fieldPair"><label>Repeat until<DateField value={repeatUntil} min={dueDate} onChange={setRepeatUntil} /></label><label>End after occurrences<input type="number" min="1" value={repeatCount} onChange={e => setRepeatCount(e.target.value)} placeholder="No limit" /></label></div>}
+    <label>Repeat<CustomSelect value={repeatSelection} onChange={e => { const selection = e.target.value as RepeatSelection; setRepeatSelection(selection); const presetDays = defaultWeekdaysForRepeat(selection); if (presetDays) setWeekdays(presetDays); }}>{repeatOptionsFor(task?.recurrence).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</CustomSelect></label>
+    {repeatUsesWeekdayPicker(repeatSelection) && <fieldset><legend>Repeat on</legend>{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((name, day) => <label className="checkLabel" key={day}><input type="checkbox" checked={weekdays.includes(day)} onChange={e => setWeekdays(e.target.checked ? [...weekdays, day] : weekdays.filter(value => value !== day))} /> {name}</label>)}<p className="hint">If none are selected, repeat on the original weekday.</p></fieldset>}
+    {repeatSelection && <div className="fieldPair"><label>Repeat until<DateField value={repeatUntil} min={dueDate} onChange={setRepeatUntil} /></label><label>End after occurrences<input type="number" min="1" value={repeatCount} onChange={e => setRepeatCount(e.target.value)} placeholder="No limit" /></label></div>}
     <label>Reminder before deadline<CustomSelect value={reminderMinutes} onChange={e => setReminderMinutes(e.target.value)}><option value="">None</option><option value="0">At due time</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option></CustomSelect></label>
     {reminderMinutes !== "" && !dueTime && <p className="hint">Choose a due date and time for a timed reminder.</p>}
     <div className="editorActions">{task && <button type="button" className="danger" onClick={() => setDeleteConfirmationOpen(true)}>Delete</button>}<button type="button" onClick={onClose}>Cancel</button><button className="add" disabled={!title.trim() || expiredDueDate}>Save task</button></div>

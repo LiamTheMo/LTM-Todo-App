@@ -31,12 +31,12 @@ The history window includes Today and the preceding 30 calendar days. Older task
 
 ### Tasks and projects
 
-- Create and edit tasks with titles, notes, optional dates/times, priorities, tags, and project organization.
+- Create and edit tasks with titles, notes, optional dates/times, priorities, tags, and project organization. New tasks default to Low; older unprioritized tasks load as Low.
 - Use the Tasks Kanban and text search to see active and completed work.
 - Keep due dates separate from scheduled work blocks.
-- Set structured recurrence and timed reminders; use routines and templates for repeated work.
+- Set repeat presets for daily, every other day, weekdays, weekends, weekly, biweekly, monthly, every two months, quarterly, or yearly schedules. Weekly and biweekly repeats can target specific weekdays; use an end date or occurrence count to limit a series. Add timed reminders, and use routines and templates for repeated work.
 - Organize work into projects and sections, adjust ordering, and archive or restore projects.
-- See priority through the completion circle: grey for None, yellow for Low, orange for Medium, and red for High.
+- See priority through the completion circle: lime green for Low, yellow for Medium, and red for High.
 
 ### Calendar and planning
 

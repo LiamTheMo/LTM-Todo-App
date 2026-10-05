@@ -30,6 +30,42 @@ test("heading and adjacent assignment title give context to a separate date line
   assert.ok(items[0].warnings.some(warning => warning.includes("Year")));
 });
 
+test("assignment name fields and descriptive headers become task titles", () => {
+  const named = parseOutline([
+    { text: "Assignments", heading: true },
+    { text: "Assignment 2", heading: true },
+    { text: "Assignment name: Critical Reflection on Digital Privacy" },
+    { text: "Due date: October 20" },
+  ], options);
+  assert.equal(named.length, 1);
+  assert.equal(named[0].title, "Assignment 2 — Critical Reflection on Digital Privacy");
+
+  const headed = parseOutline([
+    { text: "Essay: Rethinking the Future", heading: true },
+    { text: "October 22" },
+  ], options);
+  assert.equal(headed.length, 1);
+  assert.equal(headed[0].title, "Essay: Rethinking the Future");
+
+  const nearbyName = parseOutline([
+    { text: "Assignment 3", heading: true },
+    { text: "Identity and Responsibility" },
+    { text: "Due date: October 24" },
+  ], options);
+  assert.equal(nearbyName.length, 1);
+  assert.equal(nearbyName[0].title, "Assignment 3 — Identity and Responsibility");
+});
+
+test("title cleanup preserves ordinary words and ignores section and due-date labels", () => {
+  const titled = parse("Assignment 3: Reflection on Learning due October 20")[0];
+  assert.equal(titled.title, "Assignment 3: Reflection on Learning");
+  const generic = parseOutline([
+    { text: "Assignments & Assessments", heading: true },
+    { text: "Due: October 20" },
+  ], options)[0];
+  assert.equal(generic.title, "Course item");
+});
+
 test("numeric date ambiguity is unresolved until a date order is chosen", () => {
   const ambiguous = parse("Assignment 2 due 10/11")[0];
   assert.equal(ambiguous.date, "");
@@ -89,6 +125,7 @@ test("batch import creates domain entities/reminders and omits all source conten
   assert.equal(result.added, 2);
   assert.equal(data.tasks.length, 0);
   assert.equal(result.data.tasks[0].projectId, project.id);
+  assert.equal(result.data.tasks[0].priority, "low");
   assert.equal(result.data.tasks[0].dueTimeZone, "America/Edmonton");
   assert.equal(result.data.reminders[0].minutesBefore, 30);
   assert.equal(result.data.tasks[0].notes, "");
