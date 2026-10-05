@@ -32,7 +32,7 @@ test("D1 attachment metadata stays account-scoped and orphan cleanup is retried 
   const secret = Buffer.alloc(32, 9).toString("base64url");
   const sync = new D1SyncStore(db, new SyncCursorCodec(secret));
   await sync.push(principal, { protocolVersion: 1, mutations: [{ entityType: "tasks", entityId: taskId,
-    payload: { id: taskId, title: "Attach", notes: "", priority: "none", tagIds: [], sortKey: 0,
+    payload: { id: taskId, title: "Attach", notes: "", priority: "low", tagIds: [], sortKey: 0,
       createdAt: "2026-10-03T12:00:00.000Z", updatedAt: "2026-10-03T12:00:00.000Z", revision: 1 },
     baseRevision: 0, clientMutationId: "00000000-0000-4000-8000-000000000001", clientSchemaVersion: 4, operation: "upsert" }] });
   const objects = new Map(); const uploadedAt = new Map(); let failDelete = true; let cleanupTarget;

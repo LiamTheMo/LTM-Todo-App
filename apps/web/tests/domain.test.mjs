@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
-  id, title: id, notes: "", priority: "none", tagIds: [], sortKey: 1,
+  id, title: id, notes: "", priority: "low", tagIds: [], sortKey: 1,
   createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", revision: 1,
   dueDate, ...extras
 });
@@ -186,8 +186,8 @@ test("bulk priority edits update selected open tasks atomically", () => {
   const data = { ...emptyData(), tasks: [task("one", undefined), task("two", undefined), { ...task("done", undefined), completedAt: "2026-10-01T00:00:00Z" }] };
   const updated = bulkSetPriority(data, ["one", "done"], "high");
   assert.equal(updated.tasks.find(item => item.id === "one").priority, "high");
-  assert.equal(updated.tasks.find(item => item.id === "done").priority, "none");
-  assert.equal(updated.tasks.find(item => item.id === "two").priority, "none");
+  assert.equal(updated.tasks.find(item => item.id === "done").priority, "low");
+  assert.equal(updated.tasks.find(item => item.id === "two").priority, "low");
 });
 test("84-day Dashboard date windows stay bounded and large local lists remain responsive", () => {
   const data = emptyData();

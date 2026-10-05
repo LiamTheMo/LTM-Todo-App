@@ -17,6 +17,11 @@ const builtInCalendarId = "00000000-0000-4000-8000-000000000001";
 type JournalEntry = { key: string; mutation: SyncMutation; queuedAt: number };
 export type SyncConflict = { key: string; mutation: SyncMutation; current?: SyncChange; foundAt: string };
 const entityKey = (type: string, id: string) => `${type}:${id}`;
+function normalizeTaskPriority(value: unknown): "low" | "medium" | "high" {
+  if (value === undefined || value === null || value === "none") return "low";
+  if (value === "low" || value === "medium" || value === "high") return value;
+  throw new Error("Invalid local task priority");
+}
 function sameSyncValue(type: typeof collectionTypes[number], id: string, before: unknown, after: unknown): boolean {
   if (type !== "calendars" || id !== builtInCalendarId || !before || !after) return JSON.stringify(before) === JSON.stringify(after);
   const stable = (value: Record<string, unknown>) => Object.fromEntries(Object.entries(value).filter(([key]) =>
@@ -43,8 +48,15 @@ export function normalizeData(value: unknown): Data {
   normalized.tasks = (normalized.tasks as Array<Record<string, unknown>>).map(task => {
     const standalone = { ...task };
     delete standalone.parentTaskId;
+    standalone.priority = normalizeTaskPriority(standalone.priority);
     return standalone;
   });
+  normalized.taskTemplates = (normalized.taskTemplates as Array<Record<string, unknown>>).map(template => ({
+    ...template, priority: normalizeTaskPriority(template.priority)
+  }));
+  normalized.savedViews = (normalized.savedViews as Array<Record<string, unknown>>).map(view => ({
+    ...view, priority: view.priority === "none" ? "low" : view.priority
+  }));
   const data = { ...emptyData(), ...normalized, schemaVersion: 4,
     generation: (raw.generation as number | undefined) ?? 0 } as Data;
   for (const name of collections) {
@@ -63,7 +75,7 @@ export function normalizeData(value: unknown): Data {
   }
   for (const task of data.tasks) {
     if (typeof task.title !== "string" || !task.title.trim() || !Array.isArray(task.tagIds) ||
-        !Number.isFinite(task.sortKey)) {
+        !Number.isFinite(task.sortKey) || !["low", "medium", "high"].includes(task.priority)) {
       throw new Error("Invalid local task record");
     }
   }
@@ -83,7 +95,7 @@ export function normalizeData(value: unknown): Data {
   const calendarIds = new Set(data.calendars.map(calendar => calendar.id));
   for (const template of data.taskTemplates) {
     if (typeof template.name !== "string" || !template.name.trim() || typeof template.title !== "string" || !template.title.trim() ||
-        typeof template.notes !== "string" || !Array.isArray(template.tagIds) || !["none", "low", "medium", "high"].includes(template.priority)) {
+        typeof template.notes !== "string" || !Array.isArray(template.tagIds) || !["low", "medium", "high"].includes(template.priority)) {
       throw new Error("Invalid task template record");
     }
   }

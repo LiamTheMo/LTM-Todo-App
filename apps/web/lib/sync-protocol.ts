@@ -28,6 +28,8 @@ export type ProtocolResult<T> = ProtocolSuccess<T> | ProtocolFailure;
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const forbiddenKeys = new Set(["__proto__", "prototype", "constructor"]);
+// `none` remains accepted on the wire for already-open/older clients; local storage migrates it to Low.
+const wirePriorities = ["none", "low", "medium", "high"];
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
 
@@ -89,7 +91,7 @@ function validEntityPayload(type: SyncEntityType, payload: Record<string, unknow
   switch (type) {
     case "tasks":
       return hasOnlyKeys(payload, [...entityKeys, "title", "notes", "priority", "projectId", "sectionId", "tagIds", "sortKey", "dueDate", "dueTime", "dueTimeZone", "completedAt", "recurrence"]) &&
-        nonEmptyText(payload.title) && text(payload.notes) && ["none", "low", "medium", "high"].includes(String(payload.priority)) &&
+        nonEmptyText(payload.title) && text(payload.notes) && wirePriorities.includes(String(payload.priority)) &&
         textList(payload.tagIds) && payload.tagIds.every(value => uuid.test(value)) && finite(payload.sortKey) &&
         optionalDate(payload.dueDate) && optionalTime(payload.dueTime) &&
         [payload.projectId, payload.sectionId].every(optionalUuid) &&
@@ -114,7 +116,7 @@ function validEntityPayload(type: SyncEntityType, payload: Record<string, unknow
         instant(payload.startInstant) && instant(payload.endInstant) && Date.parse(payload.endInstant) > Date.parse(payload.startInstant) && validTimeZone(payload.timeZone));
     case "taskTemplates": return hasOnlyKeys(payload, [...entityKeys, "name", "title", "notes", "priority", "projectId", "sectionId", "tagIds"]) &&
       nonEmptyText(payload.name) && nonEmptyText(payload.title) && text(payload.notes) &&
-      ["none", "low", "medium", "high"].includes(String(payload.priority)) && textList(payload.tagIds) && payload.tagIds.every(value => uuid.test(value)) &&
+      wirePriorities.includes(String(payload.priority)) && textList(payload.tagIds) && payload.tagIds.every(value => uuid.test(value)) &&
       [payload.projectId, payload.sectionId].every(optionalUuid);
     case "eventTemplates": return hasOnlyKeys(payload, [...entityKeys, "name", "calendarId", "title", "notes", "allDay", "duration", "timeZone", "startTime"]) &&
       nonEmptyText(payload.name) && uuid.test(String(payload.calendarId)) && nonEmptyText(payload.title) &&
@@ -132,7 +134,7 @@ function validEntityPayload(type: SyncEntityType, payload: Record<string, unknow
       nonEmptyText(payload.name) && text(payload.query) &&
       (payload.projectId === undefined || payload.projectId === null || optionalUuid(payload.projectId)) &&
       (payload.tagId === undefined || optionalUuid(payload.tagId)) &&
-      (payload.priority === undefined || ["all", "none", "low", "medium", "high"].includes(String(payload.priority))) &&
+      (payload.priority === undefined || payload.priority === "all" || wirePriorities.includes(String(payload.priority))) &&
       (payload.dateScope === undefined || ["all", "overdue", "today", "upcoming", "undated"].includes(String(payload.dateScope))) &&
       (payload.completed === undefined || payload.completed === "all" || bool(payload.completed));
   }
