@@ -1,29 +1,33 @@
-# v3.01 — Course-outline Import & Repository Documentation
+# v3.01 — Course-outline Import & Task Controls
 
 ## Scope
 
-Build from the released v3.00/main tree using `v3.01 -> feat/v3.01-course-outline-import -> v3.01 -> main`. Add a private local document importer and rewrite the root README to document current product behavior, storage/privacy, setup, validation, and deployment accurately.
+Add a private local course-outline importer and detailed repository documentation, then refine assignment title extraction, task priorities, and repeat controls before promoting v3.01 to production.
 
 ## Completed / Passed
 
 - Local PDF/DOCX/TXT/Markdown and pasted-text extraction; no source-file upload, attachment creation, source IndexedDB storage, or third-party AI calls.
 - Bounded extraction, PDF worker cleanup, malformed-file checks, and DOCX XML handling without rendering arbitrary HTML or fetching external resources.
 - Deterministic dates, explicit times, title/heading context, relative-reference handling, numeric-date-order controls, course week assumptions, and semester-bounded weekly class candidates.
+- Assignment titles prefer explicit name/title/topic/prompt fields and meaningful nearby assignment headings; generic course section headings and due-date labels are not used as task names.
 - Editable review with source/page context, selection, project/calendar/time-zone choice, optional timed-task reminders, and invalid-entry blocking.
 - Batch validation before data changes, normalized duplicate checks, local domain creation, and existing persistence/sync integration.
 - Temporary source state is cleared on completion/unmount, file controls reset immediately, and original device files are untouched. Source text is not included in imported notes or account payloads.
+- The No Priority choice is removed. New and legacy-unprioritized tasks use Low; the completion marker is lime green for Low, yellow for Medium, and red for High. Older sync clients may still send the legacy value, which local storage migrates to Low.
+- Task, calendar-event, and routine repeat controls use named presets for daily, every other day, weekdays, weekends, weekly, biweekly, monthly, every two months, quarterly, and yearly schedules. Weekly/biweekly schedules retain weekday selection, and saved custom intervals remain editable.
 - README and current implementation documentation describe the deployed v3 baseline and v3.01 behavior, including limitations and outstanding manual acceptance.
 
 ## Automated validation and delivery
 
-Local validation passed: 179 Node tests on both Node 22.23.3 and Node 24, TypeScript typecheck, ESLint, Vinext production build, and the dependency audit gate. The production dependency audit found zero vulnerabilities; the existing lockfile-checked development-only exception remains documented.
+The outline importer’s initial validation passed 179 Node tests on Node 22.23.3 and Node 24, TypeScript typecheck, ESLint, Vinext production build, and the dependency audit gate. Its headless Chromium smoke test passed pasted-text import/save/reload, duplicate re-import, real text PDF and DOCX table extraction, empty-PDF handling, source-state cleanup after close, modal dropdown/date-picker interaction, midnight time-picker selection, and a 390px viewport. No browser page errors or external file uploads were observed. The same-origin PDF worker is present in the production asset output. Local frontend testing used a signed-out session; account API acceptance remains separate.
 
-A headless Chromium smoke test passed pasted-text import/save/reload, duplicate re-import, real text PDF and DOCX table extraction, empty-PDF handling, source-state cleanup after close, modal dropdown/date-picker interaction, midnight time-picker selection, and a 390px viewport. No browser page errors or external file uploads were observed. The same-origin PDF worker is present in the production asset output. Local frontend testing used an unsigned-in session; account API acceptance remains separate.
+Final task-title, priority, and repeat-preset changes passed 186 Node tests, TypeScript typecheck, ESLint, Vinext production build, and the dependency audit. The production dependency audit found zero vulnerabilities; the existing lockfile-checked development-only exception remains documented. Wrangler emitted a non-fatal read-only log-file warning in the sandbox during the otherwise successful build.
 
-The first version CI run exposed a test that assumed a specific future Edmonton UTC offset. The follow-up uses a New York DST boundary and checks Edmonton wall-clock preservation against the runtime time-zone database. It also fixes midnight editing in the shared time picker. Version CI must pass before production promotion. PR #175 contains the importer; the follow-up time-boundary fix is tracked separately in GitHub.
+The `web` and `docs` GitHub checks passed on v3.01 merge commit `abcaa9197b3a25e5bddcaceca210bb172f9a48c0` ([workflow run](https://github.com/OrangeCheasy/LTM-Todo-App/actions/runs/37385492151)). PR [#178](https://github.com/OrangeCheasy/LTM-Todo-App/pull/178) merged the implementation into v3.01. PR [#179](https://github.com/OrangeCheasy/LTM-Todo-App/pull/179) promoted v3.01 to `main` as merge commit `0667f8012d40cd999308524efb59da95cb9f3082` on 2026-10-05.
 
 ## Requires Manual Validation
 
+- Confirm Cloudflare Workers Builds deployed the `main` merge and smoke-test the live app at [ltm-todo-app.orangecheasy.workers.dev](https://ltm-todo-app.orangecheasy.workers.dev/). The connected page checker could not reach this URL, and Cloudflare build status is not exposed in this workspace, so deployment completion remains unconfirmed.
 - Import representative real course PDFs/DOCX files on desktop, iPhone, and iPad; verify table/column grouping, titles, dates, page context, times, and corrections.
 - Confirm the modal, dropdowns, custom date/time fields, keyboard focus/escape behavior, scrolling, and close cleanup on supported mobile browsers/Home Screen installs.
 - Test a signed-in import syncing to a second device, plus offline import followed by reconnect.
