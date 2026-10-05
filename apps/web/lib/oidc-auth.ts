@@ -9,6 +9,7 @@ type SupportedAlgorithm = "RS256" | "ES256";
 export type OidcVerifierOptions = {
   issuer: string;
   audience: string;
+  clientId: string;
   jwksUri: string;
   fetcher?: typeof fetch;
   now?: () => number;
@@ -77,8 +78,8 @@ export class OidcJwtAuthenticator implements SyncAuthenticator {
     this.options = options;
     const issuer = new URL(options.issuer);
     const jwks = new URL(options.jwksUri);
-    if (issuer.protocol !== "https:" || jwks.protocol !== "https:" || !options.audience.trim()) {
-      throw new Error("OIDC issuer, JWKS URI, and audience must be configured with HTTPS");
+    if (issuer.protocol !== "https:" || jwks.protocol !== "https:" || !options.audience.trim() || !options.clientId.trim()) {
+      throw new Error("OIDC issuer and JWKS URI must use HTTPS; audience and client ID must be configured");
     }
     this.fetcher = options.fetcher ?? fetch;
     this.now = options.now ?? Date.now;
@@ -113,7 +114,7 @@ export class OidcJwtAuthenticator implements SyncAuthenticator {
     if (claims.iss !== this.options.issuer || typeof claims.sub !== "string" || !claims.sub || claims.sub.length > 512 ||
         !audienceMatches(claims.aud, this.options.audience) || !Number.isFinite(claims.exp)) return;
     if (expectedNonce !== undefined && (typeof claims.nonce !== "string" || claims.nonce !== expectedNonce)) return;
-    if (Array.isArray(claims.aud) && claims.aud.length > 1 && claims.azp !== this.options.audience) return;
+    if (Array.isArray(claims.aud) && claims.aud.length > 1 && claims.azp !== this.options.clientId) return;
     const nowSeconds = Math.floor(this.now() / 1000);
     if ((claims.exp as number) <= nowSeconds - CLOCK_SKEW_SECONDS ||
         (claims.nbf !== undefined && (!Number.isFinite(claims.nbf) || (claims.nbf as number) > nowSeconds + CLOCK_SKEW_SECONDS)) ||
