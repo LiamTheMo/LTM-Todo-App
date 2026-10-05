@@ -207,10 +207,6 @@ export default function Home() {
     };
   }, [ready]);
   useEffect(() => {
-    if (syncStatus.authenticated === true) setAuthSignInStatus("signed_in");
-    else if (syncStatus.state === "signed_out") setAuthSignInStatus("signed_out");
-  }, [syncStatus.authenticated, syncStatus.state]);
-  useEffect(() => {
     if (!ready || error) return;
     const client = new SyncClient({ deviceName: `Web · ${navigator.platform || "browser"}`, outbox: {
       bindAccount: bindSyncAccount,
