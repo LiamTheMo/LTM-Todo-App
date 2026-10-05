@@ -17,6 +17,8 @@ import { TabIcon, type NavigationSection } from "../components/TabIcon";
 import { CalendarTimeline, type CalendarTimelineItem } from "../components/CalendarTimeline";
 import { CustomSelect, DateField, TimeField } from "../components/CustomFields";
 import { CalendarColorPicker } from "../components/CalendarColorPicker";
+import { OutlineImporter } from "../components/OutlineImporter";
+import { importOutlineItems } from "../lib/outline-import";
 import { toReadOnlyCalendarEvent } from "../lib/ics-calendar-view";
 
 type View = NavigationSection;
@@ -150,6 +152,7 @@ export default function Home() {
   const [accountStatus, setAccountStatus] = useState("");
   const [currentSyncDeviceId, setCurrentSyncDeviceId] = useState("");
   const [backupStatus, setBackupStatus] = useState("");
+  const [outlineImportOpen, setOutlineImportOpen] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentRecord[]>([]);
   const [attachmentTaskId, setAttachmentTaskId] = useState("");
   const [attachmentStatus, setAttachmentStatus] = useState("");
@@ -763,7 +766,7 @@ export default function Home() {
     }}><span className="navigationIcon"><TabIcon section={item} /></span>{item === "Settings" ? null : ` ${item}`}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
     <section className={`dashboard ${view === "Dashboard" ? "dashboardHome" : ""}`}>{error && <div className="error" role="alert">{error}</div>}
       {!ready ? <p>Opening your local tasks…</p> : <>
-        <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : ""}</p></div><button className="add" onClick={() => setEditing(view === "Calendar" ? `new:${calendarSelectedDate}` : "new")}>+ Add task</button></header>
+        <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : ""}</p></div><div className="pageHeaderActions"><button type="button" className="outlineOpen" disabled={Boolean(error)} onClick={() => setOutlineImportOpen(true)}>Import outline</button><button className="add" onClick={() => setEditing(view === "Calendar" ? `new:${calendarSelectedDate}` : "new")}>+ Add task</button></div></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
           <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today))) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
           {otherDashboardTasks.length > 0 && <section className="stream otherTasksPanel" aria-label="Other tasks"><div className="group"><h4>OTHER TASKS <span>{otherDashboardTasks.length}</span></h4><p className="hint">Tasks without a visible day in the current dashboard range.</p>{otherDashboardTasks.map(task => taskRow(task, task.completedAt ? new Date(task.completedAt).toLocaleDateString() : task.dueDate ? `Due ${dateLabel(task.dueDate)}` : "No date assigned"))}</div></section>}
@@ -975,6 +978,14 @@ export default function Home() {
       blocks: value.blocks.map(b => b.taskId === id && !b.deletedAt ? { ...b, deletedAt: stamp, revision: b.revision + 1 } : b),
       reminders: value.reminders.map(r => r.taskId === id && !r.deletedAt ? { ...r, deletedAt: stamp, revision: r.revision + 1 } : r)
     }; }); setEditing(null); }} />}
+    {outlineImportOpen && <OutlineImporter data={data} readOnlyCalendarIds={icsCalendarCache.map(calendar => calendar.calendarId)} onClose={() => setOutlineImportOpen(false)} onImport={async (items, destination) => {
+      if (error || writeFailed.current) throw new Error("Resolve the storage error before importing.");
+      const result = importOutlineItems(current.current, items, destination, today);
+      mutate(() => result.data);
+      await writes.current;
+      if (writeFailed.current) throw new Error("Items could not be persisted. Download an unsaved backup from Settings before reloading.");
+      return { added: result.added, skipped: result.skipped };
+    }} />}
     {eventEditing && <CalendarEventEditor key={`${eventEditing.id ?? "new"}:${eventEditing.date}`} event={data.calendarEvents.find(item => item.id === eventEditing.id)} date={eventEditing.date} calendars={activeCalendars} onClose={() => setEventEditing(null)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setEventEditing(null); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={id => { const stamp = new Date().toISOString(); mutate(value => ({ ...value, calendarEvents: value.calendarEvents.map(event => event.id === id ? { ...event, deletedAt: stamp, updatedAt: stamp, revision: event.revision + 1 } : event) })); setEventEditing(null); }} />}
     {scheduleEditing && <ScheduleEditor key={`${scheduleEditing.taskId}:${scheduleEditing.blockId ?? "new"}:${scheduleEditing.date}`} task={data.tasks.find(task => task.id === scheduleEditing.taskId)} block={data.blocks.find(item => item.id === scheduleEditing.blockId)} initialDate={scheduleEditing.date} onClose={() => setScheduleEditing(null)} onSave={block => { setScheduleUndo(data.blocks); mutate(value => saveScheduledBlock(value, block)); setScheduleEditing(null); }} />}
   </main>;
