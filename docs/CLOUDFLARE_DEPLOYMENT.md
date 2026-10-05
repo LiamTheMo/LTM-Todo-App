@@ -43,7 +43,7 @@ The Worker name is fixed by `wrangler.jsonc` as `ltm-todo-app`.
 
 ## Authentication failure logs
 
-The auth API keeps provider failures generic for browsers and emits a redacted Worker log event named `oidc_authentication_failure`. It contains only a fixed route label and one diagnostic code; it never logs the exception text, query string, cookies, tokens, or configured secret values. Review the `ltm-todo-app` Worker logs in Cloudflare after reproducing a sign-in failure.
+The auth API keeps provider failures generic for browsers and emits a redacted Worker log event named `oidc_authentication_failure`. It contains a fixed route label and diagnostic code. Rejected token exchanges also include only a numeric `providerStatus` and an allowlisted `providerError` value (standard OAuth errors, `other`, or `unknown`). It never logs the exception text, provider error description, query string, cookies, tokens, or configured secret values. Review the `ltm-todo-app` Worker logs in Cloudflare after reproducing a sign-in failure.
 
 `apps/web/wrangler.jsonc` enables Workers Logs with full sampling and disables invocation logs so raw request URLs do not capture Auth0 callback `code` and `state` query values. The redacted `oidc_authentication_failure` custom event remains available after the `main` deployment. Keep invocation logs disabled while diagnosing sign-in.
 
@@ -51,7 +51,7 @@ Diagnostic codes:
 
 - `provider_discovery_fetch_failed`, `provider_discovery_http_error`, `provider_discovery_invalid_document`, `provider_issuer_mismatch`, `provider_jwks_uri_mismatch`, and `provider_endpoint_invalid` identify discovery fetch, HTTP, document, or configuration failures.
 - `callback_provider_error`, `callback_flow_invalid`, `callback_code_invalid`, and `callback_request_invalid` identify an Auth0 callback error or invalid/missing login-flow state.
-- `callback_token_exchange_failed` and `callback_token_exchange_rejected` distinguish a failed token request from a non-success Auth0 response.
+- `callback_token_exchange_failed` and `callback_token_exchange_rejected` distinguish a failed token request from a non-success Auth0 response. A rejection also records its HTTP status and a fixed OAuth error category; the provider's error description is omitted.
 - `callback_token_response_invalid`, `callback_id_token_invalid`, and `callback_access_token_invalid` identify malformed token data or an ID/access token that failed verification (including issuer, audience, signature, or nonce checks).
 - `callback_token_verification_failed` means the Worker could not complete signing-key verification; `callback_identity_mismatch` means the verified tokens identify different subjects or issuers.
 - `callback_session_cookie_too_large` means the encrypted session exceeded the safe cookie-size limit.

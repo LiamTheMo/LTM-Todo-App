@@ -172,9 +172,13 @@ test("OIDC callback rejects a state mismatch and logout rejects cross-site origi
 
 test("OIDC callback logs redacted diagnostic codes for provider and token failures", async () => {
   const cases = [
-    { code: "callback_provider_error", status: 401, providerError: true, expectedTokenRequests: 0 },
-    { code: "callback_token_exchange_rejected", status: 401, expectedTokenRequests: 1,
+    { code: "callback_provider_error", status: 401, callbackProviderError: true, expectedTokenRequests: 0 },
+    { code: "callback_token_exchange_rejected", status: 401, providerError: "invalid_client", providerStatus: 401, expectedTokenRequests: 1,
       tokenResponse: () => Response.json({ error: "invalid_client", error_description: "private-provider-description" }, { status: 401 }) },
+    { code: "callback_token_exchange_rejected", status: 401, providerError: "other", providerStatus: 400, expectedTokenRequests: 1,
+      tokenResponse: () => Response.json({ error: "private-provider-error-code", error_description: "private-provider-description" }, { status: 400 }) },
+    { code: "callback_token_exchange_rejected", status: 401, providerError: "unknown", providerStatus: 502, expectedTokenRequests: 1,
+      tokenResponse: () => new Response("private-malformed-provider-body", { status: 502 }) },
     { code: "callback_token_exchange_failed", status: 503, expectedTokenRequests: 1,
       tokenResponse: () => { throw new Error("private-token-endpoint-details"); } },
     { code: "callback_token_response_invalid", status: 401, expectedTokenRequests: 1,
@@ -204,7 +208,7 @@ test("OIDC callback logs redacted diagnostic codes for provider and token failur
     const cookie = login.headers.get("Set-Cookie").split(";")[0];
     const authorization = new URL(login.headers.get("Location"));
     const callback = new URL(redirectUri);
-    if (item.providerError) {
+    if (item.callbackProviderError) {
       callback.searchParams.set("error", "access_denied");
       callback.searchParams.set("error_description", marker);
     } else {
@@ -216,10 +220,17 @@ test("OIDC callback logs redacted diagnostic codes for provider and token failur
     assert.equal(failed.status, item.status, item.code);
     if (item.status === 401) assert.equal(await failed.text(), "Authentication failed. Please try signing in again.");
     else assert.deepEqual(await failed.json(), { error: "authentication_unavailable" });
-    assert.deepEqual(diagnostic, { event: "oidc_authentication_failure", route: "callback", code: item.code });
+    assert.deepEqual(diagnostic, {
+      event: "oidc_authentication_failure",
+      route: "callback",
+      code: item.code,
+      ...(item.providerError ? { providerError: item.providerError, providerStatus: item.providerStatus } : {})
+    });
     assert.equal(JSON.stringify(diagnostic).includes(marker), false);
     assert.equal(JSON.stringify(diagnostic).includes("private-token-endpoint-details"), false);
     assert.equal(JSON.stringify(diagnostic).includes("private-provider-description"), false);
+    assert.equal(JSON.stringify(diagnostic).includes("private-provider-error-code"), false);
+    assert.equal(JSON.stringify(diagnostic).includes("private-malformed-provider-body"), false);
     assert.equal(JSON.stringify(diagnostic).includes("private-access-token"), false);
     assert.equal(JSON.stringify(diagnostic).includes("private-id-token"), false);
     assert.equal(tokenRequests, item.expectedTokenRequests);
