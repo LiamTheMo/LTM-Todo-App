@@ -15,6 +15,7 @@ function fixture(fetcher) {
   const client = new SyncClient({ fetcher, online: () => true, deviceId: "4e731b4e-c82c-4df6-a26a-847a2c115414",
     now: () => Date.parse("2026-10-03T12:00:00Z"), random: () => 0.5, outbox: {
     bindAccount: async () => true,
+    prepareUpload: async () => undefined,
     pending: async () => pendingMutation ? [pendingMutation] : [],
     acknowledge: async (...args) => { calls.acknowledged.push(args); pendingMutation = undefined; },
     recordConflict: async (...args) => { calls.conflicts.push(args); hasConflicts = true; },
@@ -114,4 +115,20 @@ test("revision conflicts are retained for local-first resolution and surfaced", 
   assert.equal(calls.conflicts.length, 1);
   assert.equal(calls.conflicts[0][1].payload.title, "Other device");
   assert.equal(client.getStatus().state, "conflict");
+});
+
+test("paused sync identifies the failed operation and fixed error code without leaking server content", async () => {
+  for (const code of ["database_schema_missing", "raw private task title and token"]) {
+    const { client } = fixture(async input => String(input).includes("auth/session")
+      ? Response.json({ authenticated: true, accountKey: "a".repeat(43) })
+      : Response.json({ error: code, detail: "secret user content" }, { status: 503 }));
+    try {
+      await client.syncNow();
+      assert.equal(client.getStatus().state, "error");
+      assert.equal(client.getStatus().authenticated, true);
+      assert.deepEqual(client.getStatus().failure, { step: "device_registration", status: 503,
+        code: code === "database_schema_missing" ? code : undefined });
+      assert.doesNotMatch(JSON.stringify(client.getStatus()), /secret|private|token/);
+    } finally { client.dispose(); }
+  }
 });

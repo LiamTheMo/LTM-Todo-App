@@ -27,3 +27,11 @@ test("rejects modified, malformed, and expired cursor values", async () => {
 test("requires a cryptographic cursor secret of exactly 32 bytes", () => {
   assert.throws(() => new SyncCursorCodec(Buffer.alloc(16, 1).toString("base64url")), /32 bytes/);
 });
+
+test("snapshot order migration rejects old continuations so the client restarts safely", async () => {
+  const codec = new SyncCursorCodec(secret);
+  const cursor = await codec.encodeSnapshot({ accountId: "account-a", sequence: 5, entityType: "tasks", entityId: "task-a" });
+  assert.match(cursor, /^s2\./);
+  assert.equal((await codec.decodeSnapshot(cursor, "account-a")).entityType, "tasks");
+  await assert.rejects(() => codec.decodeSnapshot(cursor.replace(/^s2\./, "s1."), "account-a"), /Invalid snapshot cursor/);
+});

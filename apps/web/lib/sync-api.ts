@@ -3,6 +3,7 @@ import {
   type SyncPushBatch
 } from "./sync-protocol.ts";
 import type { SyncSnapshotResponse } from "./d1-sync-store.ts";
+import { logSyncBackendFailure } from "./sync-diagnostics.ts";
 
 export type SyncPrincipal = { issuer: string; subject: string };
 export type SyncChange = {
@@ -113,7 +114,7 @@ export async function handleSyncRequest(request: Request, auth: SyncAuthenticato
       if (error instanceof SyncMutationConflictError) return json({ error: "mutation_id_reused" }, 409);
       if (error instanceof InvalidSyncRelationshipError) return json({ error: "invalid_relationship" }, 409);
       if (error instanceof SyncRateLimitError) return json({ error: "rate_limited" }, 429, { "Retry-After": "60" });
-      return json({ error: "sync_unavailable" }, 503);
+      return json({ error: logSyncBackendFailure("upload", error) }, 503);
     }
   }
 
@@ -122,7 +123,7 @@ export async function handleSyncRequest(request: Request, auth: SyncAuthenticato
   try { return json(await store.pull(principal, query.value.cursor, query.value.limit)); }
   catch (error) {
     if (error instanceof InvalidSyncCursorError) return json({ error: "invalid_cursor" }, 410);
-    return json({ error: "sync_unavailable" }, 503);
+    return json({ error: logSyncBackendFailure("download", error) }, 503);
   }
 }
 
@@ -143,6 +144,6 @@ export async function handleSyncSnapshotRequest(request: Request, auth: SyncAuth
   try { return json(await store.snapshot(principal, cursor, Number(rawLimit))); }
   catch (error) {
     if (error instanceof InvalidSyncCursorError) return json({ error: "invalid_cursor" }, 410);
-    return json({ error: "sync_unavailable" }, 503);
+    return json({ error: logSyncBackendFailure("snapshot", error) }, 503);
   }
 }
