@@ -32,7 +32,8 @@ export function describeSyncFailure(failure: SyncFailure): string {
   if (failure.code === "local_storage_unavailable") return "Unable to read or update this device's sync storage.";
   if (failure.code === "invalid_relationship") return "Some records could not be linked to their calendars or tasks.";
   if (failure.code === "rate_limited" || failure.status === 429) return "The server asked this device to wait before syncing.";
-  if (failure.code === "network_error") return "Unable to reach account storage.";
+  if (failure.code === "network_error") return failure.step === "session"
+    ? "Unable to reach the account session service." : "Unable to reach account storage.";
   const step = { session: "verify the account", local_storage: "prepare this device's data",
     device_registration: "register this device", snapshot: "load account data", upload: "save changes to the account",
     download: "load account changes", cursor: "confirm downloaded changes" }[failure.step];

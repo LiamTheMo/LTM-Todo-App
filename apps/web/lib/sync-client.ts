@@ -54,14 +54,15 @@ export class SyncClient {
   private status: SyncStatus = { state: "idle" };
 
   constructor(options: SyncClientOptions) {
-    this.fetcher = options.fetcher ?? fetch;
+    // Native browser APIs require the global receiver, even when stored on a client.
+    this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
     this.outbox = options.outbox;
     this.onStatus = options.onStatus ?? (() => undefined);
     this.online = options.online ?? (() => typeof navigator === "undefined" || navigator.onLine);
     this.now = options.now ?? Date.now;
     this.random = options.random ?? Math.random;
-    this.setTimer = options.setTimer ?? setTimeout;
-    this.clearTimer = options.clearTimer ?? clearTimeout;
+    this.setTimer = options.setTimer ?? globalThis.setTimeout.bind(globalThis);
+    this.clearTimer = options.clearTimer ?? globalThis.clearTimeout.bind(globalThis);
     this.deviceId = options.deviceId ?? getLocalSyncDeviceId();
     this.deviceName = options.deviceName ?? "This browser";
   }

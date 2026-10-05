@@ -29,6 +29,38 @@ function fixture(fetcher) {
   return { client, calls };
 }
 
+test("default browser APIs retain their global receiver during session checks", async t => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let requests = 0;
+  let scheduled = 0;
+  let cleared = 0;
+  t.mock.method(globalThis, "fetch", async function (input) {
+    assert.equal(this, globalThis, "browser fetch must not receive the SyncClient as this");
+    assert.equal(input, "/api/v1/auth/session");
+    requests++;
+    return Response.json({ authenticated: false });
+  });
+  t.mock.method(globalThis, "setTimeout", function (...args) {
+    assert.equal(this, globalThis, "browser timers must retain their global receiver");
+    scheduled++;
+    return originalSetTimeout(...args);
+  });
+  t.mock.method(globalThis, "clearTimeout", function (...args) {
+    assert.equal(this, globalThis);
+    cleared++;
+    return originalClearTimeout(...args);
+  });
+  const { client } = fixture();
+  try {
+    await client.syncNow();
+    assert.equal(client.getStatus().state, "signed_out");
+    assert.equal(requests, 1);
+    assert.equal(scheduled, 1);
+    assert.equal(cleared, 1);
+  } finally { client.dispose(); }
+});
+
 test("sync checks session, pushes idempotent local mutations, then applies and checkpoints pull pages", async () => {
   const requests = [];
   const { client, calls } = fixture(async (input, init = {}) => {
