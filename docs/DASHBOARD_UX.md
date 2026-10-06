@@ -4,7 +4,7 @@
 The Dashboard answers: **What is happening and what is due, day by day?** It replaces separate Today, Upcoming and History navigation.
 
 ## Structure
-The app shell stays within the viewport; navigation and Dashboard controls remain in place while the content pane scrolls. The date stream opens at Today, scrolls down into future dates and up through a 31-calendar-day history window (Today plus the previous 30 days). Older due tasks, completion history, and scheduled events expire from local storage automatically. An Overdue section stays visible above the stream; unfinished task deadlines before the current local date appear there, and an empty section says “Nothing overdue”.
+The app shell stays within the viewport; navigation and Dashboard controls remain in place while the content pane scrolls. The date stream opens at Today, scrolls down into future dates and up through a 31-calendar-day history window (Today plus the previous 30 days). Older due tasks, completion history, and scheduled events expire from local storage automatically. The Overdue section appears above the stream only when unfinished task deadlines exist before the current local date; otherwise, it is hidden.
 
 Each date section has:
 1. Sticky date header: relative label when useful + formatted date.
