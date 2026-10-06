@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type UIEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type UIEvent } from "react";
 import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
 import { defaultCalendarColor, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, updateCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
 import { acknowledgeSyncMutation, applyRemoteSyncChanges, bindSyncAccount, getSyncCursor, getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, persistIcsCalendarCache, prepareInitialSyncUpload, readData, readIcsCalendarCache, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData, type CachedIcsCalendar, type SyncConflict } from "../lib/storage";
@@ -635,14 +635,20 @@ export default function Home() {
       ...item, completedAt: undefined, updatedAt: new Date().toISOString(), revision: item.revision + 1
     } : item) };
   });
-  const projects = data.projects.filter(p => !p.deletedAt && !p.archivedAt).sort((a, b) => a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const projects = useMemo(() => data.projects.filter(p => !p.deletedAt && !p.archivedAt).sort((a, b) => a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)), [data.projects]);
+  const projectNameById = useMemo(() => new Map(projects.map(project => [project.id, project.name])), [projects]);
+  const latestCompletionIdByTaskId = useMemo(() => {
+    const latest = new Map<string, string>();
+    for (const completion of data.completions) latest.set(completion.taskId, completion.id);
+    return latest;
+  }, [data.completions]);
   const tags = data.tags.filter(t => !t.deletedAt);
   const taskRow = (task: Task, caption?: string, completionId?: string, key = task.id, scheduleDate = task.dueDate && task.dueDate >= today ? task.dueDate : today) => {
     const isComplete = Boolean(completionId || task.completedAt);
-    const latestCompletion = completionId && data.completions.filter(item => item.taskId === task.id).at(-1)?.id === completionId;
+    const latestCompletion = Boolean(completionId && latestCompletionIdByTaskId.get(task.id) === completionId);
     return <div className={`taskRow priority-${task.priority} ${isComplete ? "completed" : ""}`} key={key}>
       <button className="complete" disabled={completionId ? !latestCompletion : false} onClick={() => completionId ? latestCompletion && mutate(value => undoCompletion(value, completionId)) : toggle(task)} aria-label={isComplete ? `Reopen ${task.title}` : `Complete ${task.title}`}>{isComplete ? "✓" : "○"}</button>
-      <button className="taskText" draggable={!isComplete} onDragStart={e => { if (isComplete) return; e.dataTransfer.setData("application/x-ltm-task", task.id); e.dataTransfer.effectAllowed = "copy"; }} onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, projects.find(p => p.id === task.projectId)?.name, task.priority !== "low" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
+      <button className="taskText" draggable={!isComplete} onDragStart={e => { if (isComplete) return; e.dataTransfer.setData("application/x-ltm-task", task.id); e.dataTransfer.effectAllowed = "copy"; }} onClick={() => setEditing(task.id)}><span>{task.title}</span><small>{completionId ? `Completed ${caption ?? ""}` : caption ?? [task.dueDate && `Due ${dateLabel(task.dueDate)}`, task.projectId ? projectNameById.get(task.projectId) : undefined, task.priority !== "low" && `${priorityLabel(task.priority)} priority`].filter(Boolean).join(" · ")}</small></button>
       {!isComplete && <button className="scheduleAction" onClick={() => setScheduleEditing({ taskId: task.id, date: scheduleDate })} aria-label={`Schedule work for ${task.title}`} title="Schedule work">◷</button>}
       <button className="more" onClick={() => setEditing(task.id)} aria-label={`Edit ${task.title}`}>···</button>
     </div>;
@@ -771,7 +777,7 @@ export default function Home() {
         <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : ""}</p></div><div className="pageHeaderActions"><button type="button" className="outlineOpen" disabled={Boolean(error)} onClick={() => setOutlineImportOpen(true)}>Import outline</button></div></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
           {overdue.length > 0 && <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today), undefined, task.id, today))}</div></section>}
-          {otherDashboardTasks.length > 0 && <section className="stream otherTasksPanel" aria-label="Other tasks" style={{ flex: "0 0 auto", minHeight: 88, maxHeight: "min(35vh, 280px)", overflowY: "auto" }}><div className="group"><h4>OTHER TASKS <span>{otherDashboardTasks.length}</span></h4><p className="hint">Tasks without a due date.</p>{otherDashboardTasks.map(task => taskRow(task, task.completedAt ? new Date(task.completedAt).toLocaleDateString() : "No date assigned"))}</div></section>}
+          {otherDashboardTasks.length > 0 && <section className="stream otherTasksPanel" aria-label="Other tasks"><div className="group"><h4>OTHER TASKS <span>{otherDashboardTasks.length}</span></h4><p className="hint">Tasks without a due date.</p>{otherDashboardTasks.map(task => taskRow(task, task.completedAt ? new Date(task.completedAt).toLocaleDateString() : "No date assigned"))}</div></section>}
           <div className="stream dayScroller" ref={dayScrollRef} onScroll={handleDayScroll} role="region" aria-label="Days">
             {visibleDayStart > earliestDay && <button className="loadMore" onClick={() => shiftDays(-1)}>Earlier days ↑</button>}
             {dashboard.map(day => {

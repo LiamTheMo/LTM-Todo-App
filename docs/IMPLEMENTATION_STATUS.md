@@ -1,6 +1,6 @@
 # Current Web App Implementation
 
-Last audited: 2026-10-05. This document describes the implemented v3.01 tree; production promotion is tracked in [V3_01_STATUS.md](V3_01_STATUS.md). Historical phase plans are targets, not independent evidence that every manual acceptance check has passed.
+Last audited: 2026-10-06. This document describes the current v3.02 tree; Dashboard implementation and validation status are tracked in [V3_02_STATUS.md](V3_02_STATUS.md). The v3.01 importer history is in [V3_01_STATUS.md](V3_01_STATUS.md). Historical phase plans are targets, not independent evidence that every manual acceptance check has passed.
 
 ## Supported client and storage
 
@@ -11,8 +11,8 @@ Last audited: 2026-10-05. This document describes the implemented v3.01 tree; pr
 
 ## Workspace behavior
 
-- Dashboard opens at Today, shows due tasks and planned work by day, keeps overdue deadlines separate, and retains Today plus the previous 30 days. Older history is pruned. Undated tasks stay in Tasks.
-- Tasks is a Kanban with text search. Priorities color the completion circle. Subtasks are not maintained.
+- Dashboard opens at Today, shows due tasks and planned work by day, keeps overdue deadlines separate, and retains Today plus the previous 30 days. Older history is pruned. Undated tasks remain available in Tasks and appear in the Dashboard's separate Other Tasks panel. Both Other Tasks and Overdue are hidden when empty.
+- Tasks is a Kanban with text search; dated tasks sort by closest due date within each status, followed by undated tasks. Priorities color the completion circle. Subtasks are not maintained.
 - Projects, sections, tags, ordering, archive/restore, structured recurrence, routines, and templates are implemented.
 - First-party calendars support full-spectrum colors, create/edit/delete, all-day/timed events, recurrence, month navigation, selected-day agenda/timeline, and planned-work blocks. Due dates and scheduled work remain separate.
 - Custom date/time fields work on mobile; task date/time fields remain side by side. The current-time marker refreshes every 15 seconds.
@@ -38,7 +38,7 @@ Last audited: 2026-10-05. This document describes the implemented v3.01 tree; pr
 
 Development uses temporary branches from permanent version checkpoints. Local checks run before merging to the version branch, GitHub Actions runs `web` and `docs` on version pushes, and Cloudflare production deploys from `main` only after promotion.
 
-Normal v3.00 account sign-in/sync is confirmed in production. Advanced supported-device, offline/conflict, backup/restore, attachment, session/deletion, cleanup, and ICS drills remain in [V3_STATUS.md](V3_STATUS.md). v3.01 validation and promotion evidence belong in [V3_01_STATUS.md](V3_01_STATUS.md).
+The shared Dashboard composer adds tasks or calendar events to the selected day, and mobile event date/time fields are paired horizontally. The current v3.02 scope and remaining validation are in [V3_02_STATUS.md](V3_02_STATUS.md). Normal v3.00 account sign-in/sync is confirmed in production. Advanced supported-device, offline/conflict, backup/restore, attachment, session/deletion, cleanup, and ICS drills remain in [V3_STATUS.md](V3_STATUS.md). v3.01 importer details remain in [V3_01_STATUS.md](V3_01_STATUS.md).
 
 ## Deferred scope
 
