@@ -28,7 +28,7 @@ Add these production-only entries under **Settings → Builds → Build variable
 
 The deploy script requires Cloudflare's `WORKERS_CI=1` and `WORKERS_CI_BRANCH=main` values, validates the runtime configuration and 32-byte keys, applies remote D1 migrations, passes the Worker secrets to Wrangler, then deploys. Temporary config/secret files are removed afterwards. Do not replace this with `wrangler secret put` from a developer machine: that command deploys immediately and bypasses the main-only deployment flow.
 
-Production deployment still occurs only from `main`, after the temporary implementation branch has passed validation and been promoted through its v2.0x phase checkpoint(s) and v3.00 release PR. The deploy script applies all pending migrations for the two D1 databases before publishing. Create the `ltm-todo-sync` database and `ltm-todo-attachments` R2 bucket, and configure valid unique Cloudflare rate-limit namespace IDs in `wrangler.jsonc` before the first deployment of these bindings.
+Production deployment still occurs only from `main`, after a temporary implementation branch passes validation, merges into its originating `vX.XX` checkpoint, and that version branch is promoted through a pull request. The deploy script applies all pending migrations for the two D1 databases before publishing. Create the `ltm-todo-sync` database and `ltm-todo-attachments` R2 bucket, and configure valid unique Cloudflare rate-limit namespace IDs in `wrangler.jsonc` before the first deployment of these bindings.
 
 ## Related commands
 
@@ -63,7 +63,7 @@ Discovery and unexpected runtime failures return `503 authentication_unavailable
 
 Web reminders use the same `ltm-todo-app` Worker. Before enabling them in production:
 
-1. Create the D1 database `ltm-todo-notifications` with `npx wrangler d1 create ltm-todo-notifications`. Add its returned ID to Cloudflare Workers Builds as the secret `D1_DATABASE_ID`; do not commit the real ID.
+1. Create the D1 database `ltm-todo-notifications` with `npx wrangler d1 create ltm-todo-notifications`. Add its returned ID to Cloudflare Workers Builds as the build variable `D1_DATABASE_ID`; do not commit the real ID.
 2. Generate a dedicated, stable VAPID key pair with `node scripts/generate-vapid-keys.mjs`. Add its private value to Workers Builds as the secret `VAPID_PRIVATE_KEY`; never put it in Git and do not rotate this pair after devices subscribe.
 3. Set the VAPID public key and a valid subject (prefer the public HTTPS app origin) in `wrangler.jsonc`. These are public Web Push configuration values, not credentials.
 4. Deploy only from `main`. The build command applies D1 migrations before publishing the Worker; Cron Triggers are configured for once per minute.

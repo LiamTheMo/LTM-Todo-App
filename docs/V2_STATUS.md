@@ -31,7 +31,7 @@ All development used temporary branches, then merged into the active permanent p
 - Current results and logs are available in GitHub Actions. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for verified behavior and explicit gaps.
 
 ## Dashboard updates
-- Dated tasks and scheduled work stay in Dashboard day groups; overdue tasks remain in Overdue. Tasks without due dates stay available in Tasks and are omitted from the Dashboard.
+- In the v2.00 checkpoint, dated tasks and scheduled work stayed in Dashboard day groups, overdue tasks remained in Overdue, and tasks without due dates stayed in Tasks. v3.02 later added the Other Tasks Dashboard panel; see [DASHBOARD_UX.md](DASHBOARD_UX.md) for current behavior.
 - Dashboard history retains 31 calendar days: today plus the previous 30 days.
 
 ## Remaining v2 release validation

@@ -4,7 +4,7 @@
 
 LTM Todo brings deadlines, planned work, and calendar events into one chronological workspace. It is a responsive TypeScript/React web app that can be installed to a supported device's Home Screen. The app owns its task and calendar system; Google Calendar is not a required dependency.
 
-[Open the app](https://ltm-todo-app.orangecheasy.workers.dev/) · [Implementation status](docs/IMPLEMENTATION_STATUS.md) · [v3.01 release notes](docs/V3_01_STATUS.md) · [Engineering contract](AGENTS.md)
+[Open the app](https://ltm-todo-app.orangecheasy.workers.dev/) · [Implementation status](docs/IMPLEMENTATION_STATUS.md) · [v3.02 status](docs/V3_02_STATUS.md) · [Engineering contract](AGENTS.md)
 
 ## Contents
 
@@ -25,7 +25,7 @@ LTM Todo brings deadlines, planned work, and calendar events into one chronologi
 
 ### Dashboard
 
-The Dashboard opens at Today and groups scheduled work and due tasks by calendar date. Scroll forward to upcoming days or backward through recent history. A separate Overdue panel keeps missed deadlines visible. Tasks with no due date stay in Tasks rather than creating an extra Dashboard section.
+The Dashboard opens at Today and groups scheduled work and due tasks by calendar date. Scroll forward to upcoming days or backward through recent history. The Overdue panel keeps missed deadlines separate, while undated tasks appear in an Other Tasks panel. Both panels stay hidden when they have no items.
 
 The history window includes Today and the preceding 30 calendar days. Older task, completion, and scheduled-event history is automatically pruned. Imported dates obey the same policy. Future deadlines are not restricted to this 31-day window.
 
@@ -209,11 +209,12 @@ The deploy script checks Cloudflare's build context and rejects any branch other
 | `v2.00` | First-party calendar, planning, Kanban, routines, and templates |
 | `v3.00` | Accounts, cross-device sync, backups, protected attachments, and optional read-only ICS subscriptions |
 | `v3.01` | Course-outline import and updated repository/product documentation |
+| `v3.02` | Dashboard quick-add and scheduling refinements, task due-date ordering, undated-task panel, and mobile form polish |
 
 All `vX.XX` branches are permanent historical checkpoints. Development happens on a descriptive temporary branch created from the intended version:
 
 ```text
-v3.01 → feat/your-change → v3.01 → main → Cloudflare deployment
+v3.02 → chore/your-change → v3.02 → main → Cloudflare deployment
 ```
 
 Before changing anything, audit repository state and read `AGENTS.md`. Run the audit/implement/validate/review loop, resolve actionable findings, and validate branch flow. Merge the temporary branch into its originating version, wait for version CI, then promote that version to `main`. Never develop directly on major branches, deploy a temporary/version branch, delete version checkpoints, or rewrite their history without explicit authorization.
@@ -239,3 +240,4 @@ Imported calendar events do not create event-specific push reminders; the import
 - [Current implementation](docs/IMPLEMENTATION_STATUS.md)
 - [v3.00 delivery and manual acceptance](docs/V3_STATUS.md)
 - [v3.01 outline import](docs/V3_01_STATUS.md)
+- [v3.02 Dashboard status](docs/V3_02_STATUS.md)
