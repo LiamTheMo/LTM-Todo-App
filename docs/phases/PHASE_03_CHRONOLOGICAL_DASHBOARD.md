@@ -37,7 +37,7 @@ Day bucketing; due-vs-scheduled split; today boundary; DST; locale/calendar fixt
 
 ## Acceptance criteria
 - Dashboard launches anchored at Today with previous completion dates available by scrolling upward and future dates available by scrolling downward.
-- The Overdue section always appears above the day stream and shows “Nothing overdue” when empty.
+- The Overdue section appears above the day stream only when overdue tasks exist.
 - Navigation and Overdue stay in place while the day stream scrolls in both directions.
 - The Dashboard exposes no more than 31 calendar dates of past/current activity; expired task and event history is removed automatically.
 - Past dates show retained completed activity in a muted, accessible treatment and retain Add controls; retained past-dated unfinished tasks appear in both Overdue and their original Due section.
