@@ -173,11 +173,11 @@ export default function Home() {
   const initialScrollPending = useRef(true);
   const rememberDashboardAnchor = useCallback(() => {
     const scroller = dayScrollRef.current;
-    if (view !== "Dashboard" || !scroller) return;
+    if (!scroller) return;
     const bounds = scroller.getBoundingClientRect();
     const anchor = [...scroller.querySelectorAll<HTMLElement>("[data-day]")].find(element => element.getBoundingClientRect().bottom > bounds.top);
     if (anchor?.dataset.day) pendingAnchor.current = { day: anchor.dataset.day, top: anchor.getBoundingClientRect().top - bounds.top };
-  }, [view]);
+  }, []);
   useEffect(() => { readData().then(value => { setCurrentSyncDeviceId(getLocalSyncDeviceId()); current.current = value; setData(value); setReady(true); })
     .catch(() => { setError("Local storage could not be opened. Changes are disabled."); setReady(true); }); }, []);
   useEffect(() => { void readIcsCalendarCache().then(setIcsCalendarCache).catch(() => undefined); }, []);
