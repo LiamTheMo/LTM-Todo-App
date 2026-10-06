@@ -118,8 +118,8 @@ function dayFromParts(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-export function DateField({ value, min, disabled, onChange, "aria-label": ariaLabel }: {
-  value: string; min?: string; disabled?: boolean; onChange: (value: string) => void; "aria-label"?: string;
+export function DateField({ value, min, disabled, clearable = false, onChange, "aria-label": ariaLabel }: {
+  value: string; min?: string; disabled?: boolean; clearable?: boolean; onChange: (value: string) => void; "aria-label"?: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -138,7 +138,7 @@ export function DateField({ value, min, disabled, onChange, "aria-label": ariaLa
   });
   const label = selected ? selected.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : "Choose date";
 
-  return <div className="customField" ref={root}>
+  return <div className={`customField${clearable ? " customFieldClearable" : ""}`} ref={root}>
     <button type="button" className="customFieldTrigger" disabled={disabled} aria-label={ariaLabel ?? label} aria-haspopup="dialog" aria-expanded={open} onClick={() => {
       if (!open) {
         const date = value ? new Date(`${value}T12:00:00`) : new Date();
@@ -146,6 +146,7 @@ export function DateField({ value, min, disabled, onChange, "aria-label": ariaLa
         show(330);
       } else setOpen(false);
     }}><span>{label}</span><span aria-hidden="true">▦</span></button>
+    {clearable && Boolean(value) && <button type="button" className="dateFieldClearButton" aria-label="Clear date" title="Clear date" disabled={disabled} onClick={() => { onChange(""); setOpen(false); }}>Clear</button>}
     {open && typeof document !== "undefined" && createPortal(<div id="custom-field-picker" className="datePickerPanel" role="dialog" aria-label="Choose date" style={{ top: placement.top, left: placement.left, width: placement.width, maxHeight: placement.maxHeight }}>
       <div className="datePickerHeader"><button type="button" aria-label="Previous month" onClick={() => setMonth(date => new Date(date.getFullYear(), date.getMonth() - 1, 1))}>‹</button><strong>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong><button type="button" aria-label="Next month" onClick={() => setMonth(date => new Date(date.getFullYear(), date.getMonth() + 1, 1))}>›</button></div>
       <div className="datePickerGrid" role="grid">{["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(day => <span role="columnheader" key={day}>{day}</span>)}{cells.map((day, index) => day ? <button type="button" role="gridcell" key={day} aria-label={new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} aria-selected={day === value} aria-current={day === today ? "date" : undefined} disabled={Boolean(min && day < min)} className={`${day === value ? "selected" : ""} ${day === today ? "today" : ""}`.trim()} onClick={() => { onChange(day); setOpen(false); }}>{Number(day.slice(-2))}</button> : <span aria-hidden="true" key={`blank-${index}`} />)}</div>
