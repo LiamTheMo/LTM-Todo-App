@@ -16,7 +16,7 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 
 ## Behavior
 - Launch anchored to Today while retaining loaded dates before and after it.
-- Scroll down into future days and up through the retained past month; extend the bounded date window near either edge while preserving the visible day, without allowing the history boundary to move earlier than 30 days before Today.
+- Scroll down into future days and up through the retained past month; extend the bounded date window near either edge while preserving the visible day, without allowing the history boundary to move earlier than 30 days before Today. Hide the earlier-days control once the history boundary is reached.
 - Day headers stick within the date stream. The Dashboard itself does not scroll with the browser page; navigation and Overdue remain in place.
 - Return-to-Today stays available while away from Today.
 - Past dates show retained completed tasks and completed scheduled work dimmed. Keep Add controls available for the retained past dates; a task added with a past due date appears both in Overdue and in Due on its assigned date. Existing rows may still be opened or undone when that completion is the latest occurrence.
