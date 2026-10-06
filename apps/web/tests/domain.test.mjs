@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, undoCompletion } from "../lib/domain.ts";
+import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "low", tagIds: [], sortKey: 1,
@@ -10,6 +10,18 @@ const task = (id, dueDate, extras = {}) => ({
 test("date-only arithmetic preserves calendar dates across DST", () => {
   assert.equal(addDays("2026-03-08", 1), "2026-03-09");
   assert.equal(addDays("2026-11-01", -1), "2026-10-31");
+});
+test("task due-date ordering puts nearest dates first and leaves undated tasks last", () => {
+  const tasks = [
+    task("undated", undefined, { sortKey: 0 }),
+    task("later", "2026-10-08", { sortKey: 0 }),
+    task("today-later-in-order", "2026-10-05", { sortKey: 2 }),
+    task("past", "2026-10-04", { sortKey: 0 }),
+    task("today-first-in-order", "2026-10-05", { sortKey: 1 })
+  ];
+  assert.deepEqual([...tasks].sort(taskDueDateOrder).map(item => item.id), [
+    "past", "today-first-in-order", "today-later-in-order", "later", "undated"
+  ]);
 });
 test("calendar month grid contains six Sunday-first weeks across month boundaries", () => {
   const january = calendarGridDates("2026-01");

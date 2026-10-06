@@ -477,6 +477,12 @@ export function pruneExpiredHistory(data: Data, today = localDate(new Date())): 
 }
 export const taskOrder = (a: Task, b: Task): number =>
   a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+export const taskDueDateOrder = (a: Task, b: Task): number => {
+  if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate) || taskOrder(a, b);
+  if (a.dueDate) return -1;
+  if (b.dueDate) return 1;
+  return taskOrder(a, b);
+};
 export function reorderTask(data: Data, id: string, direction: -1 | 1): Data {
   const task = data.tasks.find(item => item.id === id);
   if (!task) return data;
