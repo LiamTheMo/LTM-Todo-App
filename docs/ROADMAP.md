@@ -29,3 +29,7 @@ Each phase file contains scope, implementation guidance, tests, acceptance crite
 ## v3.01 — Course-outline importing
 
 The new checkpoint inherits the released v3.00 tree. A temporary implementation branch adds local PDF/DOCX/text extraction, deterministic deadline/schedule detection, editable review, destination and time-zone selection, duplicate-safe batch creation, and temporary-source cleanup. Imported items use normal local persistence/sync; source documents are never uploaded. OCR and AI interpretation are deferred. See [V3_01_STATUS.md](V3_01_STATUS.md) for implementation and acceptance evidence.
+
+## v3.02 — Dashboard workflow refinements
+
+This checkpoint refines the Dashboard's task/calendar quick-add composer, task due-date ordering, date clearing, Dashboard scroll anchoring during sync, mobile calendar-event fields, and empty-state behavior. The Dashboard's Other Tasks panel contains undated tasks; the Overdue and Other Tasks panels are both hidden when empty. See [V3_02_STATUS.md](V3_02_STATUS.md) for the implementation and remaining manual checks.

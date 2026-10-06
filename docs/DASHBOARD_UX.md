@@ -31,7 +31,7 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 - Search/filter state must be visibly distinguishable from the normal dashboard.
 
 ## Dashboard task coverage
-Dated tasks, scheduled work and recent completions appear in their Dashboard day groups; overdue tasks also appear in Overdue. Dated tasks outside the visible range appear in Other Tasks. Open tasks without due dates stay in Tasks and are omitted from the Dashboard.
+Dated tasks, scheduled work and recent completions appear in their Dashboard day groups; overdue tasks also appear in Overdue. Open tasks without due dates stay available in Tasks and appear in a separate Other Tasks panel on the Dashboard. Hide both panels when they contain no tasks.
 
 ## Calendar surface
 The Calendar view is a local planning surface over tasks, planned-work blocks and first-party calendar events.
