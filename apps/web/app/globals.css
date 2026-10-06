@@ -23,9 +23,9 @@
 .dashboardHome .overduePanel .overdueEmpty{min-height:46px;display:flex;align-items:center;color:#75665e}
 .dayScroller{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border-radius:18px}
 .dashboardHome .dayScroller{padding-bottom:92px}
-.dashboardAddFab{position:fixed;z-index:15;right:max(34px,calc((100vw - 1170px)/2 + 34px));bottom:24px;display:grid;place-items:center;width:52px;height:52px;border:1px solid #fff9;border-radius:50%;background:linear-gradient(145deg,#e89442 0%,#d27529 48%,#b9581e 100%);color:#fff;box-shadow:0 9px 22px #69330f38,0 2px 5px #48290d1c,inset 0 1px 0 #ffffff70;transition:transform 160ms ease,box-shadow 160ms ease,filter 160ms ease}
+.dashboardAddFab{position:fixed;z-index:15;right:max(34px,calc((100vw - 1170px)/2 + 34px));bottom:24px;display:grid;place-items:center;width:56px;height:56px;border:1px solid #fff9;border-radius:50%;background:linear-gradient(145deg,#e89442 0%,#d27529 48%,#b9581e 100%);color:#fff;box-shadow:0 9px 22px #69330f38,0 2px 5px #48290d1c,inset 0 1px 0 #ffffff70;transition:transform 160ms ease,box-shadow 160ms ease,filter 160ms ease}
 .dashboardAddFab::before{content:"";position:absolute;inset:4px;border:1px solid #ffffff55;border-radius:50%;pointer-events:none}
-.addFabIcon{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.addFabIcon{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .dashboardAddFab:hover{filter:brightness(1.06);transform:translateY(-2px);box-shadow:0 12px 26px #69330f42,0 3px 7px #48290d24,inset 0 1px 0 #ffffff80}
 .dashboardAddFab:active{transform:translateY(0) scale(.97)}
 .dashboardAddFab:focus-visible{outline:3px solid #bd651f;outline-offset:4px}
@@ -40,7 +40,7 @@
   .dashboardHome .pageHeader p{display:none}
   .dashboardHome .streamControls{margin-bottom:6px}
   .dashboardHome .overduePanel{max-height:30vh;margin-bottom:8px}
-  .dashboardAddFab{right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:50px;height:50px}
+  .dashboardAddFab{right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:54px;height:54px}
 }
 
 .bulkActions{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.75rem 0}.bulkTaskRow{display:flex;align-items:center;gap:.5rem}.bulkTaskRow>input{flex:0 0 auto;width:1.1rem;height:1.1rem}.bulkTaskRow>.taskRow{flex:1;min-width:0}
@@ -116,7 +116,7 @@
 .scheduleAction{border:1px solid #e8e0d8;border-radius:8px;background:#fffaf4;color:#8b4b14;padding:7px 9px;font-size:12px;white-space:nowrap}.taskRow .scheduleAction{border:0;background:transparent;font-size:18px;min-width:38px;min-height:42px;padding:4px}.plannedRow{display:flex;align-items:center;gap:4px}.plannedRow>.taskRow{flex:1;min-width:0}.scheduleUndo{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin:-6px 0 12px;font-size:12px;color:#756c61}.scheduleUndo button{border:0;background:transparent;color:#9f581c;font-weight:700}
 .kanbanBoard{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;align-items:start}.kanbanColumn{border:1px solid #e1dbd3;border-radius:14px;background:#fff;padding:12px;min-width:0}.kanbanColumn>h3{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px;font-size:14px}.kanbanColumn>h3 small{font-size:11px;color:#8c837a;background:#f4e5d2;border-radius:999px;padding:3px 7px}.kanbanCard{padding:7px 9px;margin:7px 0;border:1px solid #eee8e2;border-radius:10px;background:#fffdfb}.kanbanCard .taskRow{border-bottom:0}.kanbanCard>label{display:flex;align-items:center;gap:8px;font-size:12px;color:#756c61}.routineForm input{border:1px solid #e1dbd3;border-radius:8px;background:white;padding:8px;min-width:0}.routineForm{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:10px 0 20px;padding:12px;border:1px solid #e1dbd3;border-radius:12px;background:#fffdfb}.routineForm label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#625b53}.routineForm button{align-self:end;border:0;border-radius:9px;padding:9px 14px;background:#f4e5d2;color:#8b4b14;font-weight:650}.settingsPanel .tagLine small{font-size:12px;color:#8c837a}
 @media(max-width:800px){.calendarLayout{grid-template-columns:minmax(0,1fr)}.calendarAgenda{border-left:0;border-top:1px solid #eee8e2;padding:18px 0 0}}
-@media(max-width:700px){.editor .fieldPair:has(.customField){grid-template-columns:minmax(0,1fr)}.editor .fieldPair.dateTimePair:has(.customField){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.calendarDay{min-height:72px;padding:5px}.calendarDayPreview{font-size:8px;line-height:11px}.calendarGrid,.calendarWeekdays{gap:3px}}
+@media(max-width:700px){.editor .fieldPair:has(.customField){grid-template-columns:minmax(0,1fr)}.editor .fieldPair.dateTimePair:has(.customField){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.dashboardComposerModal .fieldPair.dateTimePair:has(.customField){gap:8px}.dashboardComposerModal .fieldPair.dateTimePair .customFieldTrigger{gap:4px;padding-inline:7px}.calendarDay{min-height:72px;padding:5px}.calendarDayPreview{font-size:8px;line-height:11px}.calendarGrid,.calendarWeekdays{gap:3px}}
 
 /* Full sRGB calendar color picker */
 .calendarColorPicker{display:grid;justify-items:center;gap:10px;min-width:0;padding:6px 2px}
