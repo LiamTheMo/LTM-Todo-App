@@ -24,7 +24,7 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 - Overdue means an unfinished task with a due date before the current local date. A scheduled event or work block without an expired task deadline is never overdue.
 - Overdue tasks appear in the Overdue section and remain in Due on their assigned date while that date is within the retained month.
 - Each overdue task shows its deadline as a relative calendar-day label, such as “Due 2 days ago”; use “day” for one day.
-- Keep the Overdue section visible when empty and show “Nothing overdue”. Style its title at the same size as the day heading, with a noticeable orange-red accent and the Dashboard's warm neutral surfaces.
+- Show the Overdue section only when at least one unfinished task is overdue. Style its title at the same size as the day heading, with a noticeable orange-red accent and the Dashboard's warm neutral surfaces.
 - Completion is optimistic/local and immediately reflected.
 - Tapping an item opens detail without losing scroll position.
 - Quick add defaults intelligently to current dashboard context but must make the assigned date obvious.
