@@ -41,7 +41,8 @@ The Calendar view is a local planning surface over tasks, planned-work blocks an
 - The calendar has no separate Month/Week/Day/Agenda mode selector. Month navigation plus selecting a date are the available controls.
 - Calendar creation is an in-app form with a full-spectrum sRGB color wheel and exact 0–255 RGB channel inputs. Task and event date/time/option fields use app-styled web controls; opening New Task does not focus the title field.
 - The supported responsive web client uses Dashboard date-only semantics and the same rolling history boundary. Displaying planned work never changes a task deadline.
-- Navigation order is Dashboard, Tasks, Projects, Calendar, Settings. Tasks is a status-based Kanban with text search and no other task filter controls; Settings is shown as a gear icon.
+- Navigation order is Dashboard, Tasks, Projects, Calendar, Settings. Tasks is a status-based Kanban with text search and no other task filter controls; tasks with due dates sort earliest first within each status column, and undated tasks follow them. Settings is shown as a gear icon.
+- The floating add button is available on Dashboard, Tasks, Projects and Calendar. It opens the shared task/calendar-event composer and carries the selected calendar date or active project into the new item where applicable.
 
 ## Accessibility
 Date boundaries cannot rely on color alone. Support responsive layouts, keyboard navigation, sufficient targets, reduced motion and logical focus after completion/deletion. Date-window controls must remain keyboard and accessibility operable.
