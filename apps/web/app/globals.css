@@ -138,7 +138,7 @@
 
 button.danger{color:#a83728!important}
 
-.dashboardHome .otherTasksPanel{flex:0 1 auto;max-height:min(22vh,180px);min-height:0;overflow-y:auto;overscroll-behavior:contain;margin-bottom:10px;border:1px solid #e1dbd3;border-radius:14px;background:#fff}
+.dashboardHome .otherTasksPanel{flex:0 0 auto;max-height:min(22vh,180px);min-height:0;overflow-y:auto;overscroll-behavior:contain;margin-bottom:10px;border:1px solid #e1dbd3;border-radius:14px;background:#fff}
 .dashboardHome .otherTasksPanel .group{padding:8px 16px}
 .dashboardHome .otherTasksPanel h4{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;background:#fff}
 
