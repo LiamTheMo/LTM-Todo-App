@@ -171,6 +171,13 @@ export default function Home() {
   const pendingAnchor = useRef<{ day: string; top: number } | null>(null);
   const windowShiftLock = useRef(false);
   const initialScrollPending = useRef(true);
+  const rememberDashboardAnchor = useCallback(() => {
+    const scroller = dayScrollRef.current;
+    if (!scroller) return;
+    const bounds = scroller.getBoundingClientRect();
+    const anchor = [...scroller.querySelectorAll<HTMLElement>("[data-day]")].find(element => element.getBoundingClientRect().bottom > bounds.top);
+    if (anchor?.dataset.day) pendingAnchor.current = { day: anchor.dataset.day, top: anchor.getBoundingClientRect().top - bounds.top };
+  }, []);
   useEffect(() => { readData().then(value => { setCurrentSyncDeviceId(getLocalSyncDeviceId()); current.current = value; setData(value); setReady(true); })
     .catch(() => { setError("Local storage could not be opened. Changes are disabled."); setReady(true); }); }, []);
   useEffect(() => { void readIcsCalendarCache().then(setIcsCalendarCache).catch(() => undefined); }, []);
@@ -232,6 +239,7 @@ export default function Home() {
           if (writeFailed.current) throw new Error("Local writes are paused");
           await applyRemoteSyncChanges(changes);
           const latest = await readData();
+          rememberDashboardAnchor();
           current.current = latest;
           setData(latest);
         });
@@ -267,7 +275,7 @@ export default function Home() {
       client.dispose();
       if (syncClient.current === client) syncClient.current = null;
     };
-  }, [ready, error]);
+  }, [ready, error, rememberDashboardAnchor]);
   useEffect(() => {
     const refreshToday = () => {
       const day = localDate(new Date());
@@ -364,7 +372,7 @@ export default function Home() {
     if (windowShiftLock.current) {
       requestAnimationFrame(() => { windowShiftLock.current = false; });
     }
-  }, [visibleDayStart]);
+  }, [visibleDayStart, data]);
   useLayoutEffect(() => {
     const scroller = dayScrollRef.current;
     const element = todayRef.current;
@@ -557,6 +565,7 @@ export default function Home() {
       await resolveSyncConflict(conflict.key, choice);
       if (choice === "remote") {
         const latest = await readData();
+        rememberDashboardAnchor();
         current.current = latest;
         setData(latest);
       }
