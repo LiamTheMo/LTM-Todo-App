@@ -772,7 +772,7 @@ export default function Home() {
           <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today), undefined, task.id, today)) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
           {otherDashboardTasks.length > 0 && <section className="stream otherTasksPanel" aria-label="Other tasks"><div className="group"><h4>OTHER TASKS <span>{otherDashboardTasks.length}</span></h4><p className="hint">Tasks without a visible day in the current dashboard range.</p>{otherDashboardTasks.map(task => taskRow(task, task.completedAt ? new Date(task.completedAt).toLocaleDateString() : task.dueDate ? `Due ${dateLabel(task.dueDate)}` : "No date assigned"))}</div></section>}
           <div className="stream dayScroller" ref={dayScrollRef} onScroll={handleDayScroll} role="region" aria-label="Days">
-            <button className="loadMore" onClick={() => shiftDays(-1)} disabled={visibleDayStart <= earliestDay}>Earlier days ↑</button>
+            {visibleDayStart > earliestDay && <button className="loadMore" onClick={() => shiftDays(-1)}>Earlier days ↑</button>}
             {dashboard.map(day => {
             const past = day.date < today;
             const empty = !day.scheduled.length && !day.due.length && !day.completed.length;
