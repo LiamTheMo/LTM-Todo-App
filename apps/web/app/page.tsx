@@ -756,15 +756,7 @@ export default function Home() {
     setCalendarSelectedDate(date);
   };
   const dashboard = dashboardDays(data, visibleDayStart, dashboardWindow, today);
-  const shownDashboardTaskIds = new Set([
-    ...overdue.map(task => task.id),
-    ...dashboard.flatMap(day => [
-      ...day.due.map(task => task.id),
-      ...day.scheduled.map(item => item.task.id),
-      ...day.completed.map(item => item.task.id)
-    ])
-  ]);
-  const otherDashboardTasks = filterTasks(data, { today }).filter(task => Boolean(task.dueDate) && !shownDashboardTaskIds.has(task.id));
+  const otherDashboardTasks = filterTasks(data, { today, dateScope: "undated" });
   return <main className="shell">
     <aside className="sidebar"><h1><span className="brandMark" aria-hidden="true" /> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} aria-current={view === item ? "page" : undefined} aria-label={item === "Settings" ? "Settings" : undefined} title={item === "Settings" ? "Settings" : undefined} onClick={() => {
       setProjectId("");
@@ -779,7 +771,7 @@ export default function Home() {
         <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : ""}</p></div><div className="pageHeaderActions"><button type="button" className="outlineOpen" disabled={Boolean(error)} onClick={() => setOutlineImportOpen(true)}>Import outline</button></div></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
           <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today), undefined, task.id, today)) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
-          {otherDashboardTasks.length > 0 && <section className="stream otherTasksPanel" aria-label="Other tasks" style={{ flex: "0 0 auto", minHeight: 88, maxHeight: "min(35vh, 280px)", overflowY: "auto" }}><div className="group"><h4>OTHER TASKS <span>{otherDashboardTasks.length}</span></h4><p className="hint">Tasks without a visible day in the current dashboard range.</p>{otherDashboardTasks.map(task => taskRow(task, task.completedAt ? new Date(task.completedAt).toLocaleDateString() : task.dueDate ? `Due ${dateLabel(task.dueDate)}` : "No date assigned"))}</div></section>}
+          {otherDashboardTasks.length > 0 && <section className="stream otherTasksPanel" aria-label="Other tasks" style={{ flex: "0 0 auto", minHeight: 88, maxHeight: "min(35vh, 280px)", overflowY: "auto" }}><div className="group"><h4>OTHER TASKS <span>{otherDashboardTasks.length}</span></h4><p className="hint">Tasks without a due date.</p>{otherDashboardTasks.map(task => taskRow(task, task.completedAt ? new Date(task.completedAt).toLocaleDateString() : "No date assigned"))}</div></section>}
           <div className="stream dayScroller" ref={dayScrollRef} onScroll={handleDayScroll} role="region" aria-label="Days">
             {visibleDayStart > earliestDay && <button className="loadMore" onClick={() => shiftDays(-1)}>Earlier days ↑</button>}
             {dashboard.map(day => {
