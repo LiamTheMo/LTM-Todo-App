@@ -4,7 +4,7 @@
 The Dashboard answers: **What is happening and what is due, day by day?** It replaces separate Today, Upcoming and History navigation.
 
 ## Structure
-The app shell stays within the viewport; navigation and Dashboard controls remain in place while the content pane scrolls. The date stream opens at Today, scrolls down into future dates and up through a 31-calendar-day history window (Today plus the previous 30 days). Older due tasks, completion history, and scheduled events expire from local storage automatically. An Overdue section stays visible above the stream; unfinished task deadlines before the current local date appear there, and an empty section says “Nothing overdue”.
+The app shell stays within the viewport; navigation and Dashboard controls remain in place while the content pane scrolls. The date stream opens at Today, scrolls down into future dates and up through a 31-calendar-day history window (Today plus the previous 30 days). Older due tasks, completion history, and scheduled events expire from local storage automatically. The Overdue section appears above the stream only when unfinished task deadlines exist before the current local date; otherwise, it is hidden.
 
 Each date section has:
 1. Sticky date header: relative label when useful + formatted date.
@@ -24,7 +24,7 @@ A task scheduled today but due Friday appears as scheduled today and due Friday.
 - Overdue means an unfinished task with a due date before the current local date. A scheduled event or work block without an expired task deadline is never overdue.
 - Overdue tasks appear in the Overdue section and remain in Due on their assigned date while that date is within the retained month.
 - Each overdue task shows its deadline as a relative calendar-day label, such as “Due 2 days ago”; use “day” for one day.
-- Keep the Overdue section visible when empty and show “Nothing overdue”. Style its title at the same size as the day heading, with a noticeable orange-red accent and the Dashboard's warm neutral surfaces.
+- Show the Overdue section only when at least one unfinished task is overdue. Style its title at the same size as the day heading, with a noticeable orange-red accent and the Dashboard's warm neutral surfaces.
 - Completion is optimistic/local and immediately reflected.
 - Tapping an item opens detail without losing scroll position.
 - Quick add defaults intelligently to current dashboard context but must make the assigned date obvious.
