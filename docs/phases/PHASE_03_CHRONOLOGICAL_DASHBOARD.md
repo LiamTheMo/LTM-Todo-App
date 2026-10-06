@@ -12,7 +12,7 @@ Implement the defining LTM Todo home experience: a fast, continuous day-by-day s
 - Compact empty-day representation.
 - A bidirectional day stream initially centered around Today, with past completion activity and future plans.
 - A separate Overdue section above the day stream for unfinished tasks with a due date before the local current date.
-- Keep the Overdue section visible when there are no overdue tasks and show “Nothing overdue”.
+- Show the Overdue section only when at least one task is overdue.
 - Use the existing Dashboard card, neutral surfaces and orange-brown accent palette for the Overdue section.
 - Keep navigation and Dashboard controls fixed while the day stream scrolls. Extend a bounded window in either direction while preserving the visible date, with no more than 31 calendar dates of past/current activity (Today plus the prior 30 days).
 - Show completed task occurrences on their due/occurrence dates and completed scheduled work on scheduled dates with a muted completed treatment. Undated completed tasks use their local completion date. Keep Add controls available on retained past dates; a task added with a past due date remains in its date's Due group and is also shown in Overdue until completed.
