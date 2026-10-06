@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type UIEvent } from "react";
-import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, undoCompletion, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
+import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
 import { defaultCalendarColor, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, updateCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
 import { acknowledgeSyncMutation, applyRemoteSyncChanges, bindSyncAccount, getSyncCursor, getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, persistIcsCalendarCache, prepareInitialSyncUpload, readData, readIcsCalendarCache, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData, type CachedIcsCalendar, type SyncConflict } from "../lib/storage";
 import { getLocalSyncDeviceId, SyncClient, type SyncStatus } from "../lib/sync-client";
@@ -128,9 +128,10 @@ export default function Home() {
   const [scheduleUndo, setScheduleUndo] = useState<ScheduledBlock[] | null>(null);
   const [dashboardComposerOpen, setDashboardComposerOpen] = useState(false);
   const [dashboardComposerTab, setDashboardComposerTab] = useState<"task" | "event">("task");
+  const [dashboardComposerDate, setDashboardComposerDate] = useState<string | undefined>();
+  const [dashboardComposerProject, setDashboardComposerProject] = useState<string | undefined>();
   const [editing, setEditing] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
-  const [quickTitle, setQuickTitle] = useState("");
   const [query, setQuery] = useState("");
   const [routineTemplateId, setRoutineTemplateId] = useState("");
   const [routineStartDate, setRoutineStartDate] = useState(() => localDate(new Date()));
@@ -618,11 +619,6 @@ export default function Home() {
   useEffect(() => {
     if (ready) mutate(value => pruneExpiredHistory(value, today));
   }, [ready, today, mutate]);
-  const addTask = (title: string, project?: string, dueDate?: string) => {
-    if (!title.trim()) return;
-    mutate(value => ({ ...value, tasks: [...value.tasks, { ...newEntity(), title: title.trim(), notes: "", priority: "low", projectId: project || undefined, tagIds: [], sortKey: Date.now(), dueDate }] }));
-    setQuickTitle("");
-  };
   const toggle = (task: Task) => mutate(value => {
     if (!task.completedAt) return completeTask(value, task.id);
     const completion = value.completions.filter(item => item.taskId === task.id).at(-1);
@@ -644,9 +640,10 @@ export default function Home() {
   };
   const overdue = overdueTasks(data, today);
   const searchedTasks = filterTasks(data, { query, today });
+  const taskTabTasks = [...searchedTasks].sort(taskDueDateOrder);
   const kanbanGroups = [
-    { key: "open", label: "Open", tasks: searchedTasks.filter(task => !task.completedAt) },
-    { key: "completed", label: "Completed", tasks: searchedTasks.filter(task => Boolean(task.completedAt)) }
+    { key: "open", label: "Open", tasks: taskTabTasks.filter(task => !task.completedAt) },
+    { key: "completed", label: "Completed", tasks: taskTabTasks.filter(task => Boolean(task.completedAt)) }
   ];
   const shiftDays = (direction: -1 | 1) => {
     const nextStart = addDays(visibleDayStart, direction * dashboardStep);
@@ -770,7 +767,7 @@ export default function Home() {
     }}><span className="navigationIcon"><TabIcon section={item} /></span>{item === "Settings" ? null : ` ${item}`}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
     <section className={`dashboard ${view === "Dashboard" ? "dashboardHome" : ""}`}>{error && <div className="error" role="alert">{error}</div>}
       {!ready ? <p>Opening your local tasks…</p> : <>
-        <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : ""}</p></div><div className="pageHeaderActions"><button type="button" className="outlineOpen" disabled={Boolean(error)} onClick={() => setOutlineImportOpen(true)}>Import outline</button>{view !== "Dashboard" && <button className="add" onClick={() => setEditing(view === "Calendar" ? `new:${calendarSelectedDate}` : "new")}>+ Add task</button>}</div></header>
+        <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : ""}</p></div><div className="pageHeaderActions"><button type="button" className="outlineOpen" disabled={Boolean(error)} onClick={() => setOutlineImportOpen(true)}>Import outline</button></div></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
           <section className="stream overduePanel" aria-label="Overdue tasks"><div className="group overdue"><h4>OVERDUE</h4>{overdue.length ? overdue.map(task => taskRow(task, overdueDueCaption(task.dueDate!, today), undefined, task.id, today)) : <p className="overdueEmpty">Nothing overdue</p>}</div></section>
           {otherDashboardTasks.length > 0 && <section className="stream otherTasksPanel" aria-label="Other tasks"><div className="group"><h4>OTHER TASKS <span>{otherDashboardTasks.length}</span></h4><p className="hint">Tasks without a visible day in the current dashboard range.</p>{otherDashboardTasks.map(task => taskRow(task, task.completedAt ? new Date(task.completedAt).toLocaleDateString() : task.dueDate ? `Due ${dateLabel(task.dueDate)}` : "No date assigned"))}</div></section>}
@@ -880,12 +877,10 @@ export default function Home() {
                   : <button type="button" className="eventTitle" onClick={() => setEventEditing({ id: item.event.id, date: item.occurrenceDate })}>{label}</button>}</div>;
               })}</div>}
               {!calendarAgenda.scheduled.length && !calendarAgenda.due.length && !calendarAgenda.completed.length && !calendarEvents.length && <p className="calendarEmpty">Nothing planned for this day.</p>}
-              <button className="linkButton" type="button" onClick={() => setEditing(`new:${calendarSelectedDate}`)}>+ Add task for this day</button>
             </div>
           </div>
         </section>}
         {view === "Tasks" && <>
-          <form className="quickAdd" onSubmit={e => { e.preventDefault(); addTask(quickTitle); }}><span aria-hidden>＋</span><input aria-label="Quick add task" placeholder="Add a task…" value={quickTitle} onChange={e => setQuickTitle(e.target.value)} /><button disabled={!quickTitle.trim()}>Add</button></form>
           <div className="filters"><input aria-label="Search tasks" placeholder="Search titles and notes…" value={query} onChange={e => setQuery(e.target.value)} /></div>
           <p className="filterSummary" aria-live="polite">{searchedTasks.length} {searchedTasks.length === 1 ? "task" : "tasks"}</p>
           <div className="kanbanBoard" aria-label="Tasks grouped by status">{kanbanGroups.map(group => <section className="kanbanColumn" key={group.key} aria-label={`${group.label}, ${group.tasks.length} tasks`}><h3>{group.label}<small>{group.tasks.length}</small></h3>{group.tasks.map(task => <article className="kanbanCard" key={task.id}>{taskRow(task)}</article>)}{!group.tasks.length && <p className="empty">No {group.label.toLocaleLowerCase()} tasks.</p>}</section>)}</div>
@@ -989,7 +984,12 @@ export default function Home() {
           {syncStatus.state === "device_retired" && <><p>This browser was removed from the account. You can register it again without changing local task data.</p><button type="button" onClick={() => { void syncClient.current?.reRegisterRetiredDevice(); }}>Register this browser again</button></>}
         </div>}
       </>}
-      {view === "Dashboard" && ready && <button type="button" className="dashboardAddFab" aria-label="Add a task or calendar event" aria-haspopup="dialog" onClick={() => { setDashboardComposerTab("task"); setDashboardComposerOpen(true); }}>+</button>}
+      {ready && view !== "Settings" && <button type="button" className="dashboardAddFab" aria-label="Add a task or calendar event" aria-haspopup="dialog" onClick={() => {
+        setDashboardComposerDate(view === "Calendar" ? calendarSelectedDate : view === "Dashboard" ? today : undefined);
+        setDashboardComposerProject(view === "Projects" ? projectId || undefined : undefined);
+        setDashboardComposerTab(view === "Calendar" ? "event" : "task");
+        setDashboardComposerOpen(true);
+      }}><svg className="addFabIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>}
     </section>
     {editing && <TaskEditor key={editing} task={data.tasks.find(t => t.id === editing)} initialDate={editing.startsWith("new:") ? editing.slice(4) : undefined} initialProject={view === "Projects" ? projectId : undefined} data={data} earliestDate={historyStart(today)} onClose={() => setEditing(null)} onSave={(task, reminderMinutes) => {
       mutate(value => saveTask(value, task, reminderMinutes)); setEditing(null);
@@ -1013,8 +1013,8 @@ export default function Home() {
         <button type="button" role="tab" aria-selected={dashboardComposerTab === "event"} aria-controls="dashboard-composer-panel" onClick={() => setDashboardComposerTab("event")}>Calendar event</button>
       </div>
       <div id="dashboard-composer-panel" role="tabpanel" aria-label={dashboardComposerTab === "task" ? "Add task" : "Add calendar event"}>
-        {dashboardComposerTab === "task" ? <TaskEditor key="dashboard-task" embedded initialDate={today} data={data} earliestDate={historyStart(today)} onClose={() => setDashboardComposerOpen(false)} onSave={(task, reminderMinutes) => { mutate(value => saveTask(value, task, reminderMinutes)); setDashboardComposerOpen(false); }} onDelete={() => {}} />
-          : <CalendarEventEditor key="dashboard-event" embedded date={today} calendars={activeCalendars} onClose={() => setDashboardComposerOpen(false)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setDashboardComposerOpen(false); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={() => {}} />}
+        {dashboardComposerTab === "task" ? <TaskEditor key="dashboard-task" embedded initialDate={dashboardComposerDate} initialProject={dashboardComposerProject} data={data} earliestDate={historyStart(today)} onClose={() => setDashboardComposerOpen(false)} onSave={(task, reminderMinutes) => { mutate(value => saveTask(value, task, reminderMinutes)); setDashboardComposerOpen(false); }} onDelete={() => {}} />
+          : <CalendarEventEditor key="dashboard-event" embedded date={dashboardComposerDate ?? today} calendars={activeCalendars} onClose={() => setDashboardComposerOpen(false)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setDashboardComposerOpen(false); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={() => {}} />}
       </div>
     </section></div>}
     {eventEditing && <CalendarEventEditor key={`${eventEditing.id ?? "new"}:${eventEditing.date}`} event={data.calendarEvents.find(item => item.id === eventEditing.id)} date={eventEditing.date} calendars={activeCalendars} onClose={() => setEventEditing(null)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setEventEditing(null); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={id => { const stamp = new Date().toISOString(); mutate(value => ({ ...value, calendarEvents: value.calendarEvents.map(event => event.id === id ? { ...event, deletedAt: stamp, updatedAt: stamp, revision: event.revision + 1 } : event) })); setEventEditing(null); }} />}
