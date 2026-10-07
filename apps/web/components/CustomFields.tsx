@@ -56,8 +56,9 @@ export function CustomSelect({ children, value, onChange, disabled, className, "
       if (event.key === "Tab") setOpen(false);
     };
     document.addEventListener("pointerdown", dismiss);
-    document.addEventListener("keydown", keydown);
-    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", keydown); };
+    // Capture before React portal events reach the surrounding editor.
+    document.addEventListener("keydown", keydown, true);
+    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", keydown, true); };
   }, [open]);
 
   const show = () => {
@@ -103,8 +104,8 @@ function usePicker(open: boolean, setOpen: (value: boolean) => void, root: React
     };
     const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); root.current?.querySelector("button")?.focus(); } };
     document.addEventListener("pointerdown", dismiss);
-    document.addEventListener("keydown", keydown);
-    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", keydown); };
+    document.addEventListener("keydown", keydown, true);
+    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", keydown, true); };
   }, [open, root, setOpen]);
   const show = (height: number) => {
     const anchor = root.current;
