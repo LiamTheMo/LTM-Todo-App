@@ -27,7 +27,7 @@ export function OutlineImporter({ data, readOnlyCalendarIds, onClose, onImport }
   const [options, setOptions] = useState<OutlineOptions>({ today });
   const [reviewPage, setReviewPage] = useState(0);
   const calendars = data.calendars.filter(calendar => !calendar.deletedAt && !readOnlyCalendarIds.includes(calendar.id));
-  const projects = data.projects.filter(project => !project.deletedAt && !project.archivedAt);
+  const projects = data.projects.filter(project => !project.deletedAt);
   const [destination, setDestination] = useState<OutlineDestination>({ calendarId: calendars[0]?.id || "", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", readOnlyCalendarIds });
   const controller = useRef<AbortController | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
