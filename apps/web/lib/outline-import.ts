@@ -59,7 +59,7 @@ export function importOutlineItems(data: Data, items: OutlineItem[], destination
   const selected = items.filter(item => item.selected);
   if (!selected.length || selected.length > MAX_OUTLINE_ITEMS) throw new Error(`Select 1–${MAX_OUTLINE_ITEMS.toLocaleString()} items to import.`);
   try { new Intl.DateTimeFormat("en", { timeZone: destination.timeZone }); } catch { throw new Error("Choose a valid IANA time zone, such as America/Edmonton."); }
-  if (destination.projectId && !data.projects.some(project => project.id === destination.projectId && !project.deletedAt && !project.archivedAt)) throw new Error("Choose an active project.");
+  if (destination.projectId && !data.projects.some(project => project.id === destination.projectId && !project.deletedAt)) throw new Error("Choose an active project.");
   if (selected.some(item => item.kind === "event") && (!data.calendars.some(calendar => calendar.id === destination.calendarId && !calendar.deletedAt) || destination.readOnlyCalendarIds?.includes(destination.calendarId))) throw new Error("Choose an editable calendar.");
   if (destination.reminderMinutes && (!/^\d+$/.test(destination.reminderMinutes) || +destination.reminderMinutes > 10_080)) throw new Error("Reminder must be between 0 and 10,080 minutes.");
   for (const item of selected) {
