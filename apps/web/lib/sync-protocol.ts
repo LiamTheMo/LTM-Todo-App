@@ -8,7 +8,7 @@ export const MAX_SYNC_PAGE_SIZE = 12;
 
 export const syncEntityTypes = [
   "tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents",
-  "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews"
+  "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews", "preferences"
 ] as const;
 
 export type SyncEntityType = typeof syncEntityTypes[number];
@@ -89,6 +89,7 @@ function validEntityPayload(type: SyncEntityType, payload: Record<string, unknow
   }
   if (!entityMeta(payload) || (payload.deletedAt !== undefined && !instant(payload.deletedAt))) return false;
   switch (type) {
+    case "preferences": return hasOnlyKeys(payload, [...entityKeys, "completedTaskRetentionDays"]) && payload.id === "00000000-0000-4000-8000-000000000002" && Number.isInteger(payload.completedTaskRetentionDays) && (payload.completedTaskRetentionDays as number) >= 1 && (payload.completedTaskRetentionDays as number) <= 14;
     case "tasks":
       return hasOnlyKeys(payload, [...entityKeys, "title", "notes", "priority", "projectId", "sectionId", "tagIds", "sortKey", "dueDate", "dueTime", "dueTimeZone", "completedAt", "recurrence"]) &&
         nonEmptyText(payload.title) && text(payload.notes) && wirePriorities.includes(String(payload.priority)) &&
