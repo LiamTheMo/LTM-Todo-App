@@ -33,3 +33,7 @@ The new checkpoint inherits the released v3.00 tree. A temporary implementation 
 ## v3.02 — Dashboard workflow refinements
 
 This checkpoint refines the Dashboard's task/calendar quick-add composer, task due-date ordering, date clearing, Dashboard scroll anchoring during sync, mobile calendar-event fields, and empty-state behavior. The Dashboard's Other Tasks panel contains undated tasks; the Overdue and Other Tasks panels are both hidden when empty. See [V3_02_STATUS.md](V3_02_STATUS.md) for the implementation and remaining manual checks.
+
+## v3.03 — Sync recovery and event scheduling context
+
+The checkpoint inherits the deployed v3.02 tree. It hardens coalesced local edits during in-flight sync, prevents repeated task/event form submission from creating separate records, and adds the selected day's existing event, planned-work, and deadline timeline to the Calendar composer. See [V3_03_STATUS.md](V3_03_STATUS.md) for acceptance and validation status.

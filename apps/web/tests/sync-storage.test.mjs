@@ -38,6 +38,26 @@ test("local commits atomically queue upserts and coalesce retries against server
   assert.equal(updatedMutation.payload.title, "Changed locally");
 });
 
+test("acknowledging an in-flight save rebases a newer coalesced local edit", async () => {
+  const data = emptyData();
+  data.tasks.push(task("First save"));
+  await writeData({ ...data, generation: 1 }, 0);
+  const firstSave = (await readPendingSyncMutations(12)).find(item => item.entityType === "tasks");
+
+  const saved = await readData();
+  await writeData({ ...saved, generation: saved.generation + 1,
+    tasks: saved.tasks.map(item => item.id === taskId ? { ...item, title: "Edited while syncing", revision: item.revision + 1 } : item) }, saved.generation);
+  const newerSave = (await readPendingSyncMutations(12)).find(item => item.entityType === "tasks");
+  assert.notEqual(newerSave.clientMutationId, firstSave.clientMutationId);
+  assert.equal(newerSave.baseRevision, 0);
+
+  await acknowledgeSyncMutation(firstSave, 7);
+  const rebasedSave = (await readPendingSyncMutations(12)).find(item => item.entityType === "tasks");
+  assert.equal(rebasedSave.clientMutationId, newerSave.clientMutationId);
+  assert.equal(rebasedSave.baseRevision, 7);
+  assert.equal(rebasedSave.payload.title, "Edited while syncing");
+});
+
 test("deleting a server-known entity queues a content-free tombstone", async () => {
   const data = emptyData();
   data.tasks.push(task());
