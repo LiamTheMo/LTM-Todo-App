@@ -3,7 +3,7 @@ import { MAX_OUTLINE_CHARACTERS, type OutlineBlock } from "./outline-parser.ts";
 export const MAX_OUTLINE_BYTES = 10 * 1024 * 1024;
 const MAX_XML_BYTES = 2 * 1024 * 1024;
 export function textOutlineBlocks(text: string): OutlineBlock[] {
-  if (text.length > MAX_OUTLINE_CHARACTERS) throw new Error("Outline text is too large (maximum 500,000 characters).");
+  if (text.length > MAX_OUTLINE_CHARACTERS) throw new Error("Import text is too large (maximum 5,000,000 characters).");
   return text.split(/\r?\n/).map(text => ({ text: text.trim(), heading: /^#{1,6}\s/.test(text) }));
 }
 export function docxXmlBlocks(xml: string): OutlineBlock[] {

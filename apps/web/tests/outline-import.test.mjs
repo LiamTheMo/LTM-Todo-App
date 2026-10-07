@@ -5,6 +5,7 @@ import { importOutlineItems, isOutlineDuplicate, outlineItemError } from "../lib
 import { textOutlineBlocks, readOutlineDocument } from "../lib/outline-document.ts";
 import { emptyData, newEntity } from "../lib/domain.ts";
 import { calendarEventOccurrences } from "../lib/calendar-domain.ts";
+import { parseBulkDelimitedFile, MAX_BULK_IMPORT_ITEMS } from "../lib/bulk-import.ts";
 
 const options = { year: 2026, today: "2026-10-05" };
 const parse = (text, extra = {}) => parseOutline(textOutlineBlocks(text), { ...options, ...extra });
@@ -88,23 +89,21 @@ test("relative dates require explicit document reference date, rather than today
   assert.equal(parse("Assignment due next Friday", { referenceDate: "2026-10-09" })[0].date, "2026-10-16");
 });
 
-test("week numbering requires semester start and weekday and has an explicit assumption note", () => {
+test("week numbering without an explicit date stays unresolved for review", () => {
   assert.equal(parse("Assignment due Week 5")[0].selected, false);
-  const item = parse("Assignment due Week 5 Monday", { termStart: "2026-09-09" })[0];
-  assert.equal(item.date, "2026-10-05");
-  assert.ok(item.warnings.some(warning => warning.includes("Monday-based")));
+  const item = parse("Assignment due Week 5 Monday")[0];
+  assert.equal(item.date, "");
+  assert.ok(item.warnings.some(warning => warning.includes("real date")));
 });
 
-test("bounded weekly classes begin on a matching remaining semester day", () => {
-  const item = parse("Lectures every Monday and Wednesday 2:30–3:50 PM", { termStart: "2026-09-01", termEnd: "2026-12-10" })[0];
+test("weekly class candidates need a reviewed repeat-until date, not semester controls", () => {
+  const item = parse("Lectures every Monday and Wednesday 2:30–3:50 PM")[0];
   assert.deepEqual(item.weekdays, [1, 3]);
   assert.equal(item.date, "2026-10-05");
-  assert.equal(item.until, "2026-12-10");
-  const data = emptyData();
-  const imported = importOutlineItems(data, [item], destination(data), options.today).data;
-  assert.deepEqual(calendarEventOccurrences(imported, "2026-10-05", "2026-10-12").map(event => event.occurrenceDate), ["2026-10-05", "2026-10-07"]);
-  assert.equal(calendarEventOccurrences(imported, "2026-12-11", "2026-12-20").length, 0);
-  assert.equal(parse("Lectures every Monday 2:30–3:50 PM")[0].selected, false);
+  assert.equal(item.until, "");
+  assert.ok(item.warnings.some(warning => warning.includes("repeat-until")));
+  assert.ok(outlineItemError(item, options.today)?.includes("repeat-until"));
+  assert.equal(parse("Lectures every Monday 2:30–3:50 PM")[0].selected, true);
 });
 
 test("explicit two-date all-day event uses an inclusive last date in review", () => {
@@ -146,6 +145,38 @@ test("re-importing skips existing and within-batch duplicates without adding rem
   assert.equal(again.data, first.data);
 });
 
+test("CSV batch import reads task and event rows with quoted notes, priorities, and common columns", async () => {
+  const file = new File([
+    'type,title,date,start time,end time,end date,notes,priority\n' +
+    'task,"Essay, part one",2026-10-20,,,,"Bring the source file, then revise",high\n' +
+    'event,Project meeting,2026-10-21,2:30 PM,3:50 PM,,Review milestones,medium\n' +
+    'event,Company holiday,10/22/2026,,,,,low\n',
+  ], "batch.csv", { type: "text/csv" });
+  const items = await parseBulkDelimitedFile(file, options);
+  assert.equal(items.length, 3);
+  assert.equal(items[0].title, "Essay, part one");
+  assert.equal(items[0].kind, "task");
+  assert.equal(items[0].notes, "Bring the source file, then revise");
+  assert.equal(items[0].priority, "high");
+  assert.equal(items[1].kind, "event");
+  assert.equal(items[1].time, "14:30");
+  assert.equal(items[1].endTime, "15:50");
+  assert.equal(items[2].date, "2026-10-22");
+  const imported = importOutlineItems(emptyData(), items, destination(emptyData()), options.today).data;
+  assert.equal(imported.tasks[0].priority, "high");
+  assert.equal(imported.tasks[0].notes, "Bring the source file, then revise");
+  assert.equal(imported.calendarEvents[0].notes, "Review milestones");
+});
+
+test("CSV imports flag ambiguous dates, reject malformed headers, and bound large batches", async () => {
+  const ambiguous = await parseBulkDelimitedFile(new File(["type,title,date\ntask,Read,10/11/2026"], "items.csv"), options);
+  assert.equal(ambiguous[0].selected, false);
+  assert.ok(ambiguous[0].warnings[0].includes("Ambiguous"));
+  await assert.rejects(parseBulkDelimitedFile(new File(["label,when\na,2026-10-10"], "bad.csv"), options), /title\/name column/);
+  const rows = ["title,date", ...Array.from({ length: MAX_BULK_IMPORT_ITEMS + 1 }, (_, index) => "Task " + index + ",2026-10-20")].join("\n");
+  await assert.rejects(parseBulkDelimitedFile(new File([rows], "large.csv"), options), /more than 1,000 rows/);
+});
+
 test("invalid selected item makes batch atomic and old dates obey retention", () => {
   const data = emptyData();
   const items = parse("Assignment 2 due October 20\nMidterm October 21 at 2:30 PM");
@@ -168,7 +199,10 @@ test("read-only calendars, bad zones, archived projects and invalid reminders ca
 
 test("DST boundary recurrence keeps local class times and changes UTC offset", () => {
   const data = emptyData();
-  const item = parse("Lectures every Monday 2:30–3:50 PM", { termStart: "2026-10-26", termEnd: "2026-11-09" })[0];
+  const item = parse("Lectures every Monday 2:30–3:50 PM")[0];
+  item.date = "2026-10-26";
+  item.endDate = item.date;
+  item.until = "2026-11-09";
   const imported = importOutlineItems(data, [item], { ...destination(data), timeZone: "America/New_York" }, options.today).data;
   const occurrences = calendarEventOccurrences(imported, "2026-10-26", "2026-11-10");
   assert.equal(occurrences[0].startInstant, "2026-10-26T18:30:00.000Z");
@@ -183,11 +217,16 @@ test("DST boundary recurrence keeps local class times and changes UTC offset", (
 
 test("weekly series re-imported later and reordered recurrence fields still skip duplicates", () => {
   const data = emptyData();
-  const first = parse("Lectures every Monday and Wednesday 2:30–3:50 PM", { termStart: "2026-09-01", termEnd: "2026-12-10" })[0];
+  const first = parse("Lectures every Monday and Wednesday 2:30–3:50 PM")[0];
+  first.date = "2026-10-05";
+  first.endDate = first.date;
+  first.until = "2026-12-10";
   const saved = importOutlineItems(data, [first], destination(data), options.today).data;
   const rule = saved.calendarEvents[0].recurrence;
   saved.calendarEvents[0].recurrence = { until: rule.until, weekdays: [3, 1], interval: 1, frequency: "weekly" };
-  const later = parse("Lectures every Monday and Wednesday 2:30–3:50 PM", { termStart: "2026-09-01", termEnd: "2026-12-10", today: "2026-10-19" })[0];
+  const later = parse("Lectures every Monday and Wednesday 2:30–3:50 PM", { today: "2026-10-19" })[0];
+  later.endDate = later.date;
+  later.until = "2026-12-10";
   assert.equal(importOutlineItems(saved, [later], destination(saved), "2026-10-19").skipped, 1);
 });
 
@@ -197,8 +236,8 @@ test("24-hour times and midnight are parsed without meridiem guesses", () => {
 });
 
 test("source and candidate counts are bounded", () => {
-  assert.throws(() => textOutlineBlocks("a".repeat(500_001)), /too large/);
-  assert.throws(() => parse(Array.from({ length: 251 }, (_, i) => `Assignment ${i} due October 20`).join("\n")), /250/);
+  assert.throws(() => textOutlineBlocks("a".repeat(5_000_001)), /too large/);
+  assert.throws(() => parse(Array.from({ length: 1_001 }, (_, i) => "Assignment " + i + " due October 20").join("\n")), /1,000/);
 });
 
 test("text file extraction is local and unsupported/empty/oversized files are rejected", async () => {
