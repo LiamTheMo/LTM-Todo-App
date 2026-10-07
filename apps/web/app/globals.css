@@ -138,6 +138,148 @@
 
 button.danger{color:#a83728!important}
 
+/* Workspace menus share the Dashboard's warm headers and quiet card borders. */
+.workspaceView{padding-bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+.workspaceView .pageHeader>div:first-child{min-width:0}
+.workspaceView .pageHeader h2{overflow-wrap:anywhere}
+.workspaceView .pageHeaderActions{flex-shrink:0}
+.workspaceView .taskSearchToolbar{display:flex;align-items:center;gap:16px;margin:0 0 20px}
+.taskSearch{display:flex;align-items:center;flex:1;min-width:0;min-height:46px;border:1px solid var(--color-border);border-radius:12px;background:#fff}
+.taskSearch:focus-within{outline:2px solid var(--color-accent);outline-offset:2px}
+.taskSearch input{width:100%;min-width:0;padding:12px 14px;border:0;outline:none;background:transparent;color:var(--color-ink);font-size:14px}
+.taskSearch button{flex:none;min-width:44px;min-height:44px;border:0;background:transparent;color:#756c61;font-size:22px}
+.taskSearchToolbar .filterSummary{flex:none;margin:0;color:#756c61;font-size:12px}
+.workspaceView .kanbanBoard{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.workspaceView .kanbanColumn{padding:0;box-shadow:0 5px 18px #4d392207}
+.menuPanelHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:8px 16px;border-bottom:1px solid #eee7df;border-radius:14px 14px 0 0;background:var(--color-surface)}
+.menuPanelHeader h3,.workspaceView .projectGroupHead h3{display:flex;align-items:center;gap:9px;margin:0;font-size:13px;font-weight:700;min-width:0;overflow-wrap:anywhere}
+.menuCount{display:inline-grid;place-items:center;flex:none;min-width:24px;min-height:24px;padding:2px 6px;border:1px solid #e8dfd4;border-radius:7px;color:#756c61;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;background:#fff}
+.menuInlineAdd{min-height:36px;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:#9f581c;font-size:12px;font-weight:650;white-space:nowrap}
+.kanbanColumnBody{padding:10px}
+.workspaceView .kanbanCard{padding:0 4px;margin:0 0 8px;background:#fff;border-color:#eee7df}
+.workspaceView .kanbanCard:last-child{margin-bottom:0}
+.workspaceView .taskRow{gap:4px}
+.workspaceView .taskText{font-size:14px}
+.workspaceView .taskText small:empty{display:none}
+.workspaceView .kanbanCard .complete,.workspaceView .kanbanCard .more{min-width:34px;padding-inline:4px}
+.workspaceView .kanbanCard .scheduleAction{min-width:32px;padding-inline:4px}
+.menuEmpty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;padding:28px 20px;text-align:center;color:#8c837a;font-size:13px}
+.menuEmpty strong{color:#625b53;font-size:14px;font-weight:650}
+.menuEmpty p{margin:0;line-height:1.6;max-width:320px}
+.workspaceView .projectCreate{margin:0 0 18px;padding:6px 10px;min-height:54px}
+.workspaceView .quickAdd input{outline:revert;color:var(--color-ink);font-size:14px}
+.workspaceView .quickAdd input:focus-visible{outline:2px solid var(--color-accent);border-radius:6px}
+.workspaceView .quickAdd button{min-height:40px;font-size:13px}
+.projectEmpty{min-height:220px;border:1px dashed #d9cfc3;border-radius:14px;background:#fffaf4}
+.workspaceView .projectGrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:16px}
+.workspaceView .projectCard{padding:0;gap:0;border-radius:14px;box-shadow:0 5px 18px #4d392207}
+.workspaceView .projectOpen{width:100%;min-height:156px;padding:20px;gap:12px;border-radius:14px 14px 0 0;overflow-wrap:anywhere;color:var(--color-ink)}
+.workspaceView .projectOpen:hover{background:#fffaf4}
+.workspaceView .projectOpen strong{font-size:17px;line-height:1.4}
+.workspaceView .projectOpen small{display:flex;justify-content:space-between;width:100%;margin-top:auto;font-size:12px}
+.workspaceView .projectCard>.orderControls{justify-content:flex-end;padding:4px 10px;border-top:1px solid #eee7df;background:#fffaf4;border-radius:0 0 14px 14px}
+.workspaceView .projectCard>.orderControls button{min-height:40px}
+.projectToolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:-12px 0 14px}
+.projectToolbar .linkButton{padding-left:0;min-height:44px;font-size:13px}
+.workspaceView .projectGroup{margin:0 0 16px;border:1px solid var(--color-border);background:#fff;border-radius:14px;box-shadow:0 5px 18px #4d392207}
+.workspaceView .projectGroupHead{flex-wrap:wrap;min-height:52px;padding:8px 16px;border-bottom:1px solid #eee7df;border-radius:14px 14px 0 0;background:#fffaf4}
+.workspaceView .projectGroupHead .orderControls{gap:2px}
+.workspaceView .projectGroupHead button{min-height:40px;border-radius:8px;padding:8px;font-size:12px}
+.workspaceView .projectGroupHead button:hover:not(:disabled){background:#f4e5d2}
+.workspaceView .projectGroupHead .projectSectionAdd{background:transparent}
+.workspaceView .projectGroup .listPanel{border:0;border-radius:0 0 14px 14px;box-shadow:none;background:transparent}
+.workspaceView .projectGroupDropTarget{background:#fff8ef}
+.workspaceView .orderedTask{border-bottom:1px solid #f1ece7}
+.workspaceView .orderedTask:last-child{border-bottom:0}
+.workspaceView .orderedTask .taskRow{border-bottom:0;padding-inline:12px}
+.workspaceView .orderedTask>div:last-child{display:flex;flex-direction:column}
+.workspaceView .orderedTask>div:last-child button{min-width:32px;min-height:32px;padding:4px;border-radius:6px}
+.sectionEmpty{min-height:90px;padding:20px;border:1px dashed #e8dfd4;border-radius:10px;margin:12px}
+.workspaceView .sectionRename{max-width:none;flex-wrap:wrap}
+.workspaceView .sectionRename input{min-height:42px}
+.workspaceView .projectAddSection{min-height:44px;border:1px dashed #d9cfc3;background:#fffaf4}
+.workspaceView .projectArchive{display:block;color:#756c61;font-size:12px;margin-top:12px}
+.workspaceView .calendarToolbar{flex-wrap:wrap;gap:14px;padding-bottom:16px;border-bottom:1px solid #eee7df;margin-bottom:16px}
+.workspaceView .calendarMonthControl{gap:8px;min-width:0}
+.workspaceView .calendarMonthControl h3{font-size:18px;overflow-wrap:anywhere}
+.workspaceView .calendarMonthControl button,.workspaceView .calendarToday{min-width:42px;min-height:44px}
+.workspaceView .calendarToday{padding:8px 12px;font-size:13px}
+.workspaceView .calendarManagement{gap:12px;align-items:flex-start}
+.workspaceView .calendarToggle{flex-wrap:wrap;padding:5px 8px;border:1px solid #eee7df;border-radius:10px;background:#fffaf4;max-width:100%}
+.workspaceView .calendarToggle label{min-height:32px;overflow-wrap:anywhere;min-width:0}
+.workspaceView .calendarToggle input{accent-color:var(--color-accent);flex:none}
+.workspaceView .calendarEditActions button,.workspaceView .calendarManagementActions button{min-height:36px}
+.workspaceView .calendarAgendaHeader{padding:12px 14px;border:1px solid #eee7df;border-radius:12px;background:#fffaf4}
+.workspaceView .calendarAgendaHeader h3{font-size:17px;margin:5px 0 0;line-height:1.4}
+.workspaceView .calendarTimeline{margin-top:12px}
+.workspaceView .calendarEmpty{font-size:13px;text-align:center;padding:20px 12px}
+.workspaceView .settingsPanel{display:grid;gap:12px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.settingsSection{min-width:0;border:1px solid var(--color-border);border-radius:14px;background:#fff;box-shadow:0 5px 18px #4d392207}
+.settingsSectionSummary{position:relative;display:flex;flex-direction:column;justify-content:center;gap:4px;min-height:68px;padding:14px 48px 14px 18px;border-radius:14px;background:#fffaf4;list-style:none;cursor:pointer}
+.settingsSectionSummary::-webkit-details-marker{display:none}
+.settingsPanel .settingsSectionSummary h3{margin:0;font-size:14px;font-weight:700;color:var(--color-ink)}
+.settingsSectionDescription{color:#8c837a;font-size:12px;line-height:1.4}
+.settingsSectionSummary:after{content:"";position:absolute;right:20px;top:50%;width:8px;height:8px;border-right:2px solid #9f6a3f;border-bottom:2px solid #9f6a3f;transform:translateY(-65%) rotate(45deg)}
+.settingsSection[open]>.settingsSectionSummary{border-radius:14px 14px 0 0;border-bottom:1px solid #eee7df}
+.settingsSection[open]>.settingsSectionSummary:after{transform:translateY(-35%) rotate(225deg)}
+.settingsSectionBody{padding:18px;min-width:0;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.settingsSectionBody>p:first-child{margin-top:0}
+.settingsSectionBody>p:last-child{margin-bottom:0}
+.settingsSectionBody [role=status]:empty{display:none}
+.settingsSectionBody .accountStatus{margin-top:14px}
+.settingsSectionBody .settingsActions{gap:10px;align-items:flex-end}
+.settingsSectionBody .settingsActions>label{display:flex;flex:1 1 220px;flex-direction:column;gap:6px;min-width:0;color:#625b53;font-size:12px;font-weight:650}
+.settingsSectionBody button{min-height:42px;font-size:12px}
+.settingsSectionBody .settingsActions input[type=file]{max-width:100%;min-width:0;width:100%;font-size:12px}
+.settingsSectionBody input[type=file]::file-selector-button,.editor input[type=file]::file-selector-button{border:1px solid #dfc5a8;border-radius:8px;padding:9px 11px;margin-right:10px;background:#fffaf4;color:#8b4b14;font:inherit;cursor:pointer}
+.settingsSectionBody .tagLine{gap:12px;flex-wrap:wrap;padding:12px 0;border-color:#eee7df}
+.settingsSectionBody .tagLine>span{min-width:0;flex:1 1 180px}
+.settingsSectionBody .tagLine>div{display:flex;gap:8px;flex-wrap:wrap}
+.settingsSectionBody .tagLine button{padding:8px;border-radius:8px}
+.settingsSectionBody .routineForm{grid-template-columns:repeat(2,minmax(0,1fr));padding:14px;margin-bottom:0}
+.settingsSectionBody .routineForm .fieldPair,.settingsSectionBody .routineForm fieldset{grid-column:1/-1;min-width:0}
+.settingsSectionBody .routineForm .fieldPair{align-items:start}
+.settingsSectionBody .routineForm fieldset{border:1px solid #e1dbd3;border-radius:10px}
+.settingsSectionBody .routineForm .checkLabel{display:inline-flex;flex-direction:row;gap:5px;margin:4px 8px 4px 0}
+.settingsSectionBody .routineForm .checkLabel input{accent-color:var(--color-accent)}
+.settingsSectionBody .routineForm button[type=submit],.settingsSectionBody .routineForm>button{grid-column:1/-1;justify-self:end}
+/* All editors and picker menus use the same comfortable control spacing. */
+.editorHead{gap:14px;padding-bottom:12px;border-bottom:1px solid #e8dfd4}
+.editorHead h2{font-size:23px;line-height:1.3;overflow-wrap:anywhere}
+.editorHead>button{display:grid;place-items:center;flex:none;width:42px;height:42px;border:1px solid #e8dfd4;border-radius:10px;color:#756c61;background:#fff;font-size:24px}
+.editorHead>button:hover{background:#f7f1ea}
+.editor textarea{resize:vertical;min-height:74px}
+.editorActions{flex-wrap:wrap;align-items:center;gap:8px;padding-top:14px;border-top:1px solid #e8dfd4}
+.editorActions button{min-height:44px;border-radius:9px;font-size:13px}
+.editorActions button:not(.add):not(.danger){color:#625b53;background:#f7f1ea;padding:10px 13px}
+.editor .checkLabel input{accent-color:var(--color-accent)}
+.customSelectMenu [role=option]{min-height:42px}
+.datePickerHeader button{min-width:42px;min-height:42px}
+.timePickerColumn button{min-height:38px}
+.outlineItem{padding:16px;background:#fff;border-color:#e8dfd4}
+.outlineSelection button{min-height:42px;font-size:12px}
+@media(max-width:700px){
+  .workspaceView .pageHeader{align-items:flex-start;margin-bottom:22px}
+  .workspaceView .taskSearchToolbar{flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .workspaceView .taskSearch{flex-basis:100%}
+  .workspaceView .kanbanBoard{grid-template-columns:minmax(0,1fr);gap:14px}
+  .workspaceView .projectCreate{flex-wrap:wrap;padding:10px}
+  .workspaceView .projectCreate input{flex-basis:100%;width:100%}
+  .workspaceView .projectCreate button{margin-left:auto}
+  .workspaceView .projectGroupHead{gap:6px;padding:8px 12px}
+  .workspaceView .projectGroupHead h3{flex:1 1 100%}
+  .workspaceView .projectGroupHead .orderControls{justify-content:flex-start;flex:1 1 100%}
+  .workspaceView .sectionCreate{flex-wrap:wrap}
+  .workspaceView .sectionCreate input{flex-basis:100%}
+  .projectToolbar{margin-top:0;gap:2px}
+  .projectToolbar .hint{width:100%;margin-bottom:6px}
+  .settingsSectionSummary{padding-left:14px}
+  .settingsSectionBody{padding:14px}
+  .settingsSectionBody .routineForm{grid-template-columns:minmax(0,1fr)}
+  .editorHead h2{font-size:21px}
+  .editorActions{gap:6px}
+}
+
 /* Shared Dashboard task panels; Overdue retains its existing warning palette. */
 .dashboardHome .dashboardTaskPanel{--panel-header:#fffaf4;--panel-ink:var(--color-ink,#292521);--panel-divider:#eee7df;--panel-chevron:#9f6a3f;min-height:0;border-radius:14px}
 .dashboardHome .overduePanel{--panel-header:#fff0eb;--panel-ink:#b54131;--panel-divider:#e5a99d;--panel-chevron:#b54131}
