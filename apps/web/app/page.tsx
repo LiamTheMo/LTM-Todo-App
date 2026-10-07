@@ -175,6 +175,11 @@ export default function Home() {
   const earliestDay = historyStart(today);
   const visibleDayStart = dayStart < earliestDay ? earliestDay : dayStart;
   const todayRef = useRef<HTMLElement>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    // Each menu starts at its header; the Dashboard's day scroller is independent.
+    if (workspaceRef.current) workspaceRef.current.scrollTop = 0;
+  }, [view, projectId]);
   const dayScrollRef = useRef<HTMLDivElement>(null);
   const pendingAnchor = useRef<{ day: string; top: number } | null>(null);
   const windowShiftLock = useRef(false);
@@ -755,7 +760,7 @@ export default function Home() {
       } else if (item === "Dashboard") goToday();
       setView(item);
     }}><span className="navigationIcon"><TabIcon section={item} /></span>{item === "Settings" ? null : ` ${item}`}</button>)}</nav><div className="sidebarFoot">A calmer way through the day.</div></aside>
-    <section className={`dashboard ${view === "Dashboard" ? "dashboardHome" : "workspaceView"}`}>{error && <div className="error" role="alert">{error}</div>}
+    <section ref={workspaceRef} className={`dashboard ${view === "Dashboard" ? "dashboardHome" : "workspaceView"}`}>{error && <div className="error" role="alert">{error}</div>}
       {!ready ? <p>Opening your local tasks…</p> : <>
         <header className="pageHeader"><div><span className="eyebrow">YOUR SPACE</span><h2>{projectId && view === "Projects" ? projects.find(p => p.id === projectId)?.name : view}</h2><p>{view === "Dashboard" ? "A little clarity, one day at a time." : view === "Calendar" ? "Events, due dates, and planned work." : view === "Tasks" ? "Everything to do, in one place." : view === "Projects" ? projectId ? "A little structure for your next steps." : "Make room for the things you’re working on." : "Your account, workspace, and preferences."}</p></div><div className="pageHeaderActions"><button type="button" className="outlineOpen" disabled={Boolean(error)} onClick={() => setOutlineImportOpen(true)}>Import</button></div></header>
         {view === "Dashboard" && <><div className="streamControls"><button onClick={goToday}>Return to Today</button></div>
