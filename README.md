@@ -210,7 +210,7 @@ The deploy script checks Cloudflare's build context and rejects any branch other
 | `v3.00` | Accounts, cross-device sync, backups, protected attachments, and optional read-only ICS subscriptions |
 | `v3.01` | Course-outline import and updated repository/product documentation |
 | `v3.02` | Dashboard quick-add and scheduling refinements, task due-date ordering, undated-task panel, and mobile form polish |
-| `v3.03` | Cross-device sync recovery and selected-day event timeline in the Calendar composer |
+| `v3.03` | Cross-device sync recovery, task and event batch import, and selected-day event timeline in the Calendar composer |
 
 All `vX.XX` branches are permanent historical checkpoints. Development happens on a descriptive temporary branch created from the intended version:
 

@@ -42,6 +42,8 @@ export function OutlineImporter({ data, readOnlyCalendarIds, onClose, onImport }
   const update = (id: string, patch: Partial<OutlineItem>) => setItems(value => value.map(item => item.id === id ? { ...item, ...patch } : item));
   const setting = (patch: Partial<OutlineOptions>) => setOptions(value => ({ ...value, ...patch }));
   const selected = items.filter(item => item.selected);
+  const selectedTasks = selected.filter(item => item.kind === "task").length;
+  const selectedEvents = selected.length - selectedTasks;
   const invalid = selected.some(item => Boolean(outlineItemError(item, today)));
   const readFile = async (file: File) => {
     controller.current?.abort();
@@ -61,7 +63,7 @@ export function OutlineImporter({ data, readOnlyCalendarIds, onClose, onImport }
     try {
       const value = parseOutline(pasted.trim() ? textOutlineBlocks(pasted) : blocks, options);
       setItems(value); setReview(true);
-      setStatus(value.length ? `${value.length} items found. Review their dates and types before importing.` : "No dated course items found. Try pasting the assessment or schedule section with its headings.");
+      setStatus(value.length ? `${value.length} items found. Review dates, task or event types, and destinations before importing.` : "No dated tasks or events found. Try pasting the assignment or schedule section with its headings.");
     } catch (cause) { setStatus(cause instanceof Error ? cause.message : "The outline could not be parsed."); }
   };
   const importSelected = async () => {
@@ -74,23 +76,23 @@ export function OutlineImporter({ data, readOnlyCalendarIds, onClose, onImport }
     finally { setBusy(false); }
   };
   return <dialog ref={dialog} className="outlineDialog" aria-labelledby="outline-title" onCancel={event => { event.preventDefault(); if (!busy || !review) onClose(); }}>
-    <div className="editor outlineEditor"><div className="editorHead"><h2 id="outline-title">Import course outline</h2><button ref={closeButton} type="button" aria-label="Close outline importer" disabled={busy && review} onClick={onClose}>×</button></div>
-      <p className="hint">Files are read on this device. Only approved tasks and events are saved and synced. Temporary document data is discarded when you finish or close this importer.</p>
+    <div className="editor outlineEditor"><div className="editorHead"><h2 id="outline-title">Import tasks and events</h2><button ref={closeButton} type="button" aria-label="Close importer" disabled={busy && review} onClick={onClose}>×</button></div>
+      <p className="hint">Import up to 250 tasks and calendar events from a course outline or event schedule. Review and select the whole batch before saving. Files are read on this device; only selected items are saved and synced, and temporary document data is discarded when you finish or close this importer.</p>
       {!finished && !review && <>
-        <label>Choose PDF, DOCX, or text (up to 10 MiB)<input type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" disabled={busy} onChange={event => {
+        <label>Choose an outline or schedule (PDF, DOCX, or text; up to 10 MiB)<input type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" disabled={busy} onChange={event => {
           const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void readFile(file);
         }} /></label>{fileName && <p className="hint">Selected: {fileName}</p>}
-        <label>Or paste outline text<textarea rows={7} maxLength={500_000} value={pasted} disabled={busy} placeholder="Assignment 2 — due October 20 at 11:59 PM" onChange={event => { setPasted(event.target.value); setBlocks([]); setFileName(""); }} /></label>
+        <label>Or paste a list of assignments and events<textarea rows={7} maxLength={500_000} value={pasted} disabled={busy} placeholder={'Assignment 2 — due October 20 at 11:59 PM\nMidterm — October 21, 2:30–3:50 PM'} onChange={event => { setPasted(event.target.value); setBlocks([]); setFileName(""); }} /></label>
         <div className="fieldPair"><label>Semester year<input type="number" min="2000" max="2099" value={options.year} onChange={event => setting({ year: Number(event.target.value) })} /></label><label>Numeric date order<CustomSelect value={options.dateOrder || ""} aria-label="Numeric date order" onChange={event => setting({ dateOrder: event.target.value as OutlineOptions["dateOrder"] || undefined })}><option value="">Flag ambiguous dates</option><option value="mdy">Month / Day</option><option value="dmy">Day / Month</option></CustomSelect></label></div>
         <div className="fieldPair"><label>Semester start (for weekly classes)<DateField value={options.termStart || ""} onChange={value => setting({ termStart: value })} /></label><label>Semester end<DateField value={options.termEnd || ""} onChange={value => setting({ termEnd: value })} /></label></div>
         <label>Document reference date (for “tomorrow” / “next Friday”)<DateField value={options.referenceDate || ""} onChange={value => setting({ referenceDate: value })} /></label>
         <p className="hint">Scanned PDFs need OCR. Missing times remain unspecified. Week numbers and semester holidays need your review.</p>
-        <div className="editorActions"><button type="button" className="add" disabled={busy || !pasted.trim() && !blocks.length} onClick={findItems}>Find items</button></div>
+        <div className="editorActions"><button type="button" className="add" disabled={busy || !pasted.trim() && !blocks.length} onClick={findItems}>Preview items</button></div>
       </>}
       {!finished && review && <>
         <div className="fieldPair"><label>Task project<CustomSelect value={destination.projectId || ""} aria-label="Task project" onChange={event => setDestination(value => ({ ...value, projectId: event.target.value || undefined }))}><option value="">No project</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</CustomSelect></label><label>Event calendar<CustomSelect value={destination.calendarId} aria-label="Event calendar" onChange={event => setDestination(value => ({ ...value, calendarId: event.target.value }))}>{calendars.length ? calendars.map(calendar => <option key={calendar.id} value={calendar.id}>{calendar.name}</option>) : <option value="">Create an editable calendar first</option>}</CustomSelect></label></div>
         <div className="fieldPair"><label>Time zone<input value={destination.timeZone} maxLength={100} onChange={event => setDestination(value => ({ ...value, timeZone: event.target.value }))} /></label><label>Task reminders (timed deadlines only)<CustomSelect value={destination.reminderMinutes || ""} aria-label="Import task reminders" onChange={event => setDestination(value => ({ ...value, reminderMinutes: event.target.value }))}><option value="">No reminder</option><option value="0">At deadline</option><option value="15">15 minutes before</option><option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="1440">1 day before</option></CustomSelect></label></div>
-        <div className="outlineSelection"><button type="button" onClick={() => setItems(value => value.map(item => ({ ...item, selected: !outlineItemError(item, today) })))}>Select valid items</button><button type="button" onClick={() => setItems(value => value.map(item => ({ ...item, selected: false })))}>Deselect all</button><span>{selected.length} selected</span></div>
+        <div className="outlineSelection"><button type="button" onClick={() => setItems(value => value.map(item => ({ ...item, selected: !outlineItemError(item, today) })))}>Select valid items</button><button type="button" onClick={() => setItems(value => value.map(item => ({ ...item, selected: false })))}>Deselect all</button><span>{selectedTasks} tasks · {selectedEvents} events selected</span></div>
         {items.map(item => {
           const error = outlineItemError(item, today);
           const duplicate = isOutlineDuplicate(data, item, destination);
