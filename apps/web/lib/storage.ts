@@ -1,5 +1,5 @@
 import { normalizeCalendarColor, validEvent } from "./calendar-domain.ts";
-import { emptyData, localDate, pruneExpiredHistory, type Data } from "./domain.ts";
+import { emptyData, localDate, type Data } from "./domain.ts";
 import { SYNC_CLIENT_SCHEMA_VERSION, type SyncEntityType, type SyncMutation } from "./sync-protocol.ts";
 import type { SyncChange } from "./sync-api.ts";
 import { syncEntityPriority } from "./sync-entity-order.ts";
@@ -12,7 +12,7 @@ const SYNC_META = "sync-meta";
 const CONFLICTS = "sync-conflicts";
 const ATTACHMENT_OUTBOX = "attachment-outbox";
 const ICS_CACHE = "ics-calendar-cache";
-const collectionTypes = ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews"] as const;
+const collectionTypes = ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews", "preferences"] as const;
 const builtInCalendarId = "00000000-0000-4000-8000-000000000001";
 type JournalEntry = { key: string; mutation: SyncMutation; queuedAt: number };
 export type SyncConflict = { key: string; mutation: SyncMutation; current?: SyncChange; foundAt: string };
@@ -34,7 +34,7 @@ export function normalizeData(value: unknown): Data {
   const raw = value as Record<string, unknown>;
   if (raw.schemaVersion !== 1 && raw.schemaVersion !== 2 && raw.schemaVersion !== 3 && raw.schemaVersion !== 4) throw new Error("Unsupported local data version");
   const migratingV1 = raw.schemaVersion === 1;
-  const collections = ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews"] as const;
+  const collections = ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews", "preferences"] as const;
   for (const name of collections) {
     if (raw[name] !== undefined && !Array.isArray(raw[name])) throw new Error(`Invalid ${name} collection`);
   }
@@ -72,6 +72,9 @@ export function normalizeData(value: unknown): Data {
       }
       ids.add(item.id);
     }
+  }
+  for (const preference of data.preferences) {
+    if (preference.id !== "00000000-0000-4000-8000-000000000002" || !Number.isInteger(preference.completedTaskRetentionDays) || preference.completedTaskRetentionDays < 1 || preference.completedTaskRetentionDays > 14) throw new Error("Invalid account preferences");
   }
   for (const task of data.tasks) {
     if (typeof task.title !== "string" || !task.title.trim() || !Array.isArray(task.tagIds) ||
@@ -242,7 +245,7 @@ export async function acknowledgeAttachmentUpload(id: string): Promise<void> {
     });
   } finally { db.close(); }
 }
-export async function readData(today = localDate(new Date())): Promise<Data> {
+export async function readData(_today = localDate(new Date())): Promise<Data> {
   const db = await openDatabase();
   try {
     return await new Promise((resolve, reject) => {
@@ -255,9 +258,9 @@ export async function readData(today = localDate(new Date())): Promise<Data> {
         try {
           const legacy = request.result !== undefined && (request.result as { schemaVersion?: number }).schemaVersion !== 4;
           const stored = normalizeData(request.result);
-          const retained = pruneExpiredHistory(stored, today);
-          if (legacy || retained !== stored) {
-            result = { ...retained, generation: stored.generation + 1 };
+          // Cleanup must go through writeData so every removal queues a sync tombstone.
+          if (legacy) {
+            result = { ...stored, generation: stored.generation + 1 };
             store.put(result, KEY);
           } else result = stored;
         } catch (error) {
