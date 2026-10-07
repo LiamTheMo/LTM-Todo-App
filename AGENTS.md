@@ -5,7 +5,7 @@ This file is authoritative for AI agents and contributors working in this reposi
 ## 1. Product intent
 Build a polished personal productivity system delivered as a responsive web app for desktop, iPhone and iPad browsers. Users may install it to the Home Screen where supported. The app owns its task and calendar models. Do not introduce Google Calendar or another calendar service as a core dependency; interoperability may be added later only as an optional integration.
 
-The primary home experience is a vertically scrolling chronological Dashboard. It opens at Today, scrolls forward into future dates and upward into past activity, and keeps overdue deadlines separate from everyday events. Past completed work is dimmed; users can still add a task with a past due date, which appears both in Overdue and Due on its assigned date until completed. Keep 31 calendar dates including Today (Today plus the prior 30 days); older task, completion, and scheduled-event history is automatically removed, and new due dates cannot be assigned outside that window. Due-dated completion history stays on its due/occurrence date, while undated tasks use their completion date. Each day is a section containing what is scheduled on that day and what is due on that day. Open tasks without due dates remain available in Tasks and appear in a separate Other Tasks panel on the Dashboard. Hide Overdue and Other Tasks panels when they are empty. Scheduled time and due time are separate concepts.
+The primary home experience is a vertically scrolling chronological Dashboard. It opens at Today, scrolls forward into future dates and upward into past activity, and keeps overdue deadlines separate from everyday events. Past completed work is dimmed; users can still add a task with a past due date, which appears both in Overdue and Due on its assigned date until completed. Keep 31 calendar dates including Today (Today plus the prior 30 days); older open-task and scheduled-event history is automatically removed; completed tasks and completion history use the account’s 1–14-day retention setting (7 days by default), and new due dates cannot be assigned outside that window. Due-dated completion history stays on its due/occurrence date, while undated tasks use their completion date. Each day is a section containing what is scheduled on that day and what is due on that day. Open tasks without due dates remain available in Tasks and appear in a separate Other Tasks panel on the Dashboard. Hide Overdue and Other Tasks panels when they are empty. Scheduled time and due time are separate concepts.
 
 ## 2. Git workflow
 Major branches are only `main` and `vX.XX`. Version branches are permanent checkpoints and must never be deleted. Never implement, fix, refactor, clean up, audit-remediate, or maintain directly on a major branch.
@@ -40,7 +40,7 @@ Classify audit results as:
 - Stable UUIDs for synchronizable entities from day one.
 - Store created/updated timestamps and revision/version metadata needed for future sync.
 - Support soft deletion/tombstones for syncable records.
-- Automatically purge task, completion, and scheduled-event history older than the 31-calendar-day Dashboard window; legacy child task records are retained as standalone tasks.
+- Automatically purge open-task and scheduled-event history older than the 31-calendar-day Dashboard window and completed tasks/history according to the account retention setting; legacy child task records are retained as standalone tasks.
 - Model due time separately from scheduled start/end.
 - Recurrence is structured data, not display text.
 - Calendar events and tasks are distinct domain entities.
@@ -60,3 +60,5 @@ Every phase document is an implementation contract. Do not silently omit accepta
 
 ## 7. Definition of done
 A phase is complete only when its acceptance criteria are implemented, automated validation passes, actionable review findings are resolved, documentation matches behavior, and remaining manual validation is explicitly listed. Completed temporary branches must be merged into their originating version branch; production-capable work reaches main only through the version branch.
+
+Completed task retention: account preferences sync across devices and backups. Default 7 calendar days from completion; users can choose 1–14 days in Settings. Cleanup runs after account state is verified on open/sync and through normal journaled writes, producing cloud tombstones without resurrection. Active recurring tasks remain; their expired completion records are removed. Undated completed tasks sort below open tasks in Other Tasks. The 31-day window continues to apply to other Dashboard history.
