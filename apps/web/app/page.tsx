@@ -14,7 +14,8 @@ import { syncPendingAttachmentUploads } from "../lib/attachment-client";
 import { queueAttachmentUpload, readPendingAttachmentUploads, type PendingAttachmentUpload } from "../lib/storage";
 import { dueTimeCaption, overdueDueCaption } from "../lib/date-labels";
 import { TabIcon, type NavigationSection } from "../components/TabIcon";
-import { CalendarTimeline, type CalendarTimelineItem } from "../components/CalendarTimeline";
+import { CalendarTimeline } from "../components/CalendarTimeline";
+import { calendarTimelineItemsForDay, type CalendarTimelineItem } from "../lib/calendar-timeline-items";
 import { CustomSelect, DateField, TimeField } from "../components/CustomFields";
 import { CalendarColorPicker } from "../components/CalendarColorPicker";
 import { OutlineImporter } from "../components/OutlineImporter";
@@ -721,33 +722,7 @@ export default function Home() {
       monthEventsByDay.set(day, [...(monthEventsByDay.get(day) ?? []), item]);
     }
   }
-  const timelineItems: CalendarTimelineItem[] = [
-    ...calendarEvents.flatMap(item => {
-      if (item.allDay || item.event.allDay || !item.startInstant || !item.endInstant) return [];
-      const event = item.event;
-      const color = activeCalendars.find(calendar => calendar.id === event.calendarId)?.color ?? defaultCalendarColor;
-      const start = localDate(new Date(item.startInstant)) < calendarSelectedDate
-        ? zonedDateTimeToInstant(calendarSelectedDate, "00:00", event.timeZone) ?? item.startInstant
-        : item.startInstant;
-      const lastEventDay = localDate(new Date(Date.parse(item.endInstant) - 1));
-      const end = lastEventDay > calendarSelectedDate
-        ? zonedDateTimeToInstant(addDays(calendarSelectedDate, 1), "00:00", event.timeZone) ?? item.endInstant
-        : item.endInstant;
-      return [{ id: `event:${event.id}:${item.occurrenceDate}`, title: event.title,
-        caption: `${timeLabel(start)} – ${timeLabel(end)} · Event`, start, end, color }];
-    }),
-    ...calendarAgenda.scheduled.map(({ block, task }) => ({
-      id: `block:${block.id}`, title: task.title,
-      caption: `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Planned work`,
-      start: block.startInstant, end: block.endInstant, color: "blue"
-    })),
-    ...calendarAgenda.due.filter(task => task.dueTime && !calendarAgenda.scheduled.some(item => item.task.id === task.id)).flatMap(task => {
-      const start = zonedDateTimeToInstant(calendarSelectedDate, task.dueTime!, task.dueTimeZone ?? zone());
-      if (!start) return [];
-      const end = new Date(Date.parse(start) + 30 * 60_000).toISOString();
-      return [{ id: `deadline:${task.id}`, title: task.title, caption: "Task deadline", start, end, color: "orange" }];
-    })
-  ];
+  const timelineItems = calendarTimelineItemsForDay(calendarViewData, calendarSelectedDate, today, calendarAgenda);
   const calendarMonthLabel = calendarMonthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const shiftCalendarMonth = (offset: number) => {
     const next = new Date(calendarMonthDate);
@@ -1021,19 +996,20 @@ export default function Home() {
       </div>
       <div id="dashboard-composer-panel" role="tabpanel" aria-label={dashboardComposerTab === "task" ? "Add task" : "Add calendar event"}>
         {dashboardComposerTab === "task" ? <TaskEditor key="dashboard-task" embedded initialDate={dashboardComposerDate} initialProject={dashboardComposerProject} data={data} earliestDate={historyStart(today)} onClose={() => setDashboardComposerOpen(false)} onSave={(task, reminderMinutes) => { mutate(value => saveTask(value, task, reminderMinutes)); setDashboardComposerOpen(false); }} onDelete={() => {}} />
-          : <CalendarEventEditor key="dashboard-event" embedded date={dashboardComposerDate ?? today} calendars={activeCalendars} onClose={() => setDashboardComposerOpen(false)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setDashboardComposerOpen(false); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={() => {}} />}
+          : <CalendarEventEditor key="dashboard-event" embedded showTimeline date={dashboardComposerDate ?? today} calendars={activeCalendars} data={calendarViewData} today={today} now={calendarNow} onClose={() => setDashboardComposerOpen(false)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setDashboardComposerOpen(false); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={() => {}} />}
       </div>
     </section></div>}
-    {eventEditing && <CalendarEventEditor key={`${eventEditing.id ?? "new"}:${eventEditing.date}`} event={data.calendarEvents.find(item => item.id === eventEditing.id)} date={eventEditing.date} calendars={activeCalendars} onClose={() => setEventEditing(null)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setEventEditing(null); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={id => { const stamp = new Date().toISOString(); mutate(value => ({ ...value, calendarEvents: value.calendarEvents.map(event => event.id === id ? { ...event, deletedAt: stamp, updatedAt: stamp, revision: event.revision + 1 } : event) })); setEventEditing(null); }} />}
+    {eventEditing && <CalendarEventEditor key={`${eventEditing.id ?? "new"}:${eventEditing.date}`} event={data.calendarEvents.find(item => item.id === eventEditing.id)} date={eventEditing.date} calendars={activeCalendars} data={calendarViewData} today={today} now={calendarNow} onClose={() => setEventEditing(null)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setEventEditing(null); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={id => { const stamp = new Date().toISOString(); mutate(value => ({ ...value, calendarEvents: value.calendarEvents.map(event => event.id === id ? { ...event, deletedAt: stamp, updatedAt: stamp, revision: event.revision + 1 } : event) })); setEventEditing(null); }} />}
     {scheduleEditing && <ScheduleEditor key={`${scheduleEditing.taskId}:${scheduleEditing.blockId ?? "new"}:${scheduleEditing.date}`} task={data.tasks.find(task => task.id === scheduleEditing.taskId)} block={data.blocks.find(item => item.id === scheduleEditing.blockId)} data={calendarViewData} initialDate={scheduleEditing.date} today={today} now={calendarNow} onClose={() => setScheduleEditing(null)} onSave={block => { setScheduleUndo(data.blocks); mutate(value => saveScheduledBlock(value, block)); setScheduleEditing(null); }} />}
   </main>;
 }
 
-function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTemplate, onDelete, embedded = false }: {
-  event?: CalendarEvent; date: string; calendars: Data["calendars"]; onClose: () => void;
+function CalendarEventEditor({ event, date, calendars, data, today, now, onClose, onSave, onSaveTemplate, onDelete, embedded = false, showTimeline = false }: {
+  event?: CalendarEvent; date: string; calendars: Data["calendars"]; data: Data; today: string; now: Date; onClose: () => void;
   onSave: (event: CalendarEvent) => void; onSaveTemplate: (event: CalendarEvent, name: string) => void; onDelete: (id: string) => void;
-  embedded?: boolean;
+  embedded?: boolean; showTimeline?: boolean;
 }) {
+  const submitted = useRef(false);
   const timeZone = event && !event.allDay ? event.timeZone : zone();
   const parts = (instant?: string) => {
     if (!instant) return { day: date, time: "09:00" };
@@ -1054,12 +1030,15 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTe
   const [weekdays, setWeekdays] = useState<number[]>(event?.recurrence?.weekdays ?? []);
   const [until, setUntil] = useState(event?.recurrence?.until ?? "");
   const [count, setCount] = useState(event?.recurrence?.count ? String(event.recurrence.count) : "");
+  const timelineItems = showTimeline ? calendarTimelineItemsForDay(data, startDate, today) : [];
+  const allDayEvents = showTimeline ? calendarEventsForDay(data, startDate).filter(item => item.allDay) : [];
   const startInstant = !allDay && startDate ? zonedDateTimeToInstant(startDate, startTime, timeZone) : undefined;
   const endInstant = !allDay && endDate ? zonedDateTimeToInstant(endDate, endTime, timeZone) : undefined;
   const invalid = !title.trim() || !calendarId || (allDay ? endDate < startDate : !startInstant || !endInstant || endInstant <= startInstant) ||
     (Boolean(repeatSelection && until) && until < startDate) || (Boolean(repeatSelection && count) && Number(count) < 1);
   const form = <form className={`editor${embedded ? " composerEditorEmbedded" : ""}`} onSubmit={e => {
-    e.preventDefault(); if (invalid) return;
+    e.preventDefault(); if (submitted.current || invalid) return;
+    submitted.current = true;
     const base = event ?? { ...newEntity(), calendarId, title, notes, recurrence: undefined };
     const repeatRule = recurrenceForRepeat(repeatSelection, weekdays);
     const common = { ...base, calendarId, title: title.trim(), notes, updatedAt: new Date().toISOString(), revision: event ? event.revision + 1 : 1,
@@ -1073,6 +1052,11 @@ function CalendarEventEditor({ event, date, calendars, onClose, onSave, onSaveTe
     <label className="checkLabel"><input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} /> All day</label>
     <div className={`fieldPair${embedded ? " dateTimePair" : ""}`}><label>Starts<DateField value={startDate} onChange={setStartDate} /></label><label>Ends {allDay ? "(inclusive)" : ""}<DateField value={endDate} onChange={setEndDate} /></label></div>
     {!allDay && <><div className={`fieldPair${embedded ? " dateTimePair" : ""}`}><label>Start time<TimeField value={startTime} onChange={setStartTime} /></label><label>End time<TimeField value={endTime} onChange={setEndTime} /></label></div><p className="hint">Time zone: {timeZone}. Repeated events keep this local wall time across daylight saving changes.</p></>}
+    {showTimeline && <section className="composerDayTimeline" aria-label={`Timeline for ${dateLabel(startDate)}`}>
+      <div className="composerDayTimelineHeading"><strong>Day timeline</strong><span>{dateLabel(startDate)}</span></div>
+      {!!allDayEvents.length && <div className="composerAllDayEvents"><strong>All day</strong>{allDayEvents.map(item => <span key={`${item.event.id}:${item.occurrenceDate}`}>{item.event.title}</span>)}</div>}
+      <CalendarTimeline key={startDate} day={startDate} items={timelineItems} now={now} />
+    </section>}
     <label>Repeat<CustomSelect value={repeatSelection} onChange={e => { const selection = e.target.value as RepeatSelection; setRepeatSelection(selection); const presetDays = defaultWeekdaysForRepeat(selection); if (presetDays) setWeekdays(presetDays); }}>{repeatOptionsFor(event?.recurrence).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</CustomSelect></label>
     {repeatUsesWeekdayPicker(repeatSelection) && <fieldset><legend>Repeat on</legend>{calendarWeekdays.map((name, day) => <label className="checkLabel" key={name}><input type="checkbox" checked={weekdays.includes(day)} onChange={e => setWeekdays(e.target.checked ? [...weekdays, day] : weekdays.filter(value => value !== day))} /> {name}</label>)}</fieldset>}
     {repeatSelection && <div className="fieldPair"><label>Repeat until<DateField value={until} min={startDate} onChange={setUntil} /></label><label>End after occurrences<input type="number" min="1" value={count} onChange={e => setCount(e.target.value)} placeholder="No limit" /></label></div>}
@@ -1182,6 +1166,7 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
   onSave: (task: Task, reminder: string) => void; onDelete: (id: string) => void;
   embedded?: boolean;
 }) {
+  const submitted = useRef(false);
   const reminder = data.reminders.find(r => r.taskId === task?.id && !r.deletedAt);
   const [title, setTitle] = useState(task?.title ?? "");
   const [notes, setNotes] = useState(task?.notes ?? "");
@@ -1199,7 +1184,8 @@ function TaskEditor({ task, initialDate, initialProject, data, earliestDate, onC
   const expiredDueDate = Boolean(dueDate && dueDate < earliestDate);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const content = <><form className={`editor${embedded ? " composerEditorEmbedded" : ""}`} onSubmit={e => {
-    e.preventDefault(); if (!title.trim() || expiredDueDate || (repeatSelection && (!dueDate || (repeatUntil && repeatUntil < dueDate) || (repeatCount !== "" && Number(repeatCount) < 1)))) return;
+    e.preventDefault(); if (submitted.current || !title.trim() || expiredDueDate || (repeatSelection && (!dueDate || (repeatUntil && repeatUntil < dueDate) || (repeatCount !== "" && Number(repeatCount) < 1)))) return;
+    submitted.current = true;
     const stamp = new Date().toISOString();
     const repeatRule = recurrenceForRepeat(repeatSelection, weekdays);
     onSave({ ...(task ?? newEntity()), title: title.trim(), notes, priority, projectId: projectId || undefined, sectionId: projectId && sectionId ? sectionId : undefined,

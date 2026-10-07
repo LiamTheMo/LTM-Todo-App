@@ -419,7 +419,13 @@ export async function acknowledgeSyncMutation(mutation: SyncMutation, revision: 
       const journal = transaction.objectStore(JOURNAL);
       const pending = journal.get(key);
       pending.onsuccess = () => {
-        if ((pending.result as JournalEntry | undefined)?.mutation.clientMutationId === mutation.clientMutationId) journal.delete(key);
+        const entry = pending.result as JournalEntry | undefined;
+        if (entry?.mutation.clientMutationId === mutation.clientMutationId) journal.delete(key);
+        else if (entry && entry.mutation.baseRevision < revision) {
+          // A newer local edit may have been coalesced while this mutation was in flight.
+          // Rebase it on the accepted revision so it does not conflict with our own write.
+          journal.put({ ...entry, mutation: { ...entry.mutation, baseRevision: revision } });
+        }
         transaction.objectStore(SYNC_META).put(revision, `revision:${key}`);
       };
       transaction.oncomplete = () => resolve();
