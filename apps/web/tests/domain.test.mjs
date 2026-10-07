@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, moveTaskToSection, newEntity, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, renameSection, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion } from "../lib/domain.ts";
+import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteProject, updateProject, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, moveTaskToSection, newEntity, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, renameSection, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "low", tagIds: [], sortKey: 1,
@@ -101,7 +101,7 @@ test("overdue includes recent unfinished deadlines and ignores older dates and s
     task("archived", "2026-09-10", { projectId: "archived" }), task("event", undefined));
   data.blocks.push({ id: "event-block", taskId: "event", startInstant: "2026-09-20T15:00:00Z",
     endInstant: "2026-09-20T16:00:00Z", timeZone: "America/Edmonton", createdAt: "", updatedAt: "", revision: 1 });
-  assert.deepEqual(overdueTasks(data, "2026-09-29").map(item => item.id), ["boundary", "newer"]);
+  assert.deepEqual(overdueTasks(data, "2026-09-29").map(item => item.id), ["boundary", "archived", "newer"]);
 });
 test("an overdue task stays on its due date and also appears in Overdue", () => {
   const data = emptyData();
@@ -302,13 +302,13 @@ test("reorder retains identity and section deletion moves tasks to project root"
   assert.equal(deleted.tasks[0].sectionId, undefined);
   assert.equal(deleted.tasks[0].id, "a");
 });
-test("archived project tasks leave active search and Dashboard, then return on restore", () => {
+test("legacy archived project tasks remain visible in search and Dashboard", () => {
   const data = emptyData();
   data.projects.push({ id: "p", name: "Paused", color: "#fff", sortKey: 0, createdAt: "", updatedAt: "", revision: 1,
     archivedAt: "2026-09-01T00:00:00Z" });
   data.tasks.push(task("archived", "2026-10-05", { projectId: "p" }), task("inbox", "2026-10-05"));
-  assert.deepEqual(filterTasks(data, { completed: false }).map(item => item.id), ["inbox"]);
-  assert.deepEqual(dashboardDays(data, "2026-10-05", 1)[0].due.map(item => item.id), ["inbox"]);
+  assert.deepEqual(filterTasks(data, { completed: false }).map(item => item.id), ["archived", "inbox"]);
+  assert.deepEqual(dashboardDays(data, "2026-10-05", 1)[0].due.map(item => item.id), ["archived", "inbox"]);
   data.projects[0].archivedAt = undefined;
   assert.deepEqual(filterTasks(data, { completed: false }).map(item => item.id), ["archived", "inbox"]);
   assert.deepEqual(dashboardDays(data, "2026-10-05", 1)[0].due.map(item => item.id), ["archived", "inbox"]);
@@ -317,7 +317,7 @@ test("project and section moves persist ordering, respect boundaries and isolate
   const data = emptyData();
   const entity = (id, extras = {}) => ({ id, name: id, sortKey: 0, createdAt: "", updatedAt: "", revision: 1, ...extras });
   data.projects.push(entity("a", { color: "#fff" }), entity("b", { color: "#fff" }),
-    entity("archived", { color: "#fff", archivedAt: "2026-09-01T00:00:00Z" }));
+    entity("archived", { color: "#fff", sortKey: 2, archivedAt: "2026-09-01T00:00:00Z" }));
   data.sections.push(entity("one", { projectId: "a" }), entity("two", { projectId: "a" }),
     entity("other", { projectId: "b" }));
   const reordered = reorderSection(reorderProject(data, "b", -1), "two", -1);
@@ -326,7 +326,7 @@ test("project and section moves persist ordering, respect boundaries and isolate
   assert.deepEqual(reordered.sections.filter(s => s.projectId === "b"), data.sections.filter(s => s.projectId === "b"));
   assert.deepEqual(reorderProject(reordered, "b", -1), reordered);
   assert.deepEqual(reorderSection(reordered, "two", -1), reordered);
-  assert.deepEqual(reorderProject(reordered, "archived", -1), reordered);
+  assert.notDeepEqual(reorderProject(reordered, "archived", -1), reordered);
   assert.equal(reordered.projects.find(p => p.id === "b").revision, 2);
   assert.equal(reordered.projects.find(p => p.id === "a").revision, 1);
   assert.equal(reordered.sections.find(s => s.id === "two").revision, 2);
@@ -369,4 +369,43 @@ test("dense section sort keys rebalance only their project group", () => {
   const moved = reorderSection(data, "c", -1);
   assert.deepEqual(moved.sections.filter(s => s.projectId === "p").sort((a, b) => a.sortKey - b.sortKey).map(s => s.id), ["a", "c", "b"]);
   assert.deepEqual(moved.sections.find(s => s.id === "other"), data.sections.find(s => s.id === "other"));
+});
+
+test("project editing validates input and preserves identity and sort order", () => {
+  const data = emptyData();
+  data.projects.push({ ...newEntity(), id: "p", name: "Original", color: "#c86b24", sortKey: 42 });
+  assert.equal(updateProject(data, "p", " ", "#ffffff"), data);
+  assert.equal(updateProject(data, "p", "New", "invalid"), data);
+  assert.equal(updateProject(data, "missing", "New", "#ffffff"), data);
+  const updated = updateProject(data, "p", "  Renamed  ", "#112233");
+  assert.equal(updated.projects[0].name, "Renamed");
+  assert.equal(updated.projects[0].color, "#112233");
+  assert.equal(updated.projects[0].sortKey, 42);
+  assert.equal(updated.projects[0].revision, 2);
+  assert.equal(updateProject(updated, "p", "Renamed", "#112233"), updated);
+});
+test("project deletion preserves tasks and history and clears project relationships", () => {
+  const data = emptyData();
+  data.projects.push({ ...newEntity(), id: "p", name: "Project", color: "#c86b24", sortKey: 0 });
+  data.sections.push({ ...newEntity(), id: "s", projectId: "p", name: "Section", sortKey: 0 });
+  data.tasks.push(task("open", "2026-10-07", { projectId: "p", sectionId: "s" }), task("done", undefined, { projectId: "p", completedAt: "2026-10-06" }), task("unrelated", undefined));
+  data.taskTemplates.push({ ...newEntity(), id: "template", name: "Template", title: "Task", notes: "", priority: "low", tagIds: [], projectId: "p", sectionId: "s" });
+  data.savedViews.push({ ...newEntity(), name: "View", query: "", projectId: "p" });
+  data.blocks.push({ ...newEntity(), taskId: "open", startInstant: "2026-10-07T10:00:00Z", endInstant: "2026-10-07T11:00:00Z", timeZone: "UTC" });
+  data.completions.push({ id: "completion", taskId: "done", completedAt: "2026-10-06" });
+  const deleted = deleteProject(data, "p");
+  assert.ok(deleted.projects[0].deletedAt);
+  assert.ok(deleted.sections[0].deletedAt);
+  assert.equal(deleted.tasks.length, 3);
+  assert.equal(deleted.tasks[0].projectId, undefined);
+  assert.equal(deleted.tasks[0].sectionId, undefined);
+  assert.equal(deleted.tasks[0].revision, 2);
+  assert.equal(deleted.tasks[1].completedAt, "2026-10-06");
+  assert.equal(deleted.tasks[2], data.tasks[2]);
+  assert.equal(deleted.taskTemplates[0].projectId, undefined);
+  assert.equal(deleted.taskTemplates[0].sectionId, undefined);
+  assert.equal(deleted.savedViews[0].projectId, null);
+  assert.equal(deleted.blocks, data.blocks);
+  assert.equal(deleted.completions, data.completions);
+  assert.equal(deleteProject(deleted, "p"), deleted);
 });
