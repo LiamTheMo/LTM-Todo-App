@@ -7,19 +7,20 @@ This checkpoint inherits the deployed v3.02 state. It addresses cross-device syn
 - Rebase a newer coalesced local mutation on the server revision returned for an earlier in-flight mutation from the same device. Preserve the newer local payload and mutation identity.
 - Ignore repeated submits from the task and calendar-event editors after the first valid submit, preventing rapid taps from creating records with separate IDs.
 - Show the selected start date's visible timed calendar events, planned work, and task deadlines in the Calendar composer. Show all-day events above the timeline. Changing the start date changes the displayed day's context.
-- Present the existing 1–250 item importer as a general batch import for tasks and calendar events, with mixed-item review, selection, destination choices, and duplicate skipping.
+- Expand Import into a multi-source batch workflow: combine up to 10 local files (50 MiB total), accept CSV/TSV with typed fields and task notes/priorities, support up to 1,000 candidates, and review 50 entries per page. Remove semester-year and semester-end setup; infer unqualified years and flag them for review.
 
 ## Acceptance and validation
 
 - [x] A deterministic storage test verifies that an in-flight save acknowledgement rebases a newer local edit without losing its payload.
 - [x] A deterministic timeline test verifies selected-day events, scheduled work, deadlines, and hidden-calendar filtering.
-- [x] Outline importer tests cover mixed task/event batches and duplicate skipping.
+- [x] Import tests cover mixed task/event CSV rows, quoted notes, task priorities, ambiguous dates, the 1,000-row cap, and duplicate skipping.
 - [x] Web tests (33/33), typecheck, lint, Cloudflare production build, dependency audit, and branch-flow validation pass locally.
-- [x] Version-branch CI (`web` and `docs`) passed, and the main-only Cloudflare deployment serves the updated Calendar composer assets.
+- [x] Version-branch CI (`web` and `docs`) and the main-only Cloudflare deployment were validated for the earlier sync/calendar-composer v3.03 changes.
+- [ ] The expanded multi-source Import flow still needs version-branch CI and main promotion.
 
 ## Manual validation
 
-On the installed iPhone and iPad apps, import a source containing multiple tasks and events, review the selected counts and destinations, and confirm duplicates are skipped. Create and edit tasks on each device, confirm the other device receives the changes, and try rapid repeated submits to confirm a single task or event is created. In the Calendar composer, inspect a day containing timed events, all-day events, planned work, and a deadline; change the start date and confirm the timeline updates to that day.
+On the installed iPhone and iPad apps, combine several source files (including CSV/TSV), review batches larger than 50 entries, check task notes/priorities and event destinations, and confirm duplicates are skipped. Create and edit tasks on each device, confirm the other device receives the changes, and try rapid repeated submits to confirm a single task or event is created. In the Calendar composer, inspect a day containing timed events, all-day events, planned work, and a deadline; change the start date and confirm the timeline updates to that day.
 
 ## Audit classification
 
@@ -27,4 +28,4 @@ On the installed iPhone and iPad apps, import a source containing multiple tasks
 
 **Requires Manual Validation:** cross-device behavior and mobile Calendar composer layout listed above.
 
-**Incomplete / Needs Work:** none known. The real-device sync and iPhone/iPad layout checks above remain open for manual acceptance.
+**Incomplete / Needs Work:** the expanded multi-source Import flow awaits version CI and production promotion. The real-device sync and iPhone/iPad layout checks above remain open for manual acceptance.

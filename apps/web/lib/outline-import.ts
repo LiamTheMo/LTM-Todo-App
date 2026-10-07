@@ -1,6 +1,6 @@
 import { addDays, historyStart, newEntity, saveTask, type Data, type CalendarEvent, type EventRecurrence } from "./domain.ts";
 import { saveCalendarEvent, zonedDateTimeToInstant } from "./calendar-domain.ts";
-import { validOutlineDate, type OutlineItem } from "./outline-parser.ts";
+import { MAX_OUTLINE_ITEMS, validOutlineDate, type OutlineItem } from "./outline-parser.ts";
 
 export type OutlineDestination = { calendarId: string; projectId?: string; timeZone: string; reminderMinutes?: string; readOnlyCalendarIds?: string[] };
 const titleKey = (title: string) => title.trim().replace(/\s+/g, " ").toLocaleLowerCase("en");
@@ -32,7 +32,7 @@ export function outlineItemError(item: OutlineItem, today: string): string | und
     if (Boolean(item.time) !== Boolean(item.endTime)) return "Provide both start and end times, or clear both for an all-day event.";
     if (item.endTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.endTime)) return "Choose a valid end time.";
     if (item.time && item.date === item.endDate && item.endTime <= item.time) return "End time must be after start time. Set next day's end date for overnight events.";
-    if (item.weekdays.length && (!validOutlineDate(item.until) || item.until < item.date || item.weekdays.some(day => !Number.isInteger(day) || day < 0 || day > 6))) return "Weekly events need valid weekdays and a semester end on or after their start.";
+    if (item.weekdays.length && (!validOutlineDate(item.until) || item.until < item.date || item.weekdays.some(day => !Number.isInteger(day) || day < 0 || day > 6))) return "Weekly events need valid weekdays and a repeat-until date on or after their start.";
   }
 }
 function buildEvent(item: OutlineItem, destination: OutlineDestination, now: Date): CalendarEvent {
@@ -57,7 +57,7 @@ export function isOutlineDuplicate(data: Data, item: OutlineItem, destination: O
 /** Validates the entire batch before returning a new Data value; source text/file bytes are never persisted. */
 export function importOutlineItems(data: Data, items: OutlineItem[], destination: OutlineDestination, today: string, now = new Date()): { data: Data; added: number; skipped: number } {
   const selected = items.filter(item => item.selected);
-  if (!selected.length || selected.length > 250) throw new Error("Select 1–250 items to import.");
+  if (!selected.length || selected.length > MAX_OUTLINE_ITEMS) throw new Error(`Select 1–${MAX_OUTLINE_ITEMS.toLocaleString()} items to import.`);
   try { new Intl.DateTimeFormat("en", { timeZone: destination.timeZone }); } catch { throw new Error("Choose a valid IANA time zone, such as America/Edmonton."); }
   if (destination.projectId && !data.projects.some(project => project.id === destination.projectId && !project.deletedAt && !project.archivedAt)) throw new Error("Choose an active project.");
   if (selected.some(item => item.kind === "event") && (!data.calendars.some(calendar => calendar.id === destination.calendarId && !calendar.deletedAt) || destination.readOnlyCalendarIds?.includes(destination.calendarId))) throw new Error("Choose an editable calendar.");
@@ -73,10 +73,10 @@ export function importOutlineItems(data: Data, items: OutlineItem[], destination
   for (const item of selected) {
     if (isOutlineDuplicate(next, item, destination)) { skipped++; continue; }
     if (item.kind === "task") {
-      next = saveTask(next, { ...newEntity(now), title: item.title.trim(), notes: "", priority: "low", tagIds: [],
+      next = saveTask(next, { ...newEntity(now), title: item.title.trim(), notes: item.notes || "", priority: item.priority || "low", tagIds: [],
         sortKey: next.tasks.length, projectId: destination.projectId || undefined, dueDate: item.date,
         dueTime: item.time || undefined, dueTimeZone: item.time ? destination.timeZone : undefined }, destination.reminderMinutes || "", today);
-    } else next = saveCalendarEvent(next, buildEvent(item, destination, now));
+    } else next = saveCalendarEvent(next, { ...buildEvent(item, destination, now), notes: item.notes || "" });
     added++;
   }
   return { data: next, added, skipped };

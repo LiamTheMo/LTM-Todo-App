@@ -1,17 +1,17 @@
 import { addDays, localDate, parseLocalDate } from "./domain.ts";
 
-export const MAX_OUTLINE_CHARACTERS = 500_000;
-export const MAX_OUTLINE_ITEMS = 250;
+export const MAX_OUTLINE_CHARACTERS = 5_000_000;
+export const MAX_PASTED_TEXT_CHARACTERS = 500_000;
+export const MAX_OUTLINE_ITEMS = 1_000;
 export type OutlineBlock = { text: string; heading?: boolean; page?: number };
 export type OutlineOptions = {
-  year: number; dateOrder?: "mdy" | "dmy"; referenceDate?: string;
-  termStart?: string; termEnd?: string; today?: string;
+  year?: number; dateOrder?: "mdy" | "dmy"; referenceDate?: string; today?: string;
 };
 export type OutlineItem = {
   id: string; selected: boolean; kind: "task" | "event"; title: string;
   date: string; endDate: string; time: string; endTime: string;
   weekdays: number[]; until: string; source: string; page?: number;
-  warnings: string[];
+  warnings: string[]; notes?: string; priority?: "low" | "medium" | "high";
 };
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const monthPattern = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
@@ -94,6 +94,7 @@ export function outlineTimes(text: string): { time: string; endTime: string; ran
     warning: matches.length > 2 ? "Multiple times found; verify the selected times." : undefined };
 }
 function datesIn(text: string, options: OutlineOptions) {
+  const inferredYear = options.year || new Date().getFullYear();
   const results: { value: string; raw: string; index: number }[] = [];
   const warnings: string[] = [];
   const occupied: [number, number][] = [];
@@ -103,15 +104,15 @@ function datesIn(text: string, options: OutlineOptions) {
     occupied.push([index, index + match[0].length]);
     const value = dateValue(year, month, day);
     if (!value) warnings.push(`Invalid date: ${match[0]}.`);
-    if (inferred) warnings.push(`Year taken from ${options.year}; verify the semester.`);
+    if (inferred) warnings.push(`Year inferred as ${year}; verify it against the source.`);
     results.push({ value, raw: match[0], index });
   };
   for (const match of text.matchAll(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/g)) add(match, +match[1], +match[2], +match[3], false);
   for (const match of text.matchAll(new RegExp(`\\b(${monthPattern})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(20\\d{2}))?\\b`, "gi"))) {
-    add(match, match[3] ? +match[3] : options.year, months.indexOf(match[1].slice(0, 3).toLowerCase()) + 1, +match[2], !match[3]);
+    add(match, match[3] ? +match[3] : inferredYear, months.indexOf(match[1].slice(0, 3).toLowerCase()) + 1, +match[2], !match[3]);
   }
   for (const match of text.matchAll(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthPattern})(?:,?\\s+(20\\d{2}))?\\b`, "gi"))) {
-    add(match, match[3] ? +match[3] : options.year, months.indexOf(match[2].slice(0, 3).toLowerCase()) + 1, +match[1], !match[3]);
+    add(match, match[3] ? +match[3] : inferredYear, months.indexOf(match[2].slice(0, 3).toLowerCase()) + 1, +match[1], !match[3]);
   }
   for (const match of text.matchAll(/\b(\d{1,2})[/.](\d{1,2})(?:[/.](20\d{2}|\d{2}))?\b/g)) {
     if (+match[1] <= 12 && +match[2] <= 12 && !options.dateOrder && +match[1] !== +match[2]) {
@@ -119,7 +120,7 @@ function datesIn(text: string, options: OutlineOptions) {
       add(match, 0, 0, 0, false);
     } else {
       const dmy = options.dateOrder === "dmy" || !options.dateOrder && +match[1] > 12;
-      const year = match[3] ? (+match[3] < 100 ? 2000 + +match[3] : +match[3]) : options.year;
+      const year = match[3] ? (+match[3] < 100 ? 2000 + +match[3] : +match[3]) : inferredYear;
       add(match, year, +(dmy ? match[2] : match[1]), +(dmy ? match[1] : match[2]), !match[3]);
     }
   }
@@ -142,22 +143,15 @@ function datesIn(text: string, options: OutlineOptions) {
   }
   const week = text.match(new RegExp(`\\bWeek\\s+(\\d{1,2})(?:\\s*[:,–-]?\\s*(${weekdayPattern}))?`, "i"));
   if (!results.length && week) {
-    let date = "";
-    if (options.termStart && validOutlineDate(options.termStart) && week[2] && +week[1] > 0) {
-      const firstMonday = addDays(options.termStart, -(parseLocalDate(options.termStart).getDay() + 6) % 7);
-      const weekday = dayNames.indexOf(week[2].slice(0, 3).toLowerCase());
-      date = addDays(firstMonday, (+week[1] - 1) * 7 + (weekday + 6) % 7);
-      warnings.push("Week 1 is the Monday-based week containing semester start; verify course week numbering.");
-    } else warnings.push("Week-based date needs semester start and an explicit weekday; choose a date in review.");
-    results.push({ value: date, raw: week[0], index: week.index ?? 0 });
+    warnings.push("Week-number dates need a real date from the source; choose the date in review.");
+    results.push({ value: "", raw: week[0], index: week.index ?? 0 });
   }
   return { dates: results.sort((a, b) => a.index - b.index), warnings: [...new Set(warnings)] };
 }
 
 /** Conservative deterministic extraction. All candidates remain editable before any persistence. */
 export function parseOutline(blocks: OutlineBlock[], options: OutlineOptions): OutlineItem[] {
-  if (!Number.isInteger(options.year) || options.year < 2000 || options.year > 2099) throw new Error("Choose a year from 2000 to 2099.");
-  if (blocks.reduce((total, block) => total + block.text.length, 0) > MAX_OUTLINE_CHARACTERS) throw new Error("Outline text is too large (maximum 500,000 characters).");
+  if (blocks.reduce((total, block) => total + block.text.length, 0) > MAX_OUTLINE_CHARACTERS) throw new Error("Import text is too large (maximum 5,000,000 characters).");
   const items: OutlineItem[] = [];
   let itemHeader = "";
   let itemName = "";
@@ -198,12 +192,9 @@ export function parseOutline(blocks: OutlineBlock[], options: OutlineOptions): O
     const kind = deadline.test(context) && !(/\b(?:exam|midterm|quiz|test|lecture|tutorial)\b/i.test(text) && !/\b(?:due|submit|deadline)\b/i.test(text)) ? "task" : eventWord.test(context) || weekly ? "event" : "task";
     let date = dates[0]?.value || "";
     if (weekly) {
-      if (options.termStart && validOutlineDate(options.termStart)) {
-        date = options.termStart > (options.today || localDate(new Date())) ? options.termStart : (options.today || localDate(new Date()));
-        for (let offset = 0; offset < 7; offset++) if (days.includes(parseLocalDate(addDays(date, offset)).getDay())) { date = addDays(date, offset); break; }
-        warnings.push("Recurring classes begin on the next matching day within the semester; verify holidays separately.");
-      } else warnings.push("Recurring classes need semester start.");
-      if (!options.termEnd || !validOutlineDate(options.termEnd)) warnings.push("Recurring classes need semester end.");
+      date = options.today || localDate(new Date());
+      for (let offset = 0; offset < 7; offset++) if (days.includes(parseLocalDate(addDays(date, offset)).getDay())) { date = addDays(date, offset); break; }
+      warnings.push("Review the start date and set a repeat-until date for this weekly event.");
     }
     if (dates.length > 2) warnings.push("Multiple dates found; verify the selected date range.");
     if (timing.warning) warnings.push(timing.warning);
@@ -213,11 +204,11 @@ export function parseOutline(blocks: OutlineBlock[], options: OutlineOptions): O
     const title = usefulTitle(currentTitle) && !dateLabelOnly ? currentTitle
       : fieldTitle ? assignmentTitle(itemHeader, fieldTitle)
         : headerTitle || (usefulTitle(previousTitle) ? previousTitle : "Course item");
-    const item: OutlineItem = { id: `outline-${index}`, selected: Boolean(date) && (!weekly || Boolean(options.termEnd)), kind,
+    const item: OutlineItem = { id: `outline-${index}`, selected: Boolean(date), kind,
       title: title.slice(0, 240), date, endDate: dates[1]?.value || date, time: timing.time, endTime: timing.endTime,
-      weekdays: weekly ? days : [], until: weekly ? options.termEnd || "" : "", source: text.slice(0, 2000), page: block.page, warnings: [...new Set(warnings)] };
+      weekdays: weekly ? days : [], until: "", source: text.slice(0, 2000), page: block.page, warnings: [...new Set(warnings)], priority: "low", notes: "" };
     if (!items.some(old => old.title.toLowerCase() === item.title.toLowerCase() && old.date === item.date && old.time === item.time && old.kind === item.kind)) items.push(item);
-    if (items.length > MAX_OUTLINE_ITEMS) throw new Error("More than 250 items found. Import a smaller section of the outline.");
+    if (items.length > MAX_OUTLINE_ITEMS) throw new Error(`More than ${MAX_OUTLINE_ITEMS.toLocaleString()} items found. Split the source into smaller imports.`);
     itemHeader = "";
     itemName = "";
     previous = "";
