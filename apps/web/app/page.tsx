@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type UIEvent } from "react";
-import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteProject, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, moveTaskToSection, newEntity, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, renameSection, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion, updateProject, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
+import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteProject, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, moveTaskToSection, newEntity, otherDashboardTasks as getOtherDashboardTasks, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, renameSection, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion, updateProject, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
 import { defaultCalendarColor, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, updateCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
 import { acknowledgeSyncMutation, applyRemoteSyncChanges, bindSyncAccount, getSyncCursor, getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, persistIcsCalendarCache, prepareInitialSyncUpload, readData, readIcsCalendarCache, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData, type CachedIcsCalendar, type SyncConflict } from "../lib/storage";
 import { getLocalSyncDeviceId, SyncClient, type SyncStatus } from "../lib/sync-client";
@@ -13,6 +13,7 @@ import type { AttachmentRecord } from "../lib/attachment-api";
 import { syncPendingAttachmentUploads } from "../lib/attachment-client";
 import { queueAttachmentUpload, readPendingAttachmentUploads, type PendingAttachmentUpload } from "../lib/storage";
 import { dueTimeCaption, overdueDueCaption } from "../lib/date-labels";
+import { completedTaskRetentionDays, setCompletedTaskRetentionDays } from "../lib/task-retention";
 import { ProjectEditor } from "../components/ProjectEditor";
 import { SettingsSection } from "../components/SettingsSection";
 import { TabIcon, type NavigationSection } from "../components/TabIcon";
@@ -398,7 +399,7 @@ export default function Home() {
   const mutate = useCallback((change: (value: Data) => Data) => {
     if (error || writeFailed.current) return;
     const previous = current.current;
-    const changed = pruneExpiredHistory(change(previous), today);
+    const changed = pruneExpiredHistory(change(previous), today, authSignInStatus === "signed_out" || syncStatus.state === "idle");
     if (changed === previous) return;
     const next = { ...changed, generation: previous.generation + 1 };
     current.current = next; setData(next);
@@ -409,7 +410,7 @@ export default function Home() {
       setError(cause instanceof Error && cause.message.includes("another tab") ? cause.message :
       "Changes could not be saved. Download an unsaved backup from Settings before reloading this tab.");
     });
-  }, [error, today]);
+  }, [error, today, authSignInStatus, syncStatus.state]);
   useEffect(() => {
     if (!accountSyncAvailable) return;
     let cancelled = false;
@@ -641,7 +642,7 @@ export default function Home() {
     } catch (cause) { setAttachmentStatus(cause instanceof Error ? cause.message : "The attachment could not be deleted."); }
   };
   useEffect(() => {
-    if (ready) mutate(value => pruneExpiredHistory(value, today));
+    if (ready) mutate(value => value);
   }, [ready, today, mutate]);
   const toggle = (task: Task) => mutate(value => {
     if (!task.completedAt) return completeTask(value, task.id);
@@ -751,7 +752,7 @@ export default function Home() {
     setCalendarSelectedDate(date);
   };
   const dashboard = dashboardDays(data, visibleDayStart, dashboardWindow, today);
-  const otherDashboardTasks = filterTasks(data, { today, dateScope: "undated" });
+  const otherDashboardTasks = getOtherDashboardTasks(data, today);
   const totalTaskCount = filterTasks(data, { today }).length;
   return <main className="shell">
     <aside className="sidebar"><h1><span className="brandMark" aria-hidden="true" /> LTM Todo</h1><nav aria-label="Main navigation">{views.map(item => <button key={item} className={view === item ? "active" : ""} aria-current={view === item ? "page" : undefined} aria-label={item === "Settings" ? "Settings" : undefined} title={item === "Settings" ? "Settings" : undefined} onClick={() => {
@@ -928,6 +929,7 @@ export default function Home() {
             }} /></label>
           </div><p role="status" aria-live="polite">{backupStatus}</p>
           </SettingsSection>
+          <SettingsSection title="Completed tasks" description="Choose how long finished tasks stay in your account."><label>Keep completed tasks<CustomSelect aria-label="Completed task retention" value={String(completedTaskRetentionDays(data))} onChange={event => mutate(value => setCompletedTaskRetentionDays(value, Number(event.target.value)))}>{Array.from({ length: 14 }, (_, index) => index + 1).map(days => <option key={days} value={days}>{days} {days === 1 ? "day" : "days"}{days === 7 ? " (default)" : ""}</option>)}</CustomSelect></label><p className="hint">Completed tasks are automatically deleted after this many days, measured from completion. This setting syncs across your devices. Cleanup runs when the app opens or syncs; recurring tasks stay active while their old completion history is removed. Reducing this period removes tasks already past the new limit.</p></SettingsSection>
           <SettingsSection title="Protected attachments" description="Files linked to your tasks."><p>Attachments are private to your account and linked to one of your tasks. Supported types: JPEG, PNG, WebP, PDF, and plain text, up to 10 MiB. Offline uploads remain in this device&apos;s private IndexedDB queue and retry after reconnecting.</p><div className="settingsActions"><label>Attach to task<CustomSelect aria-label="Attach to task" value={attachmentTaskId} onChange={event => setAttachmentTaskId(event.target.value)}><option value="">Choose a task</option>{data.tasks.filter(task => !task.deletedAt).map(task => <option key={task.id} value={task.id}>{task.title}</option>)}</CustomSelect></label><label>Upload file<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" disabled={!attachmentTaskId} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void uploadAttachment(file); }} /></label><button type="button" onClick={() => { void refreshAttachments(); }}>Refresh attachments</button></div>{pendingAttachments.map(attachment => <div className="tagLine" key={attachment.id}><span><strong>{attachment.fileName}</strong><small> · Saved on this device · {data.tasks.find(task => task.id === attachment.taskId)?.title ?? "Task"}</small></span></div>)}{attachments.map(attachment => <div className="tagLine" key={attachment.id}><span><strong>{attachment.fileName}</strong><small> · {Math.ceil(attachment.size / 1024).toLocaleString()} KiB · {data.tasks.find(task => task.id === attachment.taskId)?.title ?? "Task"}</small></span><div><button type="button" onClick={() => { void downloadAttachment(attachment); }}>Download</button><button type="button" className="danger" onClick={() => { void deleteAttachment(attachment); }}>Delete</button></div></div>)}<p role="status" aria-live="polite">{attachmentStatus}</p>
           </SettingsSection>
           <SettingsSection title="Task templates" description="Reusable starting points for tasks."><p>Templates create fresh tasks with their own IDs and completion history.</p>{data.taskTemplates.filter(template => !template.deletedAt).map(template => <div className="tagLine" key={template.id}><span><strong>{template.name}</strong><small> · {template.title}</small></span><button type="button" onClick={() => mutate(value => instantiateTaskTemplate(value, template.id))}>Create task</button></div>)}{!data.taskTemplates.some(template => !template.deletedAt) && <p>No task templates yet. Your saved templates will appear here.</p>}
