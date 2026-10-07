@@ -1,3 +1,4 @@
+import { completedTaskRetentionDays } from "./task-retention.ts";
 export type Priority = "low" | "medium" | "high";
 export type Frequency = "daily" | "weekly" | "monthly" | "yearly";
 export type Recurrence = {
@@ -69,7 +70,9 @@ export type EventTemplate = Entity & { name: string; calendarId: string; title: 
 export type Routine = Entity & { name: string; templateId: string; taskId: string; enabled: boolean; startDate: string; recurrence: Recurrence };
 const reminderFormatters = new Map<string, Intl.DateTimeFormat>();
 export type Completion = { id: string; taskId: string; occurrenceDate?: string; completedAt: string; clearedBlockIds?: string[] };
+export type AccountPreferences = Entity & { completedTaskRetentionDays: number };
 export type Data = {
+  preferences: AccountPreferences[];
   schemaVersion: 4;
   generation: number; // Monotonic document revision for cross-tab write detection.
   tasks: Task[];
@@ -92,7 +95,7 @@ export const defaultCalendar = (now = new Date()): LocalCalendar => ({
   createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1
 });
 export const emptyData = (): Data => ({
-  schemaVersion: 4, generation: 0, tasks: [], projects: [], sections: [], tags: [], blocks: [],
+  schemaVersion: 4, generation: 0, preferences: [], tasks: [], projects: [], sections: [], tags: [], blocks: [],
   calendars: [defaultCalendar()], calendarEvents: [], taskTemplates: [], eventTemplates: [], routines: [], reminders: [], completions: [], savedViews: []
 });
 export const newEntity = (now = new Date()): Entity => ({
@@ -429,10 +432,12 @@ export function overdueTasks(data: Data, today = localDate(new Date())): Task[] 
     .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || taskOrder(a, b));
 }
 
-/** Permanently remove task history older than the rolling 31 calendar days kept on the Dashboard. */
-export function pruneExpiredHistory(data: Data, today = localDate(new Date())): Data {
+/** Remove expired completed tasks and old Dashboard history; persistence journals deletions for sync. */
+export function pruneExpiredHistory(data: Data, today = localDate(new Date()), completedCleanup = true): Data {
   const cutoff = historyStart(today);
+  const completedCutoff = addDays(today, -completedTaskRetentionDays(data));
   const expiredTaskIds = new Set(data.tasks.filter(task => {
+    if (task.completedAt && !task.deletedAt) return completedCleanup && localDate(new Date(task.completedAt)) <= completedCutoff;
     if (task.dueDate && task.dueDate < cutoff) return true;
     if (task.deletedAt && localDate(new Date(task.deletedAt)) < cutoff) return true;
     if (!task.dueDate && task.completedAt) {
@@ -461,7 +466,7 @@ export function pruneExpiredHistory(data: Data, today = localDate(new Date())): 
   const completions = data.completions.filter(completion => {
     if (!existingTaskIds.has(completion.taskId)) return false;
     const completionDay = completion.occurrenceDate ?? localDate(new Date(completion.completedAt));
-    return completionDay >= cutoff;
+    return completionDay >= cutoff && (!completedCleanup || localDate(new Date(completion.completedAt)) > completedCutoff);
   });
   if (completions.length !== data.completions.length) changed = true;
   const retainedBlockIds = new Set(blocks.map(block => block.id));
@@ -606,4 +611,9 @@ export function filterTasks(data: Data, filter: TaskFilter): Task[] {
         filter.dateScope === "overdue" ? task.dueDate < today && isInRetainedHistory(task.dueDate, today) : task.dueDate > today)))) &&
     (!query || `${task.title} ${task.notes}`.toLocaleLowerCase().includes(query))
   ).sort(taskOrder);
+}
+
+/** Keep the existing priority/order within each completion group. */
+export function otherDashboardTasks(data: Data, today: string): Task[] {
+  return filterTasks(data, { today, dateScope: "undated" }).sort((a, b) => Number(Boolean(a.completedAt)) - Number(Boolean(b.completedAt)));
 }
