@@ -99,6 +99,28 @@ test("remote changes apply without being re-enqueued; local pending edits are pr
   assert.equal(await hasSyncConflicts(), false);
 });
 
+test("overlapping sync pages do not roll back newer remote data or conflict with its acknowledged base", async () => {
+  const id = "f106a9a8-a363-4fc8-979f-1604211c4e53";
+  const remoteV2 = { ...task("Remote revision 2"), id, revision: 2 };
+  const remoteV1 = { ...task("Remote revision 1"), id, revision: 1 };
+  await applyRemoteSyncChanges([
+    { entityType: "tasks", entityId: id, revision: 2, updatedAt: stamp, payload: remoteV2 },
+    { entityType: "tasks", entityId: id, revision: 1, updatedAt: stamp, payload: remoteV1 }
+  ]);
+  await applyRemoteSyncChanges([{ entityType: "tasks", entityId: id, revision: 1, updatedAt: stamp, payload: remoteV1 }]);
+  let data = await readData();
+  assert.equal(data.tasks.find(item => item.id === id).title, "Remote revision 2");
+
+  await writeData({ ...data, generation: data.generation + 1,
+    tasks: data.tasks.map(item => item.id === id ? { ...item, title: "New local edit", revision: item.revision + 1 } : item) }, data.generation);
+  const [pending] = (await readPendingSyncMutations(12)).filter(item => item.entityId === id);
+  assert.equal(pending.baseRevision, 2);
+  await applyRemoteSyncChanges([{ entityType: "tasks", entityId: id, revision: 2, updatedAt: stamp, payload: remoteV2 }]);
+  data = await readData();
+  assert.equal(data.tasks.find(item => item.id === id).title, "New local edit");
+  assert.equal(await hasSyncConflicts(), false);
+});
+
 test("choosing the remote side atomically replaces the local entity and clears its pending mutation", async () => {
   const remote = { ...task("Remote revision"), id: "f106a9a8-a363-4fc8-979f-1604211c4e53", revision: 9 };
   await applyRemoteSyncChanges([{ entityType: "tasks", entityId: remote.id, revision: 9, updatedAt: stamp, payload: remote }]);
