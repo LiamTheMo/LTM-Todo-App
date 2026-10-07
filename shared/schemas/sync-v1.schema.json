@@ -16,7 +16,7 @@
   "$defs": {
     "uuid": { "type": "string", "format": "uuid" },
     "entityType": {
-      "enum": ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews"]
+      "enum": ["tasks", "projects", "sections", "tags", "blocks", "calendars", "calendarEvents", "taskTemplates", "eventTemplates", "routines", "reminders", "completions", "savedViews", "preferences"]
     },
     "common": {
       "type": "object",
@@ -57,6 +57,7 @@
         { "if": { "properties": { "entityType": { "const": "routines" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/routinePayload" } } } },
         { "if": { "properties": { "entityType": { "const": "reminders" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/reminderPayload" } } } },
         { "if": { "properties": { "entityType": { "const": "completions" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/completionPayload" } } } },
+        { "if": { "properties": { "entityType": { "const": "preferences" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/preferencesPayload" } } } },
         { "if": { "properties": { "entityType": { "const": "savedViews" } }, "required": ["entityType"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/savedViewPayload" } } } }
       ]
     },
@@ -109,6 +110,7 @@
     "routinePayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "templateId", "taskId", "enabled", "startDate", "recurrence"], "properties": { "name": { "type": "string", "minLength": 1 }, "templateId": { "$ref": "#/$defs/uuid" }, "taskId": { "$ref": "#/$defs/uuid" }, "enabled": { "type": "boolean" }, "startDate": { "$ref": "#/$defs/date" }, "recurrence": { "$ref": "#/$defs/taskRecurrence" } } } ], "unevaluatedProperties": false },
     "reminderPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["taskId", "minutesBefore", "enabled"], "properties": { "taskId": { "$ref": "#/$defs/uuid" }, "minutesBefore": { "type": "integer", "minimum": 0 }, "enabled": { "type": "boolean" } } } ], "unevaluatedProperties": false },
     "completionPayload": { "type": "object", "additionalProperties": false, "required": ["id", "taskId", "completedAt"], "properties": { "id": { "$ref": "#/$defs/uuid" }, "taskId": { "$ref": "#/$defs/uuid" }, "occurrenceDate": { "$ref": "#/$defs/date" }, "completedAt": { "$ref": "#/$defs/instant" }, "clearedBlockIds": { "type": "array", "items": { "$ref": "#/$defs/uuid" } } } },
+    "preferencesPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["completedTaskRetentionDays"], "properties": { "id": { "const": "00000000-0000-4000-8000-000000000002" }, "completedTaskRetentionDays": { "type": "integer", "minimum": 1, "maximum": 14 } } } ], "unevaluatedProperties": false },
     "savedViewPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "query"], "properties": { "name": { "type": "string", "minLength": 1 }, "query": { "type": "string" }, "projectId": { "anyOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] }, "priority": { "enum": ["all", "none", "low", "medium", "high"] }, "tagId": { "$ref": "#/$defs/uuid" }, "dateScope": { "enum": ["all", "overdue", "today", "upcoming", "undated"] }, "completed": { "anyOf": [{ "type": "boolean" }, { "const": "all" }] } } } ], "unevaluatedProperties": false }
   }
 }
