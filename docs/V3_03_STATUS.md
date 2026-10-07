@@ -13,7 +13,7 @@ This checkpoint inherits the deployed v3.02 state. It addresses cross-device syn
 - [x] A deterministic storage test verifies that an in-flight save acknowledgement rebases a newer local edit without losing its payload.
 - [x] A deterministic timeline test verifies selected-day events, scheduled work, deadlines, and hidden-calendar filtering.
 - [x] Web tests (33/33), typecheck, lint, Cloudflare production build, dependency audit, and branch-flow validation pass locally.
-- [ ] Version-branch CI and the main-only Cloudflare deployment pass.
+- [x] Version-branch CI (`web` and `docs`) passed, and the main-only Cloudflare deployment serves the updated Calendar composer assets.
 
 ## Manual validation
 
@@ -21,8 +21,8 @@ On the installed iPhone and iPad apps, create and edit tasks on each device, con
 
 ## Audit classification
 
-**Completed / Passed:** implementation and all listed local automated checks pass.
+**Completed / Passed:** implementation, all listed local automated checks, version-branch CI, main promotion, and the production asset smoke check.
 
 **Requires Manual Validation:** cross-device behavior and mobile Calendar composer layout listed above.
 
-**Incomplete / Needs Work:** any failing automated check or deployment gate remains a release blocker and must be documented here before promotion.
+**Incomplete / Needs Work:** none known. The real-device sync and iPhone/iPad layout checks above remain open for manual acceptance.
