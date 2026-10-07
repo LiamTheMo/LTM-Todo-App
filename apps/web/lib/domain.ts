@@ -525,9 +525,30 @@ function reorderEntities<T extends Entity & { sortKey: number }>(items: T[], id:
     ...item, sortKey: positions.get(item.id)!, updatedAt: stamp, revision: item.revision + 1
   } : item);
 }
+export function updateProject(data: Data, id: string, name: string, color: string): Data {
+  const project = data.projects.find(item => item.id === id && !item.deletedAt);
+  const normalized = name.trim();
+  if (!project || !normalized || !/^#[0-9a-f]{6}$/i.test(color)) return data;
+  if (project.name === normalized && project.color === color && !project.archivedAt) return data;
+  const stamp = new Date().toISOString();
+  return { ...data, projects: data.projects.map(item => item.id === id
+    ? { ...item, name: normalized, color, archivedAt: undefined, updatedAt: stamp, revision: item.revision + 1 } : item) };
+}
+export function deleteProject(data: Data, id: string): Data {
+  if (!data.projects.some(item => item.id === id && !item.deletedAt)) return data;
+  const stamp = new Date().toISOString();
+  const detached = <T extends Entity & { projectId?: string; sectionId?: string }>(items: T[]): T[] => items.map(item => item.projectId === id
+    ? { ...item, projectId: undefined, sectionId: undefined, updatedAt: stamp, revision: item.revision + 1 } : item);
+  return { ...data,
+    projects: data.projects.map(item => item.id === id ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item),
+    sections: data.sections.map(item => item.projectId === id && !item.deletedAt ? { ...item, deletedAt: stamp, updatedAt: stamp, revision: item.revision + 1 } : item),
+    tasks: detached(data.tasks), taskTemplates: detached(data.taskTemplates),
+    savedViews: data.savedViews.map(item => item.projectId === id ? { ...item, projectId: null, updatedAt: stamp, revision: item.revision + 1 } : item)
+  };
+}
 export function reorderProject(data: Data, id: string, direction: -1 | 1): Data {
-  if (!data.projects.some(project => project.id === id && !project.deletedAt && !project.archivedAt)) return data;
-  const active = data.projects.filter(project => !project.deletedAt && !project.archivedAt);
+  if (!data.projects.some(project => project.id === id && !project.deletedAt)) return data;
+  const active = data.projects.filter(project => !project.deletedAt);
   const reordered = reorderEntities(active, id, direction);
   if (reordered === active) return data;
   const changed = new Map(reordered.map(project => [project.id, project]));
@@ -552,7 +573,7 @@ export function renameSection(data: Data, id: string, name: string): Data {
 }
 export function moveTaskToSection(data: Data, taskId: string, projectId: string, sectionId?: string): Data {
   const task = data.tasks.find(item => item.id === taskId && !item.deletedAt);
-  const project = data.projects.find(item => item.id === projectId && !item.deletedAt && !item.archivedAt);
+  const project = data.projects.find(item => item.id === projectId && !item.deletedAt);
   const section = sectionId && data.sections.find(item => item.id === sectionId && item.projectId === projectId && !item.deletedAt);
   if (!task || !project || (sectionId && !section)) return data;
   if (task.projectId === projectId && task.sectionId === sectionId) return data;
@@ -574,10 +595,8 @@ export type TaskFilter = { query?: string; projectId?: string | null; tagId?: st
   completed?: boolean; dateScope?: DateScope; today?: string };
 export function filterTasks(data: Data, filter: TaskFilter): Task[] {
   const query = filter.query?.trim().toLocaleLowerCase();
-  const archived = new Set(data.projects.filter(project => project.archivedAt && !project.deletedAt).map(project => project.id));
   const today = filter.today ?? localDate(new Date());
   return data.tasks.filter(task => !task.deletedAt &&
-    (!task.projectId || !archived.has(task.projectId)) &&
     (filter.completed === undefined || Boolean(task.completedAt) === filter.completed) &&
     (filter.projectId === null ? !task.projectId : !filter.projectId || task.projectId === filter.projectId) &&
     (!filter.tagId || task.tagIds.includes(filter.tagId)) &&
