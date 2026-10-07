@@ -514,6 +514,7 @@ export async function applyRemoteSyncChanges(changes: SyncChange[]): Promise<voi
       const conflicts = transaction.objectStore(CONFLICTS);
       const currentData = stateStore.get(KEY);
       const pendingEntries = journal.getAll();
+      const revisionRequests = changes.map(change => syncMeta.get(`revision:${entityKey(change.entityType, change.entityId)}`));
       currentData.onerror = () => transaction.abort();
       pendingEntries.onerror = () => transaction.abort();
       transaction.oncomplete = () => resolve();
@@ -521,17 +522,29 @@ export async function applyRemoteSyncChanges(changes: SyncChange[]): Promise<voi
       transaction.onabort = () => reject(transaction.error);
       let applied = false;
       const applyIfReady = () => {
-        if (applied || currentData.readyState !== "done" || pendingEntries.readyState !== "done") return;
+        if (applied || currentData.readyState !== "done" || pendingEntries.readyState !== "done" ||
+            revisionRequests.some(request => request.readyState !== "done")) return;
         applied = true;
         try {
           let data = normalizeData(currentData.result);
           const pendingByKey = new Map((pendingEntries.result as JournalEntry[]).map(item => [item.key, item]));
+          const knownRevisions = new Map(changes.map((change, index) => [
+            entityKey(change.entityType, change.entityId), Number(revisionRequests[index].result ?? 0)
+          ]));
           for (const change of changes) {
             const key = entityKey(change.entityType, change.entityId);
+            const knownRevision = knownRevisions.get(key) ?? 0;
+            // Multiple tabs can pull overlapping pages. Never let an older page roll back newer state.
+            if (change.revision <= knownRevision) continue;
+            knownRevisions.set(key, change.revision);
             const pending = pendingByKey.get(key);
             syncMeta.put(change.revision, `revision:${key}`);
             if (pending) {
-              conflicts.put({ key, mutation: pending.mutation, current: change, foundAt: new Date().toISOString() } satisfies SyncConflict);
+              // A pending edit already based on this revision is newer local work, not a conflict
+              // with the accepted mutation that may be replayed from another tab's cursor.
+              if (pending.mutation.baseRevision < change.revision) {
+                conflicts.put({ key, mutation: pending.mutation, current: change, foundAt: new Date().toISOString() } satisfies SyncConflict);
+              }
               continue;
             }
             const type = change.entityType as typeof collectionTypes[number];
@@ -558,6 +571,7 @@ export async function applyRemoteSyncChanges(changes: SyncChange[]): Promise<voi
       };
       currentData.onsuccess = applyIfReady;
       pendingEntries.onsuccess = applyIfReady;
+      revisionRequests.forEach(request => { request.onsuccess = applyIfReady; });
     });
   } finally { db.close(); }
 }
