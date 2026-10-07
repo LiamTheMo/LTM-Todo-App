@@ -139,9 +139,18 @@
 
 button.danger{color:#a83728!important}
 
-.dashboardHome .otherTasksPanel{border:1px solid #e1dbd3;border-radius:14px;background:#fff}
+/* A compact, unified header that remains visible while undated tasks scroll. */
+.dashboardHome .otherTasksPanel{min-height:0;border:1px solid #e1dbd3;border-radius:14px;background:#fff}
 .dashboardHome .otherTasksPanel .group{padding:8px 16px}
-.dashboardHome .otherTasksPanel h4{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;background:#fff}
+.dashboardHome .otherTasksPanel details>.otherTasksSummary{position:sticky;top:0;z-index:2;display:flex;align-items:center;flex-wrap:nowrap;min-height:44px;margin:0;padding:12px 48px 12px 16px;background:#fffaf4;transition:background-color 140ms ease}
+.dashboardHome .otherTasksPanel details>.otherTasksSummary:hover{background:#f8eee1}
+.dashboardHome .otherTasksPanel details>.otherTasksSummary h4{position:static;display:inline-flex;align-items:baseline;justify-content:flex-start;gap:.35em;margin:0;padding:0;background:transparent;color:#62564b;font-size:12px;font-weight:700;letter-spacing:.06em;line-height:20px}
+.dashboardHome .otherTasksPanel .otherTasksSummary h4 span{color:#897969;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:0}
+.dashboardHome .otherTasksPanel .otherTasksSummary .hint{display:none}
+.dashboardHome .otherTasksPanel details>.otherTasksSummary:after{content:"";position:absolute;right:20px;top:50%;display:block;width:8px;height:8px;border-right:2px solid #9f6a3f;border-bottom:2px solid #9f6a3f;border-radius:0;background:transparent;transform:translateY(-65%) rotate(45deg)}
+.dashboardHome .otherTasksPanel details[open]>.otherTasksSummary{border-bottom:1px solid #eee7df}
+.dashboardHome .otherTasksPanel details[open]>.otherTasksSummary:after{content:"";transform:translateY(-35%) rotate(225deg)}
+.dashboardHome .otherTasksPanel details:not([open])>.otherTasksSummary{padding-top:12px;padding-bottom:12px}
 
 .calendarManagementActions,.calendarEditActions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .calendarManagementActions button,.calendarEditActions button:not(.calendarEditButton){border:0;border-radius:7px;padding:6px 9px;background:#f4e5d2;color:#8b4b14;font-size:11px;font-weight:650;cursor:pointer}
