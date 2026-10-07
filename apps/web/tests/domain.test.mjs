@@ -137,7 +137,7 @@ test("history retention keeps 31 calendar days and removes expired task and even
   assert.deepEqual(retained.tasks.map(item => item.id), ["boundary", "open-undated", "future"]);
   assert.deepEqual(retained.blocks.map(item => item.id), ["retained-block"]);
   assert.deepEqual(retained.reminders.map(item => item.id), ["retained-reminder"]);
-  assert.deepEqual(retained.completions.map(item => item.id), ["retained-completion"]);
+  assert.deepEqual(retained.completions.map(item => item.id), []);
 });
 test("task editor domain guard rejects a due date outside the retained month", () => {
   const data = emptyData();

@@ -1,6 +1,6 @@
 /** Parents precede dependants in both upload batches and paged snapshots. */
 export const SYNC_ENTITY_ORDER = [
-  "calendars", "projects", "tags", "sections", "tasks", "taskTemplates", "eventTemplates",
+  "preferences", "calendars", "projects", "tags", "sections", "tasks", "taskTemplates", "eventTemplates",
   "calendarEvents", "blocks", "reminders", "routines", "completions", "savedViews"
 ] as const;
 
