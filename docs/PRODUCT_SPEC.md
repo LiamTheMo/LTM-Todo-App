@@ -36,3 +36,8 @@ Subscribed feed events are external and read-only in LTM. Refreshes update exist
 
 ## Explicit non-goals through v3
 Advertising, paid feature gates, Google-account OAuth or write-back in the initial v3 release, AI-generated planning, enterprise administration, public social feeds.
+
+## Workspace menu design
+Tasks uses Open and Completed cards with quiet header counts, closest-deadline ordering, a search field with a clear action, contextual empty states, and an Add action in the Open header. Projects uses a card overview and separate section panels with task counts, inline Add/Edit controls, and visible empty drop areas. Creating projects stays in the overview; a selected project shows its own sections instead.
+
+Settings is divided into keyboard-accessible collapsible groups with short descriptions. Account sync and push reminders open initially; storage, attachments, templates, routines, tags, archives, sessions, and devices remain available by expanding their group. Preserve disclosure state while data and sync status update. Calendar keeps its month grid and day timeline, with wrapping toolbars, calendar chips, and a distinct selected-day header. Editors and picker menus share consistent spacing, clear close/save/cancel controls, and responsive touch targets. Keep the established Dashboard layout and warning palette.
