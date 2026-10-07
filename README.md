@@ -210,6 +210,7 @@ The deploy script checks Cloudflare's build context and rejects any branch other
 | `v3.00` | Accounts, cross-device sync, backups, protected attachments, and optional read-only ICS subscriptions |
 | `v3.01` | Course-outline import and updated repository/product documentation |
 | `v3.02` | Dashboard quick-add and scheduling refinements, task due-date ordering, undated-task panel, and mobile form polish |
+| `v3.03` | Cross-device sync recovery and selected-day event timeline in the Calendar composer |
 
 All `vX.XX` branches are permanent historical checkpoints. Development happens on a descriptive temporary branch created from the intended version:
 
@@ -241,3 +242,4 @@ Imported calendar events do not create event-specific push reminders; the import
 - [v3.00 delivery and manual acceptance](docs/V3_STATUS.md)
 - [v3.01 outline import](docs/V3_01_STATUS.md)
 - [v3.02 Dashboard status](docs/V3_02_STATUS.md)
+- [v3.03 sync and Calendar composer](docs/V3_03_STATUS.md)

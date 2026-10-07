@@ -165,6 +165,13 @@ button.danger{color:#a83728!important}
 .dashboardComposerTabs button{flex:1;min-height:42px;border:0;border-radius:9px;background:transparent;color:#756c61;font-weight:700}
 .dashboardComposerTabs button[aria-selected="true"]{background:#fff;color:#8b4b14;box-shadow:0 2px 7px #4d39220d}
 .composerEditorEmbedded{width:100%;max-height:none;overflow:visible;border-radius:0;background:transparent;padding:0;box-shadow:none}
+.composerDayTimeline{display:grid;gap:8px;padding-top:4px}
+.composerDayTimelineHeading{display:flex;align-items:baseline;justify-content:space-between;color:#51473d;font-size:13px}
+.composerDayTimelineHeading span{color:#8c837a;font-size:12px}
+.composerDayTimeline .calendarTimeline{height:250px}
+.composerAllDayEvents{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px}
+.composerAllDayEvents strong{color:#756c61;margin-right:2px}
+.composerAllDayEvents span{border-radius:999px;background:#f7f1ea;padding:4px 8px;color:#51473d}
 .scheduleDayEditor{width:min(100%,840px);max-height:min(92dvh,980px);gap:12px}
 .scheduleDayEditor .editorHead{align-items:flex-start}
 .scheduleDayEditor .editorHead h2{margin-top:3px;font-size:24px}

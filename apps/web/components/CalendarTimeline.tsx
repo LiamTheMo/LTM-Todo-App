@@ -1,15 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-
-export type CalendarTimelineItem = {
-  id: string;
-  title: string;
-  caption: string;
-  start: string;
-  end: string;
-  color: string;
-};
+import type { CalendarTimelineItem } from "../lib/calendar-timeline-items";
+export type { CalendarTimelineItem } from "../lib/calendar-timeline-items";
 
 const hourHeight = 52;
 const minuteOfDay = (instant: string) => {
