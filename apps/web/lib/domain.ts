@@ -542,6 +542,26 @@ export function reorderSection(data: Data, id: string, direction: -1 | 1): Data 
   const changed = new Map(reordered.map(item => [item.id, item]));
   return { ...data, sections: data.sections.map(item => changed.get(item.id) ?? item) };
 }
+export function renameSection(data: Data, id: string, name: string): Data {
+  const normalized = name.trim();
+  const section = data.sections.find(item => item.id === id && !item.deletedAt);
+  if (!section || !normalized || normalized === section.name) return data;
+  const stamp = new Date().toISOString();
+  return { ...data, sections: data.sections.map(item => item.id === id
+    ? { ...item, name: normalized, updatedAt: stamp, revision: item.revision + 1 } : item) };
+}
+export function moveTaskToSection(data: Data, taskId: string, projectId: string, sectionId?: string): Data {
+  const task = data.tasks.find(item => item.id === taskId && !item.deletedAt);
+  const project = data.projects.find(item => item.id === projectId && !item.deletedAt && !item.archivedAt);
+  const section = sectionId && data.sections.find(item => item.id === sectionId && item.projectId === projectId && !item.deletedAt);
+  if (!task || !project || (sectionId && !section)) return data;
+  if (task.projectId === projectId && task.sectionId === sectionId) return data;
+  const target = data.tasks.filter(item => !item.deletedAt && item.projectId === projectId && item.sectionId === sectionId);
+  const sortKey = Math.max(0, ...target.map(item => item.sortKey)) + 1024;
+  const stamp = new Date().toISOString();
+  return { ...data, tasks: data.tasks.map(item => item.id === taskId
+    ? { ...item, projectId, sectionId, sortKey, updatedAt: stamp, revision: item.revision + 1 } : item) };
+}
 export function deleteSection(data: Data, id: string): Data {
   const stamp = new Date().toISOString();
   return { ...data,

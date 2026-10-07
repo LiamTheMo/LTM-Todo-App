@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, newEntity, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion } from "../lib/domain.ts";
+import { addDays, calendarGridDates, bulkCompleteTasks, bulkSetPriority, completeTask, createRoutine, dashboardDays, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, moveTaskToSection, newEntity, nextOccurrence, overdueTasks, pendingReminderTriggers, scheduledReminderTriggers, pruneExpiredHistory, renameSection, reorderProject, reorderSection, reorderTask, restoreScheduledBlock, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion } from "../lib/domain.ts";
 
 const task = (id, dueDate, extras = {}) => ({
   id, title: id, notes: "", priority: "low", tagIds: [], sortKey: 1,
@@ -331,6 +331,22 @@ test("project and section moves persist ordering, respect boundaries and isolate
   assert.equal(reordered.projects.find(p => p.id === "a").revision, 1);
   assert.equal(reordered.sections.find(s => s.id === "two").revision, 2);
   assert.equal(reordered.sections.find(s => s.id === "one").revision, 1);
+});
+test("dragging a task moves it to a valid project section and renaming a section persists", () => {
+  const data = emptyData();
+  data.projects.push({ id: "p", name: "Project", color: "#fff", sortKey: 0, createdAt: "", updatedAt: "", revision: 1 });
+  data.sections.push({ id: "s", projectId: "p", name: "Old name", sortKey: 0, createdAt: "", updatedAt: "", revision: 1 });
+  data.tasks.push(task("t", undefined, { title: "Move me", sortKey: 0 }));
+  const moved = moveTaskToSection(data, "t", "p", "s");
+  assert.equal(moved.tasks[0].projectId, "p");
+  assert.equal(moved.tasks[0].sectionId, "s");
+  assert.equal(moved.tasks[0].revision, 2);
+  assert.equal(moveTaskToSection(moved, "t", "p", "missing"), moved);
+  assert.equal(moveTaskToSection(moved, "t", "p", "s"), moved);
+  const renamed = renameSection(moved, "s", "  New name  ");
+  assert.equal(renamed.sections[0].name, "New name");
+  assert.equal(renamed.sections[0].revision, 2);
+  assert.equal(renameSection(renamed, "s", "   "), renamed);
 });
 test("global structured filters combine status, project, tag, priority and date without stale indexes", () => {
   const data = emptyData();
