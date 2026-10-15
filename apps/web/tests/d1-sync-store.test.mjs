@@ -163,7 +163,9 @@ test("journal compaction waits for active device acknowledgements and advances a
     const deviceId = "af73a551-d5c7-4241-8483-b22c4d75b8c9";
     d1.db.prepare(`INSERT INTO sync_devices(account_id,device_id,display_name,client_kind,acknowledged_sequence,last_seen_at)
       VALUES(?,?,?,'web',0,?)`).run(account.account_id, deviceId, "Active browser", "2026-10-03T00:00:00.000Z");
-    const now = Date.parse("2026-11-13T00:00:00.000Z");
+    // Keep this test independent of the wall clock: the push above records today's timestamp.
+    const journalCreatedAt = d1.db.prepare("SELECT created_at FROM sync_journal WHERE account_id=?").get(account.account_id).created_at;
+    const now = Date.parse(journalCreatedAt) + 31 * 86_400_000;
     await maintainSyncRetention(d1, now);
     assert.equal(d1.db.prepare("SELECT count(*) AS count FROM sync_journal WHERE account_id=?").get(account.account_id).count, 1);
     assert.equal(d1.db.prepare("SELECT min_available_sequence FROM sync_accounts WHERE account_id=?").get(account.account_id).min_available_sequence, 0);
