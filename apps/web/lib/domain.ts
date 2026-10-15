@@ -385,11 +385,11 @@ export function dashboardDays(data: Data, start: string, length: number, today =
     for (const blockId of completion.clearedBlockIds ?? []) completionByBlockId.set(blockId, completion.id);
   }
   const clearedBlockIds = new Set(completionByBlockId.keys());
-  const taskEvents: ScheduledBlock[] = data.calendarEvents.filter(event => !event.allDay && event.taskId).map(event => ({
+  const taskEvents: ScheduledBlock[] = data.calendarEvents.flatMap(event => event.allDay || !event.taskId ? [] : [{
     id: event.id, createdAt: event.createdAt, updatedAt: event.updatedAt, revision: event.revision,
-    deletedAt: event.deletedAt, taskId: event.taskId!, startInstant: event.startInstant,
+    deletedAt: event.deletedAt, taskId: event.taskId, startInstant: event.startInstant,
     endInstant: event.endInstant, timeZone: event.timeZone, calendarEventId: event.id
-  }));
+  }]);
   for (const block of [...data.blocks, ...taskEvents]) {
     const task = visibleById.get(block.taskId);
     if (!task) continue;
