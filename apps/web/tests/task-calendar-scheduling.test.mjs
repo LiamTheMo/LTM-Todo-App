@@ -108,3 +108,26 @@ test("history cleanup removes linked events with their expired parent tasks", ()
   assert.deepEqual(pruned.tasks, []);
   assert.deepEqual(pruned.calendarEvents, []);
 });
+
+test("completing an ordinary task cancels future calendar reservations but keeps past sessions", () => {
+  const data = seed({ dueDate: "2026-10-17" });
+  const first = saveCalendarEvent(data, linkedEvent(data));
+  const future = saveCalendarEvent(first, linkedEvent(data, {
+    id: "44444444-5555-4666-8777-888888888888",
+    startInstant: "2026-10-19T14:00:00.000Z", endInstant: "2026-10-19T15:00:00.000Z"
+  }));
+  const completed = completeTask(future, taskId, new Date("2026-10-18T12:00:00Z"));
+  assert.equal(completed.calendarEvents[0].deletedAt, undefined);
+  assert.ok(completed.calendarEvents[1].deletedAt);
+  assert.equal(calendarEventsForDay(completed, "2026-10-19").length, 0);
+  const restored = undoCompletion(completed, completed.completions[0].id);
+  assert.equal(restored.calendarEvents[1].deletedAt, undefined);
+});
+
+test("a past linked session is pruned after 31 days even if the undated task stays open", () => {
+  const data = seed({ dueDate: undefined });
+  const saved = saveCalendarEvent(data, linkedEvent(data));
+  const pruned = pruneExpiredHistory(saved, "2026-12-01");
+  assert.equal(pruned.tasks.length, 1);
+  assert.equal(pruned.calendarEvents.length, 0);
+});
