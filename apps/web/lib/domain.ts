@@ -34,7 +34,7 @@ export type Task = Entity & {
 export type Project = Entity & { name: string; color: string; sortKey: number; archivedAt?: string };
 export type ProjectSection = Entity & { projectId: string; name: string; sortKey: number };
 export type Tag = Entity & { name: string; color: string };
-export type ScheduledBlock = Entity & { taskId: string; startInstant: string; endInstant: string; timeZone: string };
+export type ScheduledBlock = Entity & { taskId: string; startInstant: string; endInstant: string; timeZone: string; calendarEventId?: string };
 export type CalendarColor = `#${string}`;
 export type LocalCalendar = Entity & { name: string; color: CalendarColor; visible: boolean; sortKey: number };
 export type EventRecurrence = {
@@ -48,6 +48,8 @@ type CalendarEventBase = Entity & {
   calendarId: string;
   title: string;
   notes: string;
+  /** Work sessions are calendar events linked to a task rather than duplicate scheduled blocks. */
+  taskId?: string;
   recurrence?: EventRecurrence;
 };
 export type CalendarEvent = CalendarEventBase & (
@@ -173,11 +175,15 @@ export function completeTask(data: Data, id: string, now = new Date()): Data {
   const occurrenceDate = task.dueDate;
   const recurrence = task.recurrence && { ...task.recurrence, occurrences: task.recurrence.occurrences + 1 };
   const next = recurrence && nextOccurrence(recurrence, occurrenceDate ?? localDate(now));
-  const clearedBlockIds = next ? data.blocks.filter(block => block.taskId === id && !block.deletedAt).map(block => block.id) : [];
+  const clearedBlockIds = next ? [
+    ...data.blocks.filter(block => block.taskId === id && !block.deletedAt).map(block => block.id),
+    ...data.calendarEvents.filter(event => event.taskId === id && !event.deletedAt).map(event => event.id)
+  ] : [];
   const completions = [...data.completions, { id: crypto.randomUUID(), taskId: id, occurrenceDate, completedAt, clearedBlockIds }];
   return {
     ...data, completions,
-    blocks: data.blocks.map(block => clearedBlockIds.includes(block.id) ? { ...block, deletedAt: completedAt, revision: block.revision + 1 } : block),
+    blocks: data.blocks.map(block => clearedBlockIds.includes(block.id) ? { ...block, deletedAt: completedAt, updatedAt: completedAt, revision: block.revision + 1 } : block),
+    calendarEvents: data.calendarEvents.map(event => clearedBlockIds.includes(event.id) ? { ...event, deletedAt: completedAt, updatedAt: completedAt, revision: event.revision + 1 } : event),
     tasks: data.tasks.map(item => item.id === id ? {
       ...item, recurrence, dueDate: next ?? item.dueDate,
       completedAt: next ? undefined : completedAt, updatedAt: completedAt, revision: item.revision + 1
@@ -193,6 +199,9 @@ export function undoCompletion(data: Data, completionId: string): Data {
     blocks: data.blocks.map(block => completion.clearedBlockIds?.includes(block.id) ? {
       ...block, deletedAt: undefined, updatedAt: new Date().toISOString(), revision: block.revision + 1
     } : block),
+    calendarEvents: data.calendarEvents.map(event => completion.clearedBlockIds?.includes(event.id) ? {
+      ...event, deletedAt: undefined, updatedAt: new Date().toISOString(), revision: event.revision + 1
+    } : event),
     tasks: data.tasks.map(task => task.id === completion.taskId ? {
       ...task, dueDate: completion.occurrenceDate ?? task.dueDate, completedAt: undefined,
       recurrence: task.recurrence ? { ...task.recurrence, occurrences: Math.max(0, task.recurrence.occurrences - 1) } : undefined,
@@ -214,6 +223,8 @@ export function saveTask(data: Data, task: Task, reminderMinutes = "", today = l
     ...data,
     tasks: oldTask ? data.tasks.map(item => item.id === task.id ? task : item) : [...data.tasks, task],
     blocks: data.blocks,
+    calendarEvents: oldTask && oldTask.title !== task.title ? data.calendarEvents.map(event => event.taskId === task.id && !event.deletedAt && event.title === oldTask.title
+      ? { ...event, title: task.title, updatedAt: stamp, revision: event.revision + 1 } : event) : data.calendarEvents,
     reminders: [
       ...data.reminders.map(reminder => reminder.id === currentReminder?.id ? nextReminder ?? { ...reminder, deletedAt: stamp, updatedAt: stamp, revision: reminder.revision + 1 } : reminder),
       ...(nextReminder && !currentReminder ? [nextReminder] : [])
@@ -374,7 +385,12 @@ export function dashboardDays(data: Data, start: string, length: number, today =
     for (const blockId of completion.clearedBlockIds ?? []) completionByBlockId.set(blockId, completion.id);
   }
   const clearedBlockIds = new Set(completionByBlockId.keys());
-  for (const block of data.blocks) {
+  const taskEvents: ScheduledBlock[] = data.calendarEvents.flatMap(event => event.allDay || !event.taskId ? [] : [{
+    id: event.id, createdAt: event.createdAt, updatedAt: event.updatedAt, revision: event.revision,
+    deletedAt: event.deletedAt, taskId: event.taskId, startInstant: event.startInstant,
+    endInstant: event.endInstant, timeZone: event.timeZone, calendarEventId: event.id
+  }]);
+  for (const block of [...data.blocks, ...taskEvents]) {
     const task = visibleById.get(block.taskId);
     if (!task) continue;
     let date: string;
@@ -459,6 +475,9 @@ export function pruneExpiredHistory(data: Data, today = localDate(new Date()), c
   });
   if (blocks.length !== data.blocks.length) changed = true;
 
+  const calendarEvents = data.calendarEvents.filter(event => !event.taskId || existingTaskIds.has(event.taskId));
+  if (calendarEvents.length !== data.calendarEvents.length) changed = true;
+
   const reminders = data.reminders.filter(reminder => existingTaskIds.has(reminder.taskId) &&
     !(reminder.deletedAt && localDate(new Date(reminder.deletedAt)) < cutoff));
   if (reminders.length !== data.reminders.length) changed = true;
@@ -469,7 +488,7 @@ export function pruneExpiredHistory(data: Data, today = localDate(new Date()), c
     return completionDay >= cutoff && (!completedCleanup || localDate(new Date(completion.completedAt)) > completedCutoff);
   });
   if (completions.length !== data.completions.length) changed = true;
-  const retainedBlockIds = new Set(blocks.map(block => block.id));
+  const retainedBlockIds = new Set([...blocks.map(block => block.id), ...calendarEvents.map(event => event.id)]);
   const compactedCompletions = completions.map(completion => {
     if (!completion.clearedBlockIds) return completion;
     const clearedBlockIds = completion.clearedBlockIds.filter(id => retainedBlockIds.has(id));
@@ -478,7 +497,7 @@ export function pruneExpiredHistory(data: Data, today = localDate(new Date()), c
     return { ...completion, clearedBlockIds };
   });
 
-  return changed ? { ...data, tasks, blocks, reminders, completions: compactedCompletions } : data;
+  return changed ? { ...data, tasks, blocks, calendarEvents, reminders, completions: compactedCompletions } : data;
 }
 export const taskOrder = (a: Task, b: Task): number =>
   a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);

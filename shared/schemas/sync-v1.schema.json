@@ -98,7 +98,7 @@
     "blockPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["taskId", "startInstant", "endInstant", "timeZone"], "properties": { "taskId": { "$ref": "#/$defs/uuid" }, "startInstant": { "$ref": "#/$defs/instant" }, "endInstant": { "$ref": "#/$defs/instant" }, "timeZone": { "type": "string" } } } ], "unevaluatedProperties": false },
     "calendarPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["name", "color", "visible", "sortKey"], "properties": { "name": { "type": "string", "minLength": 1 }, "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }, "visible": { "type": "boolean" }, "sortKey": { "type": "number" } } } ], "unevaluatedProperties": false },
     "calendarEventPayload": { "allOf": [ { "$ref": "#/$defs/entityBase" }, { "type": "object", "required": ["calendarId", "title", "notes", "allDay"], "properties": {
-      "calendarId": { "$ref": "#/$defs/uuid" }, "title": { "type": "string", "minLength": 1 }, "notes": { "type": "string" }, "recurrence": { "$ref": "#/$defs/eventRecurrence" },
+      "calendarId": { "$ref": "#/$defs/uuid" }, "title": { "type": "string", "minLength": 1 }, "notes": { "type": "string" }, "taskId": { "$ref": "#/$defs/uuid" }, "recurrence": { "$ref": "#/$defs/eventRecurrence" },
       "allDay": { "type": "boolean" }, "startDate": { "$ref": "#/$defs/date" }, "endDate": { "$ref": "#/$defs/date" },
       "startInstant": { "$ref": "#/$defs/instant" }, "endInstant": { "$ref": "#/$defs/instant" }, "timeZone": { "type": "string" }
     } } ], "unevaluatedProperties": false, "oneOf": [

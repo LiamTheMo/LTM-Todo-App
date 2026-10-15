@@ -108,8 +108,9 @@ function validEntityPayload(type: SyncEntityType, payload: Record<string, unknow
     case "calendars": return hasOnlyKeys(payload, [...entityKeys, "name", "color", "visible", "sortKey"]) &&
       nonEmptyText(payload.name) && /^#[0-9a-f]{6}$/i.test(String(payload.color)) &&
       bool(payload.visible) && finite(payload.sortKey);
-    case "calendarEvents": return hasOnlyKeys(payload, [...entityKeys, "calendarId", "title", "notes", "recurrence", "allDay", "startDate", "endDate", "startInstant", "endInstant", "timeZone"]) &&
-      uuid.test(String(payload.calendarId)) && nonEmptyText(payload.title) && text(payload.notes) &&
+    case "calendarEvents": return hasOnlyKeys(payload, [...entityKeys, "calendarId", "title", "notes", "taskId", "recurrence", "allDay", "startDate", "endDate", "startInstant", "endInstant", "timeZone"]) &&
+      uuid.test(String(payload.calendarId)) && optionalUuid(payload.taskId) && nonEmptyText(payload.title) && text(payload.notes) &&
+      (payload.taskId === undefined || (payload.allDay === false && payload.recurrence === undefined)) &&
       (payload.recurrence === undefined || validRecurrence(payload.recurrence, false)) &&
       (payload.allDay === true ? payload.startInstant === undefined && payload.endInstant === undefined && payload.timeZone === undefined &&
         dateOnly(payload.startDate) && dateOnly(payload.endDate) && payload.endDate > payload.startDate : payload.allDay === false &&

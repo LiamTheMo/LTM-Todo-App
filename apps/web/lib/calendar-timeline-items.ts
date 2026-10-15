@@ -8,6 +8,8 @@ export type CalendarTimelineItem = {
   start: string;
   end: string;
   color: string;
+  /** Unsaved session or event shown in the editor before committing. */
+  preview?: boolean;
 };
 
 const timeLabel = (instant: string) => new Date(instant).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
@@ -37,10 +39,10 @@ export function calendarTimelineItemsForDay(
         ? zonedDateTimeToInstant(addDays(day, 1), "00:00", event.timeZone) ?? item.endInstant
         : item.endInstant;
       return [{ id: `event:${event.id}:${item.occurrenceDate}`, title: event.title,
-        caption: `${timeLabel(start)} – ${timeLabel(end)} · Event`, start, end,
+        caption: `${timeLabel(start)} – ${timeLabel(end)} · ${event.taskId ? "Task event" : "Event"}`, start, end,
         color: calendars.get(event.calendarId)?.color ?? defaultCalendarColor }];
     }),
-    ...agenda.scheduled.map(({ block, task }) => ({ id: `block:${block.id}`, title: task.title,
+    ...agenda.scheduled.filter(({ block }) => !block.calendarEventId).map(({ block, task }) => ({ id: `block:${block.id}`, title: task.title,
       caption: `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Planned work`,
       start: block.startInstant, end: block.endInstant, color: "blue" })),
     ...agenda.due.filter(task => task.dueTime && !plannedTaskIds.has(task.id)).flatMap(task => {
