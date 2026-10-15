@@ -175,10 +175,11 @@ export function completeTask(data: Data, id: string, now = new Date()): Data {
   const occurrenceDate = task.dueDate;
   const recurrence = task.recurrence && { ...task.recurrence, occurrences: task.recurrence.occurrences + 1 };
   const next = recurrence && nextOccurrence(recurrence, occurrenceDate ?? localDate(now));
-  const clearedBlockIds = next ? [
-    ...data.blocks.filter(block => block.taskId === id && !block.deletedAt).map(block => block.id),
-    ...data.calendarEvents.filter(event => event.taskId === id && !event.deletedAt).map(event => event.id)
-  ] : [];
+  const clearedBlockIds = [
+    ...(next ? data.blocks.filter(block => block.taskId === id && !block.deletedAt).map(block => block.id) : []),
+    ...data.calendarEvents.filter(event => event.taskId === id && !event.deletedAt &&
+      !event.allDay && (next || Date.parse(event.endInstant) > now.getTime())).map(event => event.id)
+  ];
   const completions = [...data.completions, { id: crypto.randomUUID(), taskId: id, occurrenceDate, completedAt, clearedBlockIds }];
   return {
     ...data, completions,
@@ -475,7 +476,13 @@ export function pruneExpiredHistory(data: Data, today = localDate(new Date()), c
   });
   if (blocks.length !== data.blocks.length) changed = true;
 
-  const calendarEvents = data.calendarEvents.filter(event => !event.taskId || existingTaskIds.has(event.taskId));
+  const calendarEvents = data.calendarEvents.filter(event => {
+    if (!event.taskId) return true; // Standalone events are retained independently of task history.
+    if (!existingTaskIds.has(event.taskId) || event.allDay) return false;
+    if (event.deletedAt && localDate(new Date(event.deletedAt)) < cutoff) return false;
+    try { return instantDay(event.startInstant, event.timeZone) >= cutoff; }
+    catch { return false; }
+  });
   if (calendarEvents.length !== data.calendarEvents.length) changed = true;
 
   const reminders = data.reminders.filter(reminder => existingTaskIds.has(reminder.taskId) &&

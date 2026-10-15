@@ -10,7 +10,8 @@ Scheduling a task's work session now creates a normal first-party **timed calend
 - Editing an existing legacy block converts it to a linked event and soft-deletes the legacy block.
 - Editing a linked task session keeps its event identity; removing it soft-deletes the event.
 - Calendar timeline, month counts, and event rows avoid displaying a linked session twice. Hidden calendars still reserve availability.
-- A task title change updates matching linked event titles. Deleting a task deletes its linked events. Recurring task completion clears linked events and Undo restores them.
+- A task title change updates matching linked event titles. Deleting a task deletes its linked events. Completing any task cancels its future calendar reservations; recurring completion also clears work sessions from the completed occurrence. Undo restores cleared sessions. Past completed sessions remain visible.
+- Linked task sessions older than the 31-day Dashboard history window are pruned even if the parent task has no due date. Standalone calendar events retain their normal history.
 - `taskId` is optional on calendar-event payloads and validated by local storage and the sync protocol. Existing calendar events and existing `blocks` remain readable.
 
 ## Automated coverage
