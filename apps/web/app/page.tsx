@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type UIEvent } from "react";
-import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteProject, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, moveTaskToSection, newEntity, otherDashboardTasks as getOtherDashboardTasks, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, renameSection, reorderProject, reorderSection, reorderTask, saveScheduledBlock, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion, updateProject, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
+import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteProject, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, moveTaskToSection, newEntity, otherDashboardTasks as getOtherDashboardTasks, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, renameSection, reorderProject, reorderSection, reorderTask, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion, updateProject, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
 import { defaultCalendarColor, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, updateCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
 import { acknowledgeSyncMutation, applyRemoteSyncChanges, bindSyncAccount, getSyncCursor, getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, persistIcsCalendarCache, prepareInitialSyncUpload, readData, readIcsCalendarCache, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData, type CachedIcsCalendar, type SyncConflict } from "../lib/storage";
 import { getLocalSyncDeviceId, SyncClient, type SyncStatus } from "../lib/sync-client";
@@ -128,8 +128,8 @@ export default function Home() {
   const [icsFeedColor, setIcsFeedColor] = useState<CalendarColor>(defaultCalendarColor);
   const [icsFeedBusy, setIcsFeedBusy] = useState(false);
   const [icsFeedStatus, setIcsFeedStatus] = useState("");
-  const [scheduleEditing, setScheduleEditing] = useState<{ taskId: string; blockId?: string; date: string } | null>(null);
-  const [scheduleUndo, setScheduleUndo] = useState<ScheduledBlock[] | null>(null);
+  const [scheduleEditing, setScheduleEditing] = useState<{ taskId: string; blockId?: string; eventId?: string; date: string } | null>(null);
+  const [scheduleUndo, setScheduleUndo] = useState<{ blocks: ScheduledBlock[]; calendarEvents: CalendarEvent[] } | null>(null);
   const [dashboardComposerOpen, setDashboardComposerOpen] = useState(false);
   const [dashboardComposerTab, setDashboardComposerTab] = useState<"task" | "event">("task");
   const [dashboardComposerDate, setDashboardComposerDate] = useState<string | undefined>();
@@ -729,7 +729,7 @@ export default function Home() {
   }));
   const externalEventIds = new Set(externalEvents.map(event => event.id));
   const calendarViewData: Data = externalEvents.length ? { ...data, calendarEvents: [...data.calendarEvents, ...externalEvents] } : data;
-  const calendarEvents = calendarEventsForDay(calendarViewData, calendarSelectedDate);
+  const calendarEvents = calendarEventsForDay(calendarViewData, calendarSelectedDate).filter(item => !item.event.taskId);
   const monthEventsByDay = new Map<string, ReturnType<typeof calendarEventsForDay>>();
   for (const item of calendarEventOccurrences(calendarViewData, calendarGridStart, addDays(calendarGridStart, 42))) {
     const end = item.allDay ? item.endDate! : addDays(item.occurrenceDate, 1);
@@ -791,7 +791,7 @@ export default function Home() {
             <div className="calendarMonthControl"><button type="button" aria-label="Previous month" onClick={() => shiftCalendarMonth(-1)}>‹</button><h3>{calendarMonthLabel}</h3><button type="button" aria-label="Next month" onClick={() => shiftCalendarMonth(1)}>›</button></div>
             <div className="calendarActions"><button type="button" className="calendarToday" onClick={goCalendarToday}>Today</button><button type="button" className="calendarToday" onClick={() => setEventEditing({ date: calendarSelectedDate })}>+ Event</button></div>
           </div>
-          {scheduleUndo && <div className="scheduleUndo" role="status"><span>Planning change saved.</span><button type="button" onClick={() => { const blocks = scheduleUndo; mutate(value => ({ ...value, blocks })); setScheduleUndo(null); }}>Undo</button></div>}
+          {scheduleUndo && <div className="scheduleUndo" role="status"><span>Planning change saved.</span><button type="button" onClick={() => { const previous = scheduleUndo; mutate(value => ({ ...value, blocks: previous.blocks, calendarEvents: previous.calendarEvents })); setScheduleUndo(null); }}>Undo</button></div>}
           <div className="calendarManagement">
             <div className="calendarToggles" aria-label="Visible calendars">
               {activeCalendars.map(calendar => {
@@ -838,7 +838,7 @@ export default function Home() {
               <div className="calendarGrid" role="group" aria-label={`Dates in ${calendarMonthLabel}`}>
                 {calendarDays.map(day => {
                   const taskDay = calendarDays.find(item => item.date === day.date);
-                  const dayEvents = monthEventsByDay.get(day.date) ?? [];
+                  const dayEvents = (monthEventsByDay.get(day.date) ?? []).filter(item => !item.event.taskId);
                   const eventCount = dayEvents.length;
                   const itemCount = (taskDay?.scheduled.length ?? 0) + (taskDay?.due.length ?? 0) + (taskDay?.completed.length ?? 0) + eventCount;
                   const previews = [
@@ -864,7 +864,7 @@ export default function Home() {
               <div className="calendarAgendaHeader"><div><span className="eyebrow">SELECTED DAY</span><h3>{dateLabel(calendarSelectedDate)}</h3></div></div>
               <h4 className="calendarTimelineHeading">TIMELINE {calendarSelectedDate === today && <span>Now · {timeLabel(calendarNow.toISOString())}</span>}</h4>
               <CalendarTimeline day={calendarSelectedDate} items={timelineItems} now={calendarNow} />
-              {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => <div className="plannedRow" key={`calendar-block:${block.id}`}>{taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block-task:${block.id}`, calendarSelectedDate)}<button type="button" className="scheduleAction" aria-label={`Edit scheduled block for ${task.title}`} onClick={() => setScheduleEditing({ taskId: task.id, blockId: block.id, date: calendarSelectedDate })}>Edit time</button><button type="button" className="scheduleAction" aria-label={`Unschedule ${task.title}`} onClick={() => { setScheduleUndo(data.blocks); mutate(value => deleteScheduledBlock(value, block.id)); }}>Remove</button></div>)}</div>}
+              {!!calendarAgenda.scheduled.length && <div className="group"><h4>PLANNED WORK</h4>{calendarAgenda.scheduled.map(({ block, task, completionId }) => <div className="plannedRow" key={`calendar-block:${block.id}`}>{taskRow(task, `${timeLabel(block.startInstant)} – ${timeLabel(block.endInstant)} · Work block${task.dueDate === calendarSelectedDate ? " · Also due today" : ""}`, completionId, `calendar-block-task:${block.id}`, calendarSelectedDate)}<button type="button" className="scheduleAction" aria-label={`Edit scheduled block for ${task.title}`} onClick={() => setScheduleEditing({ taskId: task.id, ...(block.calendarEventId ? { eventId: block.calendarEventId } : { blockId: block.id }), date: calendarSelectedDate })}>Edit time</button><button type="button" className="scheduleAction" aria-label={`Unschedule ${task.title}`} onClick={() => { setScheduleUndo({ blocks: data.blocks, calendarEvents: data.calendarEvents }); mutate(value => block.calendarEventId ? { ...value, calendarEvents: value.calendarEvents.map(event => event.id === block.calendarEventId ? { ...event, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), revision: event.revision + 1 } : event) } : deleteScheduledBlock(value, block.id)); }}>Remove</button></div>)}</div>}
               {!!calendarAgenda.due.length && <div className="group"><h4>DUE</h4>{calendarAgenda.due.map(task => taskRow(task, task.dueTime ? `Due ${dueTimeCaption(task.dueTime)}` : "", undefined, task.id, calendarSelectedDate))}</div>}
               {!!calendarAgenda.completed.length && <div className="group"><h4>COMPLETED</h4>{calendarAgenda.completed.map(item => taskRow(item.task, new Date(item.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), item.completionId || undefined, `calendar-completion:${item.completionId || item.task.id}:${item.completedAt}`))}</div>}
               {!!calendarEvents.length && <div className="group"><h4>EVENTS</h4>{calendarEvents.map(item => {
@@ -1014,7 +1014,8 @@ export default function Home() {
       mutate(value => saveTask(value, task, reminderMinutes)); setEditing(null);
     }} onDelete={id => { mutate(value => { const stamp = new Date().toISOString(); return { ...value,
       tasks: value.tasks.map(t => t.id === id ? { ...t, deletedAt: stamp, revision: t.revision + 1 } : t),
-      blocks: value.blocks.map(b => b.taskId === id && !b.deletedAt ? { ...b, deletedAt: stamp, revision: b.revision + 1 } : b),
+      blocks: value.blocks.map(b => b.taskId === id && !b.deletedAt ? { ...b, deletedAt: stamp, updatedAt: stamp, revision: b.revision + 1 } : b),
+       calendarEvents: value.calendarEvents.map(event => event.taskId === id && !event.deletedAt ? { ...event, deletedAt: stamp, updatedAt: stamp, revision: event.revision + 1 } : event),
       reminders: value.reminders.map(r => r.taskId === id && !r.deletedAt ? { ...r, deletedAt: stamp, revision: r.revision + 1 } : r)
     }; }); setEditing(null); }} />}
     {outlineImportOpen && <OutlineImporter data={data} readOnlyCalendarIds={icsCalendarCache.map(calendar => calendar.calendarId)} onClose={() => setOutlineImportOpen(false)} onImport={async (items, destination) => {
@@ -1037,7 +1038,7 @@ export default function Home() {
       </div>
     </section></div>}
     {eventEditing && <CalendarEventEditor key={`${eventEditing.id ?? "new"}:${eventEditing.date}`} event={data.calendarEvents.find(item => item.id === eventEditing.id)} date={eventEditing.date} calendars={activeCalendars} data={calendarViewData} today={today} now={calendarNow} onClose={() => setEventEditing(null)} onSave={event => { mutate(value => saveCalendarEvent(value, event)); setEventEditing(null); }} onSaveTemplate={(event, name) => mutate(value => saveEventTemplate(value, event, name))} onDelete={id => { const stamp = new Date().toISOString(); mutate(value => ({ ...value, calendarEvents: value.calendarEvents.map(event => event.id === id ? { ...event, deletedAt: stamp, updatedAt: stamp, revision: event.revision + 1 } : event) })); setEventEditing(null); }} />}
-    {scheduleEditing && <ScheduleEditor key={`${scheduleEditing.taskId}:${scheduleEditing.blockId ?? "new"}:${scheduleEditing.date}`} task={data.tasks.find(task => task.id === scheduleEditing.taskId)} block={data.blocks.find(item => item.id === scheduleEditing.blockId)} data={calendarViewData} initialDate={scheduleEditing.date} today={today} now={calendarNow} onClose={() => setScheduleEditing(null)} onSave={block => { setScheduleUndo(data.blocks); mutate(value => saveScheduledBlock(value, block)); setScheduleEditing(null); }} />}
+    {scheduleEditing && <ScheduleEditor key={`${scheduleEditing.taskId}:${scheduleEditing.blockId ?? scheduleEditing.eventId ?? "new"}:${scheduleEditing.date}`} task={data.tasks.find(task => task.id === scheduleEditing.taskId)} block={data.blocks.find(item => item.id === scheduleEditing.blockId)} event={data.calendarEvents.find(item => item.id === scheduleEditing.eventId)} calendars={activeCalendars.filter(calendar => !icsCalendarCache.some(item => item.calendarId === calendar.id))} data={calendarViewData} initialDate={scheduleEditing.date} today={today} now={calendarNow} onClose={() => setScheduleEditing(null)} onSave={event => { setScheduleUndo({ blocks: data.blocks, calendarEvents: data.calendarEvents }); mutate(value => { const saved = saveCalendarEvent(value, event); return scheduleEditing.blockId ? deleteScheduledBlock(saved, scheduleEditing.blockId) : saved; }); setScheduleEditing(null); }} />}
   </main>;
 }
 
@@ -1071,6 +1072,11 @@ function CalendarEventEditor({ event, date, calendars, data, today, now, onClose
   const allDayEvents = showTimeline ? calendarEventsForDay(data, startDate).filter(item => item.allDay) : [];
   const startInstant = !allDay && startDate ? zonedDateTimeToInstant(startDate, startTime, timeZone) : undefined;
   const endInstant = !allDay && endDate ? zonedDateTimeToInstant(endDate, endTime, timeZone) : undefined;
+  const draftPreview: CalendarTimelineItem | undefined = showTimeline && !allDay && title.trim() && startInstant && endInstant && endInstant > startInstant
+    ? { id: "draft-calendar-event", title: title.trim(), caption: `${timeLabel(startInstant)} – ${timeLabel(endInstant)} · Preview (not saved)`,
+      start: startInstant, end: endInstant, color: calendars.find(calendar => calendar.id === calendarId)?.color ?? defaultCalendarColor, preview: true }
+    : undefined;
+  if (draftPreview && startDate === localDate(new Date(startInstant!))) timelineItems.push(draftPreview);
   const invalid = !title.trim() || !calendarId || (allDay ? endDate < startDate : !startInstant || !endInstant || endInstant <= startInstant) ||
     (Boolean(repeatSelection && until) && until < startDate) || (Boolean(repeatSelection && count) && Number(count) < 1);
   const form = <form className={`editor${embedded ? " composerEditorEmbedded" : ""}`} onSubmit={e => {
@@ -1108,18 +1114,24 @@ function CalendarEventEditor({ event, date, calendars, data, today, now, onClose
   return embedded ? form : <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>{form}</div>;
 }
 
-function ScheduleEditor({ task, block, data, initialDate, today, now, onClose, onSave }: {
-  task?: Task; block?: ScheduledBlock; data: Data; initialDate: string; today: string; now: Date;
-  onClose: () => void; onSave: (block: ScheduledBlock) => void;
+function ScheduleEditor({ task, block, event, calendars, data, initialDate, today, now, onClose, onSave }: {
+  task?: Task; block?: ScheduledBlock; event?: CalendarEvent; calendars: Data["calendars"];
+  data: Data; initialDate: string; today: string; now: Date;
+  onClose: () => void; onSave: (event: CalendarEvent) => void;
 }) {
-  const timeZone = block?.timeZone ?? zone();
-  const measuredDuration = block ? Math.round((Date.parse(block.endInstant) - Date.parse(block.startInstant)) / 60_000) : 60;
+  const submitted = useRef(false);
+  const linkedEvent = event && !event.allDay ? event : undefined;
+  const timeZone = linkedEvent?.timeZone ?? block?.timeZone ?? zone();
+  const savedStart = linkedEvent?.startInstant ?? block?.startInstant;
+  const savedEnd = linkedEvent?.endInstant ?? block?.endInstant;
+  const measuredDuration = savedStart && savedEnd ? Math.round((Date.parse(savedEnd) - Date.parse(savedStart)) / 60_000) : 60;
   const storedDuration = Number.isFinite(measuredDuration) && measuredDuration > 0 ? measuredDuration : 60;
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [durationMinutes, setDurationMinutes] = useState(storedDuration);
+  const [calendarId, setCalendarId] = useState(linkedEvent?.calendarId ?? calendars[0]?.id ?? "");
   const durationOptions = [...new Set([30, 60, 90, 120, storedDuration])].sort((left, right) => left - right);
   const [selectedSlot, setSelectedSlot] = useState<{ startInstant: string; endInstant: string } | null>(() =>
-    block ? { startInstant: block.startInstant, endInstant: block.endInstant } : null);
+    savedStart && savedEnd ? { startInstant: savedStart, endInstant: savedEnd } : null);
   const dayAgenda = dashboardDays(data, selectedDate, 1, today)[0];
   const allEvents = calendarEventsForDay(data, selectedDate, false);
   const visibleEvents = calendarEventsForDay(data, selectedDate, true);
@@ -1128,74 +1140,71 @@ function ScheduleEditor({ task, block, data, initialDate, today, now, onClose, o
   const hiddenEventCount = allEvents.filter(item => !visibleOccurrenceIds.has(`${item.event.id}:${item.occurrenceDate}`)).length;
   const dayStart = zonedDateTimeToInstant(selectedDate, "00:00", timeZone);
   const nextDayStart = zonedDateTimeToInstant(addDays(selectedDate, 1), "00:00", timeZone);
-  const hiddenOrVisibleEventRanges: BusyTimeRange[] = allEvents.flatMap(item => {
+  const busyEvents: BusyTimeRange[] = allEvents.flatMap(item => {
+    if (item.event.id === linkedEvent?.id) return [];
     if (item.allDay || item.event.allDay) return dayStart && nextDayStart ? [{ startInstant: dayStart, endInstant: nextDayStart }] : [];
-    if (!item.startInstant || !item.endInstant) return [];
-    return [{ startInstant: item.startInstant, endInstant: item.endInstant }];
+    return item.startInstant && item.endInstant ? [{ startInstant: item.startInstant, endInstant: item.endInstant }] : [];
   });
   const plannedWork = dayAgenda?.scheduled ?? [];
-  const blockRanges: BusyTimeRange[] = plannedWork.flatMap(({ block: planned }) => planned.id === block?.id ? [] :
-    [{ startInstant: planned.startInstant, endInstant: planned.endInstant }]);
+  const blockRanges: BusyTimeRange[] = plannedWork.flatMap(({ block: planned }) =>
+    (planned.id === block?.id || planned.calendarEventId === linkedEvent?.id) ? [] :
+      [{ startInstant: planned.startInstant, endInstant: planned.endInstant }]);
   const dueRanges: BusyTimeRange[] = (dayAgenda?.due ?? []).filter(item => item.dueTime &&
     !plannedWork.some(planned => planned.task.id === item.id)).flatMap(item => {
     const startInstant = zonedDateTimeToInstant(selectedDate, item.dueTime!, item.dueTimeZone ?? timeZone);
     return startInstant ? [{ startInstant, endInstant: new Date(Date.parse(startInstant) + 30 * 60_000).toISOString() }] : [];
   });
-  const busyRanges = [...hiddenOrVisibleEventRanges, ...blockRanges, ...dueRanges];
-  const availableSlots = availableWorkSlots(selectedDate, timeZone, busyRanges, durationMinutes, now.getTime());
-  const timelineItems: CalendarTimelineItem[] = [
-    ...visibleEvents.flatMap(item => {
-      if (item.allDay || item.event.allDay || !item.startInstant || !item.endInstant) return [];
-      const event = item.event;
-      const eventStartDay = localDate(new Date(item.startInstant));
-      const eventEndDay = localDate(new Date(Date.parse(item.endInstant) - 1));
-      const start = eventStartDay < selectedDate
-        ? zonedDateTimeToInstant(selectedDate, "00:00", event.timeZone) ?? item.startInstant
-        : item.startInstant;
-      const end = eventEndDay > selectedDate
-        ? zonedDateTimeToInstant(addDays(selectedDate, 1), "00:00", event.timeZone) ?? item.endInstant
-        : item.endInstant;
-      return [{ id: `event:${event.id}:${item.occurrenceDate}`, title: event.title,
-        caption: `${timeLabel(start)} – ${timeLabel(end)} · Event`, start, end,
-        color: data.calendars.find(calendar => calendar.id === event.calendarId)?.color ?? defaultCalendarColor }];
-    }),
-    ...plannedWork.map(({ block: planned, task: plannedTask }) => ({ id: `block:${planned.id}`, title: plannedTask.title,
-      caption: `${timeLabel(planned.startInstant)} – ${timeLabel(planned.endInstant)} · Planned work`,
-      start: planned.startInstant, end: planned.endInstant, color: "#3982c4" })),
-    ...(dayAgenda?.due ?? []).filter(item => item.dueTime && !plannedWork.some(planned => planned.task.id === item.id)).flatMap(item => {
-      const start = zonedDateTimeToInstant(selectedDate, item.dueTime!, item.dueTimeZone ?? timeZone);
-      if (!start) return [];
-      const end = new Date(Date.parse(start) + 30 * 60_000).toISOString();
-      return [{ id: `deadline:${item.id}`, title: item.title, caption: "Task deadline", start, end, color: "#cf6d27" }];
-    })
-  ];
-  const invalid = !task || Boolean(task.completedAt || task.deletedAt) || !selectedSlot ||
+  const availableSlots = availableWorkSlots(selectedDate, timeZone, [...busyEvents, ...blockRanges, ...dueRanges], durationMinutes, now.getTime());
+  const timelineItems = calendarTimelineItemsForDay(data, selectedDate, today, dayAgenda).filter(item =>
+    item.id !== `event:${linkedEvent?.id}:${selectedDate}` &&
+    item.id !== `block:${linkedEvent?.id}` && item.id !== `block:${block?.id}`);
+  const calendarColor = calendars.find(calendar => calendar.id === calendarId)?.color ?? defaultCalendarColor;
+  if (selectedSlot) timelineItems.push({
+    id: "draft-task-event", title: task?.title ?? "Task session",
+    caption: `${timeLabel(selectedSlot.startInstant)} – ${timeLabel(selectedSlot.endInstant)} · Preview (not saved)`,
+    start: selectedSlot.startInstant, end: selectedSlot.endInstant, color: calendarColor, preview: true
+  });
+  const existingSlot = savedStart === selectedSlot?.startInstant && savedEnd === selectedSlot?.endInstant;
+  const slotAvailable = selectedSlot && (existingSlot || availableSlots.some(slot =>
+    slot.startInstant === selectedSlot.startInstant && slot.endInstant === selectedSlot.endInstant));
+  const invalid = !task || Boolean(task.completedAt || task.deletedAt) || !calendarId || !selectedSlot || !slotAvailable ||
     Date.parse(selectedSlot.endInstant) <= Date.parse(selectedSlot.startInstant);
   const changeDay = (date: string) => { setSelectedDate(date); setSelectedSlot(null); };
-  return <div className="modalBackdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section className="editor scheduleDayEditor" role="dialog" aria-modal="true" aria-labelledby="schedule-day-title">
-    <div className="editorHead"><div><span className="eyebrow">{block ? "EDIT PLANNED WORK" : "PLAN A WORK SESSION"}</span><h2 id="schedule-day-title">{task?.title ?? "Task unavailable"}</h2></div><button type="button" onClick={onClose} aria-label="Close schedule view">×</button></div>
-    <p className="hint">Scheduling work does not change this task’s due date.</p>
-    <div className="scheduleDayControls"><button type="button" aria-label="Previous day" disabled={addDays(selectedDate, -1) < historyStart(today)} onClick={() => changeDay(addDays(selectedDate, -1))}>‹</button><h3>{dateLabel(selectedDate)}</h3><button type="button" aria-label="Next day" onClick={() => changeDay(addDays(selectedDate, 1))}>›</button></div>
-    <div className="fieldPair scheduleDuration"><label>Session length<CustomSelect value={String(durationMinutes)} onChange={event => { setDurationMinutes(Number(event.target.value)); setSelectedSlot(null); }}>{durationOptions.map(minutes => <option key={minutes} value={minutes}>{minutes < 60 ? `${minutes} minutes` : minutes % 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : `${minutes / 60} hour${minutes === 60 ? "" : "s"}`}</option>)}</CustomSelect></label><p className="hint">Open starts are shown every 30 minutes, from 6:00 AM to 10:00 PM.</p></div>
-    {!!allDayEvents.length && <div className="scheduleAllDay" aria-label="All-day calendar events"><strong>All day</strong>{allDayEvents.map(item => <span key={`${item.event.id}:${item.occurrenceDate}`}>{item.event.title}</span>)}</div>}
-    {!!hiddenEventCount && <p className="hint">Items on hidden calendars also reserve time.</p>}
-    <h3 className="scheduleSectionHeading">Day view</h3>
-    <div className="scheduleDayTimeline"><CalendarTimeline day={selectedDate} items={timelineItems} now={now} /></div>
-    <div className="scheduleAvailability"><div className="scheduleAvailabilityHeader"><h3>Open time slots</h3><span>{availableSlots.length} available</span></div>
-      {availableSlots.length ? <div className="scheduleSlots" role="group" aria-label="Available work time slots">{availableSlots.map(slot => {
-        const selected = selectedSlot?.startInstant === slot.startInstant && selectedSlot.endInstant === slot.endInstant;
-        return <button key={slot.startInstant} type="button" className={selected ? "scheduleSlotSelected" : ""} aria-pressed={selected} onClick={() => setSelectedSlot(slot)}>
-          <span>{timeLabel(slot.startInstant)} – {timeLabel(slot.endInstant)}</span>{selected && <strong>Selected</strong>}
-        </button>;
-      })}</div> : <p className="scheduleNoSlots" role="status">{selectedDate < today ? "This day has passed. Choose today or a future day to book work." : "No open slots fit this session length."}</p>}
-    </div>
-    <p className="hint">Time zone: {timeZone}. Calendar events, planned work, and timed deadlines are treated as busy time.</p>
-    <div className="editorActions"><button type="button" onClick={onClose}>Cancel</button><button type="button" className="add" disabled={invalid} onClick={() => {
-      if (invalid || !task || !selectedSlot) return;
-      onSave({ ...(block ?? newEntity()), taskId: task.id, startInstant: selectedSlot.startInstant, endInstant: selectedSlot.endInstant,
-        timeZone, updatedAt: new Date().toISOString(), revision: block ? block.revision + 1 : 1 });
-    }}>{block ? "Save new time" : "Schedule work"}</button></div>
-  </section></div>;
+  return <div className="modalBackdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <section className="editor scheduleDayEditor" role="dialog" aria-modal="true" aria-labelledby="schedule-day-title">
+      <div className="editorHead"><div><span className="eyebrow">{block || linkedEvent ? "EDIT TASK EVENT" : "SCHEDULE TASK EVENT"}</span><h2 id="schedule-day-title">{task?.title ?? "Task unavailable"}</h2></div><button type="button" onClick={onClose} aria-label="Close schedule view">×</button></div>
+      <p className="hint">A calendar event will be linked to this task. Its due date will not change.</p>
+      <div className="scheduleDayControls"><button type="button" aria-label="Previous day" disabled={addDays(selectedDate, -1) < historyStart(today)} onClick={() => changeDay(addDays(selectedDate, -1))}>‹</button><h3>{dateLabel(selectedDate)}</h3><button type="button" aria-label="Next day" onClick={() => changeDay(addDays(selectedDate, 1))}>›</button></div>
+      <div className="fieldPair scheduleDuration">
+        <label>Calendar<CustomSelect value={calendarId} onChange={e => setCalendarId(e.target.value)}>{calendars.map(calendar => <option key={calendar.id} value={calendar.id}>{calendar.name}</option>)}</CustomSelect></label>
+        <label>Session length<CustomSelect value={String(durationMinutes)} onChange={e => { setDurationMinutes(Number(e.target.value)); setSelectedSlot(null); }}>{durationOptions.map(minutes => <option key={minutes} value={minutes}>{minutes < 60 ? `${minutes} minutes` : minutes % 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : `${minutes / 60} hour${minutes === 60 ? "" : "s"}`}</option>)}</CustomSelect></label>
+      </div>
+      <p className="hint">Available starts are shown every 30 minutes, from 6:00 AM to 10:00 PM.</p>
+      {!!allDayEvents.length && <div className="scheduleAllDay" aria-label="All-day calendar events"><strong>All day</strong>{allDayEvents.map(item => <span key={`${item.event.id}:${item.occurrenceDate}`}>{item.event.title}</span>)}</div>}
+      {!!hiddenEventCount && <p className="hint">Items on hidden calendars also reserve time.</p>}
+      <h3 className="scheduleSectionHeading">Day timeline</h3>
+      <div className="scheduleDayTimeline"><CalendarTimeline day={selectedDate} items={timelineItems} now={now} /></div>
+      <p className="hint" role="status" aria-live="polite">{selectedSlot
+        ? `Preview: ${task?.title ?? "Task"} on ${dateLabel(selectedDate)}, ${timeLabel(selectedSlot.startInstant)} – ${timeLabel(selectedSlot.endInstant)}. This event is not saved yet.`
+        : "Select an available time below to preview the event on the timeline before saving."}</p>
+      <div className="scheduleAvailability"><div className="scheduleAvailabilityHeader"><h3>Open time slots</h3><span>{availableSlots.length} available</span></div>
+        {availableSlots.length ? <div className="scheduleSlots" role="group" aria-label="Available work time slots">{availableSlots.map(slot => {
+          const selected = selectedSlot?.startInstant === slot.startInstant && selectedSlot.endInstant === slot.endInstant;
+          return <button key={slot.startInstant} type="button" className={selected ? "scheduleSlotSelected" : ""} aria-pressed={selected} onClick={() => setSelectedSlot(slot)}>
+            <span>{timeLabel(slot.startInstant)} – {timeLabel(slot.endInstant)}</span>{selected && <strong>Previewing</strong>}
+          </button>;
+        })}</div> : <p className="scheduleNoSlots" role="status">{selectedDate < today ? "This day has passed. Choose today or a future day to schedule." : "No open slots fit this session length."}</p>}
+      </div>
+      <p className="hint">Time zone: {timeZone}. Calendar events, planned work, and timed deadlines are treated as busy time.</p>
+      <div className="editorActions"><button type="button" onClick={onClose}>Cancel</button><button type="button" className="add" disabled={invalid} onClick={() => {
+        if (invalid || submitted.current || !task || !selectedSlot) return;
+        submitted.current = true;
+        onSave({ ...(linkedEvent ?? newEntity()), taskId: task.id, calendarId, title: task.title, notes: task.notes,
+          allDay: false, startInstant: selectedSlot.startInstant, endInstant: selectedSlot.endInstant,
+          timeZone, updatedAt: new Date().toISOString(), revision: linkedEvent ? linkedEvent.revision + 1 : 1 });
+      }}>{block || linkedEvent ? "Save event" : "Create calendar event"}</button></div>
+    </section>
+  </div>;
 }
 
 function TaskEditor({ task, initialDate, initialProject, initialSection, data, earliestDate, onClose, onSave, onDelete, embedded = false }: {

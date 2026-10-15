@@ -228,7 +228,7 @@ export function instantiateEventTemplate(data: Data, templateId: string, date: s
 export function saveCalendarEvent(data: Data, event: CalendarEvent): Data {
   const title = event.title.trim();
   const calendar = data.calendars.find(item => item.id === event.calendarId && !item.deletedAt);
-  if (!title || !calendar || !validEvent(event)) return data;
+  if (!title || !calendar || !validEvent(event) || (event.taskId && !data.tasks.some(task => task.id === event.taskId && !task.deletedAt))) return data;
   const existing = data.calendarEvents.find(item => item.id === event.id);
   const stamp = new Date().toISOString();
   const saved = { ...event, title, notes: event.notes.trim(), createdAt: existing?.createdAt ?? event.createdAt,
@@ -242,6 +242,7 @@ export function validEvent(event: CalendarEvent): boolean {
   if (!event || typeof event !== "object" || typeof event.title !== "string" || !event.title.trim() ||
       typeof event.notes !== "string" || typeof event.calendarId !== "string" || !event.calendarId ||
       !Number.isSafeInteger(event.revision) || event.revision < 1) return false;
+  if (event.taskId !== undefined && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(event.taskId) || event.allDay || event.recurrence)) return false;
   if (event.recurrence) {
     const rule = event.recurrence;
     if (!Number.isSafeInteger(rule.interval) || rule.interval < 1 ||

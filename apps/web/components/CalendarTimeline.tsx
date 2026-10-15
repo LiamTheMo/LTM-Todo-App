@@ -41,12 +41,15 @@ export function CalendarTimeline({ day, items, now }: { day: string; items: Cale
     });
   }, [items]);
 
+  const previewStart = items.find(item => item.preview)?.start;
   useEffect(() => {
-    const hour = new Date().getHours();
-    if (scroller.current && day === localDay(new Date())) {
-      scroller.current.scrollTop = Math.max(0, (hour - 1) * hourHeight);
+    if (!scroller.current) return;
+    if (previewStart) {
+      scroller.current.scrollTop = Math.max(0, (minuteOfDay(previewStart) / 60 - 1.5) * hourHeight);
+    } else if (day === localDay(new Date())) {
+      scroller.current.scrollTop = Math.max(0, (new Date().getHours() - 1) * hourHeight);
     }
-  }, [day]);
+  }, [day, previewStart]);
 
   const isToday = day === localDay(now);
   const nowMinute = now.getHours() * 60 + now.getMinutes();
@@ -61,10 +64,10 @@ export function CalendarTimeline({ day, items, now }: { day: string; items: Cale
         const start = minuteOfDay(item.start);
         let end = minuteOfDay(item.end);
         if (end <= start) end = 24 * 60;
-        return <div className="calendarTimelineItem" key={item.id}
-          style={{ backgroundColor: `color-mix(in srgb, ${item.color} 18%, white)`, borderColor: item.color, top: start / 60 * hourHeight, height: Math.max(34, (end - start) / 60 * hourHeight),
+        return <div className={`calendarTimelineItem${item.preview ? " calendarTimelinePreview" : ""}`} key={item.id}
+          style={{ backgroundColor: `color-mix(in srgb, ${item.color} ${item.preview ? 32 : 18}%, white)`, borderColor: item.color, borderStyle: item.preview ? "dashed" : undefined, top: start / 60 * hourHeight, height: Math.max(34, (end - start) / 60 * hourHeight),
             left: `${item.column / item.columnCount * 100}%`, width: `${100 / item.columnCount}%` }}
-          aria-label={`${item.title}, ${item.caption}`}>
+          aria-label={`${item.preview ? "Unsaved preview, " : ""}${item.title}, ${item.caption}`}>
           <strong>{item.title}</strong><small>{item.caption}</small>
         </div>;
       })}
