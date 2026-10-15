@@ -6,7 +6,6 @@ import { calendarTimelineItemsForDay } from "../lib/calendar-timeline-items.ts";
 import { parseSyncPushBatch } from "../lib/sync-protocol.ts";
 
 const now = new Date("2026-10-15T18:00:00.000Z");
-const stamp = now.toISOString();
 const day = "2026-10-17";
 const taskId = "11111111-2222-4333-8444-555555555555";
 const eventId = "22222222-3333-4444-8555-666666666666";
