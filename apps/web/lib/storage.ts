@@ -122,7 +122,7 @@ export function normalizeData(value: unknown): Data {
     }
   }
   for (const event of data.calendarEvents) {
-    if (!calendarIds.has(event.calendarId) || !validEvent(event)) throw new Error("Invalid calendar event record");
+    if (!calendarIds.has(event.calendarId) || !validEvent(event) || (event.taskId && !data.tasks.some(task => task.id === event.taskId))) throw new Error("Invalid calendar event record");
   }
   const projectIds = new Set(data.projects.map(project => project.id));
   const sectionsById = new Map(data.sections.map(section => [section.id, section]));
