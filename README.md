@@ -192,7 +192,7 @@ The test suite covers date-only/time-zone semantics, recurrence/DST, retention, 
 
 ## Cloudflare setup and deployment
 
-Production uses Cloudflare Workers Builds linked to the repository, with production branch **main** and preview builds disabled. GitHub Actions performs version-branch CI and does not deploy.
+Production is deployed by the GitHub Actions **Production Deploy** workflow when a `vX.XX` pull request merges into **main**. Version-branch CI runs separately; Cloudflare Workers Builds is not used.
 
 | Setting | Value |
 | --- | --- |
@@ -206,9 +206,9 @@ Production uses Cloudflare Workers Builds linked to the repository, with product
 | Durable Object | `AccountSyncCoordinator` / binding `SYNC_COORDINATOR` |
 | Private R2 | `ltm-todo-attachments` / binding `ATTACHMENTS_BUCKET` |
 
-Build variables include `D1_DATABASE_ID` and `SYNC_D1_DATABASE_ID`. Build secrets include the VAPID private key, OIDC issuer/audience/JWKS/client/callback configuration, independent session/cursor/feed-encryption keys, and an OIDC client secret when the provider requires one. See the setup guide for the exact names and formats. Never commit these values.
+The GitHub `production` environment requires `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID` and `SYNC_D1_DATABASE_ID`. Runtime secrets (VAPID private key, OIDC configuration, session/cursor/feed-encryption keys, optional OIDC client secret) are uploaded only when set there; otherwise the Worker keeps its existing values. See the [deployment guide](docs/CLOUDFLARE_DEPLOYMENT.md) for exact names and formats. Never commit these values.
 
-The deploy script checks Cloudflare's build context and rejects any branch other than `main`. It validates configuration, injects resource IDs/secrets into temporary configs, applies both D1 migration sets, deploys, and cleans up temporary secret/config files. Deployments reach `main` through version-branch pull requests after version CI passes.
+The deploy script accepts only a merged same-repository `vX.XX -> main` pull request event whose merge commit is checked out. It validates configuration, injects resource IDs/secrets into temporary configs, applies both D1 migration sets, deploys, and cleans up temporary secret/config files. Deployments reach `main` through version-branch pull requests after version CI passes.
 
 ## Versions and contribution workflow
 
