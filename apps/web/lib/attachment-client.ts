@@ -1,3 +1,4 @@
+import { requestAuthSession } from "./auth-session-lock.ts";
 import { acknowledgeAttachmentUpload, bindSyncAccount, readPendingAttachmentUploads, type PendingAttachmentUpload } from "./storage.ts";
 
 export type AttachmentUploadSyncResult = { uploaded: number; pending: number; blocked?: "offline" | "sign_in" | "account_mismatch" | "service" };
@@ -21,7 +22,7 @@ export async function syncPendingAttachmentUploads(options: {
   if (!online) return { uploaded: 0, pending: items.length, blocked: "offline" };
   const fetcher = options.fetcher ?? fetch;
   try {
-    const session = await fetcher("/api/v1/auth/session", { credentials: "same-origin", cache: "no-store" });
+    const session = await requestAuthSession(fetcher, { credentials: "same-origin", cache: "no-store" });
     if (session.status === 401) return { uploaded: 0, pending: items.length, blocked: "sign_in" };
     if (!session.ok) return { uploaded: 0, pending: items.length, blocked: "service" };
     const account = await session.json() as { authenticated?: unknown; accountKey?: unknown };

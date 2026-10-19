@@ -52,6 +52,20 @@ test("opaque server sessions can be listed and revoked without exposing reusable
   } finally { d1.db.close(); }
 });
 
+test("token refresh extends only an active server session", async () => {
+  const { d1, registry, now } = await setup();
+  try {
+    await registry.issue(principal, sessionId, now + 3_600_000);
+    assert.equal(await registry.extend(principal, sessionId, now + 30 * 86_400_000), true);
+    const [listed] = await registry.list(principal, sessionId);
+    assert.equal(listed.expiresAt, new Date(now + 30 * 86_400_000).toISOString());
+    assert.equal(await registry.extend({ ...principal, subject: "other" }, sessionId, now + 86_400_000), false);
+    assert.equal(await registry.revoke(principal, sessionId), true);
+    assert.equal(await registry.extend(principal, sessionId, now + 86_400_000), false);
+    assert.equal(await registry.isActive(principal, sessionId), false);
+  } finally { d1.db.close(); }
+});
+
 test("account deletion requires same-origin explicit confirmation and queues durable R2 cleanup", async () => {
   const { d1, registry } = await setup();
   try {

@@ -27,3 +27,9 @@ Scheduling a task's work session now creates a normal first-party **timed calend
 ## Manual validation
 
 On desktop and installed iPhone/iPad PWAs: schedule a task and select several time slots; verify the preview moves to the expected hour; change duration and calendar, then save. Verify exactly one event in Calendar and one scheduled task in Dashboard, with an unchanged deadline. Edit the session, remove and Undo, and test an older legacy block; verify cross-device synchronization and recurrence/undo. Test hidden and subscribed calendars as busy time and confirm only writable calendars can be selected for task sessions.
+
+## Auth session refresh
+
+Browser sign-in now requests `offline_access` and keeps the provider refresh token in the encrypted session cookie, so sessions renew automatically instead of signing out when the access token expires. See [Staying signed in](CLOUDFLARE_DEPLOYMENT.md#staying-signed-in-refresh-tokens) for behavior and the required Auth0 settings. `apps/web/tests/oidc-session.test.mjs`, `account-lifecycle.test.mjs`, and `auth-sign-in-status.test.mjs` cover refresh, rotation, transient failure, rejection, revocation, logout, and cross-tab serialization.
+
+Manual validation: after enabling Auth0 offline access and the refresh-token grant, sign in on desktop and an installed iPhone/iPad PWA; confirm the session survives past the Auth0 access-token lifetime (or a temporarily shortened API token expiration), that Settings → Sessions shows a rolling expiry, and that revoking a session or signing out prevents further refreshes.

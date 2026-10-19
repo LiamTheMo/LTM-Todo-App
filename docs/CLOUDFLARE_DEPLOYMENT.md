@@ -41,6 +41,25 @@ From `apps/web`:
 
 The Worker name is fixed by `wrangler.jsonc` as `ltm-todo-app`.
 
+## Staying signed in (refresh tokens)
+
+Sign-in requests the `openid offline_access` scopes. When the provider returns a refresh token, the Worker keeps it only inside the encrypted, `HttpOnly` session cookie (never in D1, logs, or browser JavaScript) and the browser session becomes refreshable:
+
+- The session cookie and its server-session registry entry last 30 days and roll forward on every successful refresh, so a device in regular use stays signed in.
+- `GET /api/v1/auth/session` redeems the refresh token when the access token has expired or expires within 5 minutes, then returns the replacement cookie. The web client checks the session before every sync (at least once a minute while open and whenever the app becomes visible), so access tokens are renewed before API calls need them. Other API routes still require an unexpired access token and never refresh.
+- Session checks are serialized across tabs with the Web Locks API, so a rotating refresh token is redeemed once per browser.
+- A definitive provider rejection (for example `invalid_grant` after the refresh token expires or is revoked), a revoked app session, or an identity mismatch signs the browser out. Provider outages, rate limits, and network failures keep the cookie; the session endpoint returns `503 authentication_unavailable` only if the access token has already expired, and the next check retries.
+- Signing out revokes the app session and, when discovery advertises a `revocation_endpoint`, makes a best-effort revocation of the refresh token at the provider. Revoking a session in Settings blocks its next refresh.
+
+Auth0 configuration required for this (the app keeps working with the old access-token-lifetime sessions until it is done):
+
+1. **Applications → APIs →** the API whose identifier is `OIDC_AUDIENCE` **→ Settings:** enable **Allow Offline Access**.
+2. **Applications →** the LTM Todo application **→ Settings → Advanced Settings → Grant Types:** enable **Refresh Token**.
+3. **Refresh Token Expiration** (same application): set an **Absolute Lifetime** and **Inactivity Lifetime** that match how long a device should stay signed in without a fresh login (for example 90 days absolute, 30 days inactivity). The app session cannot outlive the refresh token.
+4. **Refresh Token Rotation** is optional. If enabled, set a **Reuse Interval** of at least 30 seconds so that a refresh whose response is lost in transit (for example, a timed-out mobile request) does not trigger reuse detection and revoke the device's session.
+
+Browser sessions created before this change carry no refresh token; they end at the original access-token expiry, and the next sign-in creates a refreshable session.
+
 ## Authentication failure logs
 
 The auth API keeps provider failures generic for browsers and emits a redacted Worker log event named `oidc_authentication_failure`. It contains a fixed route label and diagnostic code. Rejected token exchanges also include only a numeric `providerStatus` and an allowlisted `providerError` value (standard OAuth errors, `other`, or `unknown`). It never logs the exception text, provider error description, query string, cookies, tokens, or configured secret values. Review the `ltm-todo-app` Worker logs in Cloudflare after reproducing a sign-in failure.
@@ -54,7 +73,8 @@ Diagnostic codes:
 - `callback_token_exchange_failed` and `callback_token_exchange_rejected` distinguish a failed token request from a non-success Auth0 response. A rejection also records its HTTP status and a fixed OAuth error category; the provider's error description is omitted.
 - `callback_token_response_invalid`, `callback_id_token_invalid`, and `callback_access_token_invalid` identify malformed token data or a token that failed verification. Access-token checks include issuer, API audience, authorized-party (`azp`/client ID), signature, and time claims; ID-token checks also include the client ID audience and nonce.
 - `callback_token_verification_failed` means the Worker could not complete signing-key verification; `callback_identity_mismatch` means the verified tokens identify different subjects or issuers.
-- `callback_session_cookie_too_large` means the encrypted session exceeded the safe cookie-size limit.
+- `callback_session_cookie_too_large` means the encrypted session exceeded the safe cookie-size limit. A refresh token that would not fit is dropped and the session lasts only for the access-token lifetime.
+- `session_refresh_failed` (network or verification failure) and `session_refresh_response_invalid` (malformed token response) keep the browser session for a later retry. `session_refresh_rejected` records the numeric `providerStatus` and allowlisted `providerError`; a 4xx response other than 408/429 signs the browser out, while 408, 429, and 5xx responses are retried. `session_refresh_token_invalid` means the refreshed access token failed verification or identified a different subject, and signs the browser out.
 - `unexpected_error` identifies an otherwise unclassified failure; no exception details are written.
 
 Discovery and unexpected runtime failures return `503 authentication_unavailable`; rejected callback/token conditions return a generic `401` message. The exact diagnostic code is available only in Worker logs.
