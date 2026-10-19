@@ -19,21 +19,42 @@ export function readDeployTarget(environment) {
   const value = name => typeof environment[name] === "string" ? environment[name].trim().replace(/^(["'])(.*)\1$/s, "$2").trim() : "";
   const target = { apiToken: value("CLOUDFLARE_API_TOKEN"), accountId: value("CLOUDFLARE_ACCOUNT_ID"),
     databaseId: value("D1_DATABASE_ID"), syncDatabaseId: value("SYNC_D1_DATABASE_ID") };
-  const missing = [["CLOUDFLARE_API_TOKEN", target.apiToken], ["CLOUDFLARE_ACCOUNT_ID", target.accountId],
-    ["D1_DATABASE_ID", target.databaseId], ["SYNC_D1_DATABASE_ID", target.syncDatabaseId]].filter(([, item]) => !item).map(([name]) => name);
+  const missing = [["CLOUDFLARE_API_TOKEN", target.apiToken], ["CLOUDFLARE_ACCOUNT_ID", target.accountId]]
+    .filter(([, item]) => !item).map(([name]) => name);
   if (missing.length) throw new Error(`Set these GitHub secrets for the production deploy: ${missing.join(", ")}.`);
   if (!/^[0-9a-f]{32}$/i.test(target.accountId)) {
     throw new Error(`CLOUDFLARE_ACCOUNT_ID must be the 32-character hex account ID (got ${target.accountId.length} characters).`);
   }
+  // D1 IDs are optional overrides; without them the deploy looks each database up by name.
   for (const [name, id] of [["D1_DATABASE_ID", target.databaseId], ["SYNC_D1_DATABASE_ID", target.syncDatabaseId]]) {
-    if (!idPattern.test(id)) {
+    if (id && !idPattern.test(id)) {
       throw new Error(`${name} must be the database's 36-character UUID (Database ID in the Cloudflare D1 dashboard), not its name; got ${id.length} characters.`);
     }
   }
-  if (target.databaseId.toLowerCase() === target.syncDatabaseId.toLowerCase()) {
+  if (target.databaseId && target.databaseId.toLowerCase() === target.syncDatabaseId.toLowerCase()) {
     throw new Error("D1_DATABASE_ID and SYNC_D1_DATABASE_ID must be different databases.");
   }
   return target;
+}
+
+/** Resolves the notifications and sync D1 IDs from `wrangler d1 list --json` output by their configured names. */
+export function resolveD1DatabaseIds(listOutput, builtConfigText) {
+  const names = {};
+  for (const binding of JSON.parse(builtConfigText).d1_databases ?? []) {
+    if (binding.binding === "DB" || binding.binding === "SYNC_DB") names[binding.binding] = binding.database_name;
+  }
+  if (typeof names.DB !== "string" || typeof names.SYNC_DB !== "string") throw new Error("The built Worker config is missing a D1 database name.");
+  let databases;
+  try { databases = JSON.parse(listOutput.slice(listOutput.indexOf("["))); }
+  catch { throw new Error("Could not read the D1 database list from Wrangler."); }
+  const idFor = name => {
+    const matches = Array.isArray(databases) ? databases.filter(database => database?.name === name) : [];
+    if (matches.length !== 1 || !idPattern.test(matches[0].uuid ?? "")) {
+      throw new Error(`Could not find exactly one D1 database named ${name}; check the API token's D1 access or set its ID secret.`);
+    }
+    return matches[0].uuid;
+  };
+  return { databaseId: idFor(names.DB), syncDatabaseId: idFor(names.SYNC_DB) };
 }
 
 /** Returns the merge commit to deploy, or throws unless this is a merged same-repository vX.XX -> main pull request. */
@@ -136,13 +157,21 @@ async function deploy() {
   const commit = productionDeployCommit(process.env, event);
   const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: appRoot, encoding: "utf8" });
   if (head.status !== 0 || head.stdout.trim() !== commit) throw new Error("The checked-out commit is not the merged main commit.");
-  const { apiToken, accountId, databaseId, syncDatabaseId } = readDeployTarget(process.env);
+  const target = readDeployTarget(process.env);
   // Wrangler reads its credentials from the environment, so hand it the trimmed values.
-  process.env.CLOUDFLARE_API_TOKEN = apiToken;
-  process.env.CLOUDFLARE_ACCOUNT_ID = accountId;
+  process.env.CLOUDFLARE_API_TOKEN = target.apiToken;
+  process.env.CLOUDFLARE_ACCOUNT_ID = target.accountId;
   const workerSecrets = buildWorkerSecrets(process.env);
 
   const originalBuiltConfig = await readFile(builtConfigPath, "utf8");
+  let { databaseId, syncDatabaseId } = target;
+  if (!databaseId || !syncDatabaseId) {
+    const list = spawnSync("npx", ["wrangler", "d1", "list", "--json"], { cwd: appRoot, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+    if (list.error || list.status !== 0) throw new Error("Listing D1 databases failed; the API token needs D1 access.");
+    const resolved = resolveD1DatabaseIds(list.stdout, originalBuiltConfig);
+    databaseId ||= resolved.databaseId;
+    syncDatabaseId ||= resolved.syncDatabaseId;
+  }
   const sourceConfig = await readFile(configPath, "utf8");
   const migrationConfigPath = path.join(appRoot, `.wrangler.deploy-${process.pid}.jsonc`);
   const secretsPath = path.join(appRoot, `.wrangler.secrets-${process.pid}.json`);

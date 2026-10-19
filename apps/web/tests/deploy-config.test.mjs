@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildWorkerSecrets, productionDeployCommit, readDeployTarget, injectBuiltD1DatabaseId, injectD1DatabaseId, injectBuiltD1DatabaseIds, injectD1DatabaseIds } from "../scripts/deploy-worker.mjs";
+import { buildWorkerSecrets, productionDeployCommit, readDeployTarget, resolveD1DatabaseIds, injectBuiltD1DatabaseId, injectD1DatabaseId, injectBuiltD1DatabaseIds, injectD1DatabaseIds } from "../scripts/deploy-worker.mjs";
 
 const placeholder = "00000000-0000-4000-8000-000000000001";
 const productionId = "c1234567-89ab-4def-8123-456789abcdef";
@@ -114,4 +114,18 @@ test("deploy target trims pasted secrets and names an invalid D1 ID without echo
   assert.throws(() => readDeployTarget({ ...base, SYNC_D1_DATABASE_ID: productionId }), /must be different databases/);
   assert.throws(() => readDeployTarget({ ...base, CLOUDFLARE_ACCOUNT_ID: productionId }), /CLOUDFLARE_ACCOUNT_ID must be/);
   assert.throws(() => readDeployTarget({ ...base, CLOUDFLARE_API_TOKEN: "  " }), /CLOUDFLARE_API_TOKEN\./);
+});
+
+test("D1 IDs are optional and resolve by configured database name", () => {
+  const credentials = { CLOUDFLARE_API_TOKEN: "token", CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef".repeat(2) };
+  assert.deepEqual(readDeployTarget(credentials), { apiToken: "token", accountId: "0123456789abcdef".repeat(2), databaseId: "", syncDatabaseId: "" });
+  const built = JSON.stringify({ d1_databases: [
+    { binding: "DB", database_name: "ltm-todo-notifications", database_id: placeholder },
+    { binding: "SYNC_DB", database_name: "ltm-todo-sync", database_id: syncPlaceholder }] });
+  const list = `proxy warning\n${JSON.stringify([
+    { uuid: syncProductionId, name: "ltm-todo-sync" }, { uuid: productionId, name: "ltm-todo-notifications" },
+    { uuid: "e3456789-90ab-4def-8123-456789abcdef", name: "ltm-todo-sync-staging" }])}`;
+  assert.deepEqual(resolveD1DatabaseIds(list, built), { databaseId: productionId, syncDatabaseId: syncProductionId });
+  assert.throws(() => resolveD1DatabaseIds(JSON.stringify([{ uuid: productionId, name: "ltm-todo-notifications" }]), built), /named ltm-todo-sync/);
+  assert.throws(() => resolveD1DatabaseIds("not json", built), /D1 database list/);
 });
