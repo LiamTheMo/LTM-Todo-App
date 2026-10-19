@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildWorkerSecrets, productionDeployCommit, injectBuiltD1DatabaseId, injectD1DatabaseId, injectBuiltD1DatabaseIds, injectD1DatabaseIds } from "../scripts/deploy-worker.mjs";
+import { buildWorkerSecrets, productionDeployCommit, readDeployTarget, injectBuiltD1DatabaseId, injectD1DatabaseId, injectBuiltD1DatabaseIds, injectD1DatabaseIds } from "../scripts/deploy-worker.mjs";
 
 const placeholder = "00000000-0000-4000-8000-000000000001";
 const productionId = "c1234567-89ab-4def-8123-456789abcdef";
@@ -100,4 +100,18 @@ test("production deploys only for a merged same-repository version-branch pull r
     [environment, undefined]
   ];
   for (const [env, payload] of rejected) assert.throws(() => productionDeployCommit(env, payload), /vX\.XX pull request merges into main/);
+});
+
+test("deploy target trims pasted secrets and names an invalid D1 ID without echoing it", () => {
+  const base = { CLOUDFLARE_API_TOKEN: " token\n", CLOUDFLARE_ACCOUNT_ID: `${"0123456789abcdef".repeat(2)}\n`,
+    D1_DATABASE_ID: ` ${productionId}\n`, SYNC_D1_DATABASE_ID: `${syncProductionId}\r\n` };
+  assert.deepEqual(readDeployTarget(base), { apiToken: "token", accountId: "0123456789abcdef".repeat(2),
+    databaseId: productionId, syncDatabaseId: syncProductionId });
+  assert.throws(() => readDeployTarget({ ...base, SYNC_D1_DATABASE_ID: "ltm-todo-sync" }),
+    error => /^SYNC_D1_DATABASE_ID must be the database's 36-character UUID.*got 13 characters/.test(error.message) && !error.message.includes("ltm-todo-sync"));
+  assert.equal(readDeployTarget({ ...base, D1_DATABASE_ID: `"${productionId}"` }).databaseId, productionId);
+  assert.throws(() => readDeployTarget({ ...base, D1_DATABASE_ID: `${productionId}x` }), /D1_DATABASE_ID must be .*got 37 characters/);
+  assert.throws(() => readDeployTarget({ ...base, SYNC_D1_DATABASE_ID: productionId }), /must be different databases/);
+  assert.throws(() => readDeployTarget({ ...base, CLOUDFLARE_ACCOUNT_ID: productionId }), /CLOUDFLARE_ACCOUNT_ID must be/);
+  assert.throws(() => readDeployTarget({ ...base, CLOUDFLARE_API_TOKEN: "  " }), /CLOUDFLARE_API_TOKEN\./);
 });
