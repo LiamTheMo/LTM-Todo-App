@@ -1,0 +1,83 @@
+name: Production Deploy
+
+# Deploys only when a permanent version branch (vX.XX) pull request merges into main.
+# Direct pushes, other branches, unmerged PRs and manual dispatch never deploy.
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'v')
+    runs-on: ubuntu-24.04
+    environment: production
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify version-branch promotion
+        working-directory: .
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: bash scripts/check-branch-flow.sh main "$HEAD_REF"
+      - name: Skip superseded merges
+        id: current
+        working-directory: .
+        env:
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse origin/main)" == "$MERGE_SHA" ]]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::main has moved past this merge; its own deploy run publishes the newer commit."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v5
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          node-version: 22
+      - if: steps.current.outputs.deploy == 'true'
+        run: npm ci --no-audit --no-fund
+      - if: steps.current.outputs.deploy == 'true'
+        run: node scripts/audit-dependencies.mjs
+      - if: steps.current.outputs.deploy == 'true'
+        run: npm test
+      - if: steps.current.outputs.deploy == 'true'
+        run: npm run build:vinext
+      - name: Deploy Worker
+        if: steps.current.outputs.deploy == 'true'
+        run: npm run deploy:worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          SYNC_D1_DATABASE_ID: ${{ secrets.SYNC_D1_DATABASE_ID }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          OIDC_ISSUER: ${{ secrets.OIDC_ISSUER }}
+          OIDC_AUDIENCE: ${{ secrets.OIDC_AUDIENCE }}
+          OIDC_JWKS_URI: ${{ secrets.OIDC_JWKS_URI }}
+          OIDC_CLIENT_ID: ${{ secrets.OIDC_CLIENT_ID }}
+          OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+          OIDC_REDIRECT_URI: ${{ secrets.OIDC_REDIRECT_URI }}
+          AUTH_SESSION_SECRET: ${{ secrets.AUTH_SESSION_SECRET }}
+          SYNC_CURSOR_SECRET: ${{ secrets.SYNC_CURSOR_SECRET }}
+          ICS_FEED_ENCRYPTION_KEY: ${{ secrets.ICS_FEED_ENCRYPTION_KEY }}
