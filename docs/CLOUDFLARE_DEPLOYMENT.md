@@ -11,17 +11,21 @@ Each run installs dependencies, runs the dependency audit and tests, builds with
 ## One-time setup
 
 1. **Disconnect Cloudflare Workers Builds.** In the Cloudflare dashboard open **Workers & Pages → `ltm-todo-app` → Settings → Build** and disconnect the Git repository so Cloudflare no longer builds on push. (If it stays connected its deploy step fails, because the deploy script only runs inside the GitHub workflow.)
-2. **Create a Cloudflare API token.** **My Profile → API Tokens → Create Token →** the **Edit Cloudflare Workers** template, then add **Account → D1 → Edit**. Limit it to your account (and the zone serving the app, if the template asks). Note your **Account ID** from the Workers & Pages overview.
+2. **Create a Cloudflare API token.** **Manage Account → Account API Tokens → Create Token → Custom token** with **Account → Workers Scripts → Edit** and **Account → D1 → Edit**, limited to your account. Note your **Account ID** from the Workers & Pages overview. If a deploy fails with a permission error, add **Account → Account Settings → Read**.
 3. **Create the GitHub environment.** In GitHub open **Settings → Environments → New environment** named `production`. Leave **Deployment branches and tags** at **No restriction**: the workflow runs on the pull-request event (ref `refs/pull/N/merge`), so a `main`-only rule would block it, and the workflow already enforces the branch policy. Optionally add yourself as a required reviewer to approve each deploy.
-4. **Add the environment secrets** listed below under **Environment secrets** of `production`. Only the first four are required: the Worker already holds its runtime secrets from earlier deploys, and Wrangler keeps any secret the workflow does not supply.
+4. **Add the secrets** listed below (repository secrets or `production` environment secrets both work; environment secrets are readable only by the deploy job). Only the Cloudflare token and account ID are required: the deploy looks up the D1 databases by name, and the Worker keeps runtime secrets from earlier deploys.
 
 ## Secrets
 
 Required:
 
-- `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` — the token and account from step 2.
-- `D1_DATABASE_ID` — the UUID of the production `ltm-todo-notifications` D1 database (**Storage & Databases → D1**). It is a database identifier, not an access credential, but this public repository keeps it out of Git by injecting it into temporary Wrangler config files during deployment.
-- `SYNC_D1_DATABASE_ID` — the UUID of the separate `ltm-todo-sync` account-sync D1 database.
+- `CLOUDFLARE_API_TOKEN` — an account-owned API token with **Account → Workers Scripts → Edit** and **Account → D1 → Edit**, limited to your account. Use a token dedicated to this project, never a full-access token or the Global API Key.
+- `CLOUDFLARE_ACCOUNT_ID` — the 32-character account ID from the Workers & Pages overview.
+
+Optional D1 overrides. When unset, the deploy runs `wrangler d1 list` with the token and uses the databases named in `wrangler.jsonc` (`ltm-todo-notifications`, `ltm-todo-sync`); exactly one database must have each name:
+
+- `D1_DATABASE_ID` — the 36-character UUID (**Database ID**, not the name) of `ltm-todo-notifications`. Database IDs are identifiers, not credentials; this public repository keeps them out of Git by injecting them into temporary Wrangler config files during deployment.
+- `SYNC_D1_DATABASE_ID` — the UUID of the separate `ltm-todo-sync` account-sync database.
 
 Optional runtime secrets. Set one only to create or change that Worker secret; an unset or empty value keeps the Worker's current value. Supplied values are validated before deploying:
 

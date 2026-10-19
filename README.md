@@ -206,7 +206,7 @@ Production is deployed by the GitHub Actions **Production Deploy** workflow when
 | Durable Object | `AccountSyncCoordinator` / binding `SYNC_COORDINATOR` |
 | Private R2 | `ltm-todo-attachments` / binding `ATTACHMENTS_BUCKET` |
 
-The GitHub `production` environment requires `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID` and `SYNC_D1_DATABASE_ID`. Runtime secrets (VAPID private key, OIDC configuration, session/cursor/feed-encryption keys, optional OIDC client secret) are uploaded only when set there; otherwise the Worker keeps its existing values. See the [deployment guide](docs/CLOUDFLARE_DEPLOYMENT.md) for exact names and formats. Never commit these values.
+The deploy requires the GitHub secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; D1 databases are looked up by name unless `D1_DATABASE_ID`/`SYNC_D1_DATABASE_ID` override them. Runtime secrets (VAPID private key, OIDC configuration, session/cursor/feed-encryption keys, optional OIDC client secret) are uploaded only when set there; otherwise the Worker keeps its existing values. See the [deployment guide](docs/CLOUDFLARE_DEPLOYMENT.md) for exact names and formats. Never commit these values.
 
 The deploy script accepts only a merged same-repository `vX.XX -> main` pull request event whose merge commit is checked out. It validates configuration, injects resource IDs/secrets into temporary configs, applies both D1 migration sets, deploys, and cleans up temporary secret/config files. Deployments reach `main` through version-branch pull requests after version CI passes.
 
