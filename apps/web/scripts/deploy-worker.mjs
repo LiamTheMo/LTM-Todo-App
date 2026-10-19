@@ -11,6 +11,31 @@ const syncIdPlaceholder = "00000000-0000-4000-8000-000000000002";
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const versionBranchPattern = /^v[0-9]+\.[0-9]{2}$/;
 
+/**
+ * Reads the Cloudflare credentials and D1 IDs, trimming copy-paste whitespace and wrapping quotes. Errors name the secret and its shape but
+ * never echo the value.
+ */
+export function readDeployTarget(environment) {
+  const value = name => typeof environment[name] === "string" ? environment[name].trim().replace(/^(["'])(.*)\1$/s, "$2").trim() : "";
+  const target = { apiToken: value("CLOUDFLARE_API_TOKEN"), accountId: value("CLOUDFLARE_ACCOUNT_ID"),
+    databaseId: value("D1_DATABASE_ID"), syncDatabaseId: value("SYNC_D1_DATABASE_ID") };
+  const missing = [["CLOUDFLARE_API_TOKEN", target.apiToken], ["CLOUDFLARE_ACCOUNT_ID", target.accountId],
+    ["D1_DATABASE_ID", target.databaseId], ["SYNC_D1_DATABASE_ID", target.syncDatabaseId]].filter(([, item]) => !item).map(([name]) => name);
+  if (missing.length) throw new Error(`Set these GitHub secrets for the production deploy: ${missing.join(", ")}.`);
+  if (!/^[0-9a-f]{32}$/i.test(target.accountId)) {
+    throw new Error(`CLOUDFLARE_ACCOUNT_ID must be the 32-character hex account ID (got ${target.accountId.length} characters).`);
+  }
+  for (const [name, id] of [["D1_DATABASE_ID", target.databaseId], ["SYNC_D1_DATABASE_ID", target.syncDatabaseId]]) {
+    if (!idPattern.test(id)) {
+      throw new Error(`${name} must be the database's 36-character UUID (Database ID in the Cloudflare D1 dashboard), not its name; got ${id.length} characters.`);
+    }
+  }
+  if (target.databaseId.toLowerCase() === target.syncDatabaseId.toLowerCase()) {
+    throw new Error("D1_DATABASE_ID and SYNC_D1_DATABASE_ID must be different databases.");
+  }
+  return target;
+}
+
 /** Returns the merge commit to deploy, or throws unless this is a merged same-repository vX.XX -> main pull request. */
 export function productionDeployCommit(environment, event) {
   const pullRequest = event?.pull_request;
@@ -111,14 +136,10 @@ async function deploy() {
   const commit = productionDeployCommit(process.env, event);
   const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: appRoot, encoding: "utf8" });
   if (head.status !== 0 || head.stdout.trim() !== commit) throw new Error("The checked-out commit is not the merged main commit.");
-  if (!process.env.CLOUDFLARE_API_TOKEN?.trim() || !process.env.CLOUDFLARE_ACCOUNT_ID?.trim()) {
-    throw new Error("Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the GitHub production environment.");
-  }
-  const databaseId = process.env.D1_DATABASE_ID ?? "";
-  const syncDatabaseId = process.env.SYNC_D1_DATABASE_ID ?? "";
-  if (!databaseId || !syncDatabaseId) {
-    throw new Error("Set D1_DATABASE_ID and SYNC_D1_DATABASE_ID in the GitHub production environment.");
-  }
+  const { apiToken, accountId, databaseId, syncDatabaseId } = readDeployTarget(process.env);
+  // Wrangler reads its credentials from the environment, so hand it the trimmed values.
+  process.env.CLOUDFLARE_API_TOKEN = apiToken;
+  process.env.CLOUDFLARE_ACCOUNT_ID = accountId;
   const workerSecrets = buildWorkerSecrets(process.env);
 
   const originalBuiltConfig = await readFile(builtConfigPath, "utf8");
