@@ -9,6 +9,10 @@ const MAX_COOKIE_VALUE_CHARS = 3_800;
 const MAX_PROVIDER_RESPONSE_BYTES = 32_000;
 const FLOW_LIFETIME_SECONDS = 10 * 60;
 const MAX_SESSION_SECONDS = 24 * 60 * 60;
+// Rolling lifetime of a refreshable browser session; each successful refresh extends it.
+const REFRESHABLE_SESSION_SECONDS = 30 * 24 * 60 * 60;
+const REFRESH_WINDOW_MS = 5 * 60_000;
+const MAX_REFRESH_TOKEN_CHARS = 2_048;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 export type OidcSessionOptions = OidcVerifierOptions & {
@@ -26,10 +30,19 @@ type OidcMetadata = {
   authorization_endpoint?: unknown;
   token_endpoint?: unknown;
   jwks_uri?: unknown;
+  revocation_endpoint?: unknown;
 };
-type ProviderEndpoints = { authorization_endpoint: string; token_endpoint: string };
+type ProviderEndpoints = { authorization_endpoint: string; token_endpoint: string; revocation_endpoint?: string };
 type OidcFlow = { state: string; nonce: string; verifier: string; returnPath: string; issuedAt: number };
-type OidcSession = { accessToken: string; expiresAt: number; sessionId?: string };
+/** `expiresAt` is the access-token expiry; refreshable sessions also carry the provider refresh token and a rolling session expiry. */
+type OidcSession = {
+  accessToken: string; expiresAt: number; sessionId?: string;
+  refreshToken?: string; sessionExpiresAt?: number; subject?: string;
+};
+type RefreshResult =
+  | { kind: "refreshed"; session: OidcSession; cookie: string }
+  | { kind: "rejected" }
+  | { kind: "unavailable" };
 type JsonObject = Record<string, unknown>;
 
 export type OidcAuthenticationDiagnosticRoute =
@@ -53,6 +66,10 @@ export type OidcAuthenticationDiagnosticCode =
   | "callback_token_verification_failed"
   | "callback_identity_mismatch"
   | "callback_session_cookie_too_large"
+  | "session_refresh_failed"
+  | "session_refresh_rejected"
+  | "session_refresh_response_invalid"
+  | "session_refresh_token_invalid"
   | "unexpected_error";
 export type OidcAuthenticationProviderError =
   | "access_denied"
@@ -168,21 +185,20 @@ export class OidcSessionAuthenticator implements SyncAuthenticator {
     const token = request.headers.get("Authorization")?.match(/^Bearer ([^\s]+)$/i)?.[1];
     if (token) return this.jwt.verifyToken(token);
     if (!sessionCookie) return;
-    const session = await this.cookies.open<OidcSession>(sessionCookie, "session");
-    if (!session || typeof session.accessToken !== "string" || typeof session.expiresAt !== "number" ||
-        session.expiresAt <= this.now() || session.expiresAt > this.now() + MAX_SESSION_SECONDS * 1000) return;
-    const principal = await this.jwt.verifyToken(session.accessToken);
-    if (!principal) return;
-    if (this.options.sessionRegistry && (!session.sessionId || !await this.options.sessionRegistry.isActive(principal, session.sessionId))) return;
-    return principal;
+    const session = await openSessionCookie(this.cookies, sessionCookie, this.now());
+    return session ? (await this.verifySession(session))?.principal : undefined;
   }
 
   async readSession(request: Request): Promise<{ principal: SyncPrincipal; expiresAt: number; sessionId?: string } | undefined> {
     const cookie = parseCookies(request.headers.get("Cookie")).get(SESSION_COOKIE);
     if (!cookie) return;
-    const session = await this.cookies.open<OidcSession>(cookie, "session");
-    if (!session || typeof session.accessToken !== "string" || typeof session.expiresAt !== "number" ||
-        session.expiresAt <= this.now() || session.expiresAt > this.now() + MAX_SESSION_SECONDS * 1000) return;
+    const session = await openSessionCookie(this.cookies, cookie, this.now());
+    return session ? this.verifySession(session) : undefined;
+  }
+
+  /** Requires an unexpired access token; refreshing happens only through the session endpoint, which can set cookies. */
+  async verifySession(session: OidcSession): Promise<{ principal: SyncPrincipal; expiresAt: number; sessionId?: string } | undefined> {
+    if (session.expiresAt <= this.now()) return;
     const principal = await this.jwt.verifyToken(session.accessToken);
     if (!principal) return;
     if (this.options.sessionRegistry && (!session.sessionId || !await this.options.sessionRegistry.isActive(principal, session.sessionId))) return;
@@ -247,7 +263,7 @@ export class OidcSessionService {
     authorization.searchParams.set("client_id", this.options.clientId);
     authorization.searchParams.set("audience", this.options.audience);
     authorization.searchParams.set("redirect_uri", this.options.redirectUri);
-    authorization.searchParams.set("scope", "openid");
+    authorization.searchParams.set("scope", "openid offline_access");
     authorization.searchParams.set("state", flow.state);
     authorization.searchParams.set("nonce", flow.nonce);
     authorization.searchParams.set("code_challenge", challenge);
@@ -322,25 +338,117 @@ export class OidcSessionService {
     }
     const expiresAt = this.now() + tokens.expires_in * 1000;
     const sessionId = crypto.randomUUID();
-    const session = await this.cookies.seal({ accessToken: tokens.access_token, expiresAt, sessionId } satisfies OidcSession, "session");
+    const baseSession: OidcSession = { accessToken: tokens.access_token, expiresAt, sessionId };
+    let sessionValue: OidcSession = baseSession;
+    let session = "";
+    if (validRefreshToken(tokens.refresh_token)) {
+      sessionValue = { ...baseSession, refreshToken: tokens.refresh_token, subject: accessPrincipal.subject,
+        sessionExpiresAt: this.now() + REFRESHABLE_SESSION_SECONDS * 1000 };
+      session = await this.cookies.seal(sessionValue, "session");
+    }
+    // A refresh token that does not fit the cookie leaves an ordinary access-token-lifetime session.
+    if (!session || session.length > MAX_COOKIE_VALUE_CHARS) {
+      sessionValue = baseSession;
+      session = await this.cookies.seal(sessionValue, "session");
+    }
     if (session.length > MAX_COOKIE_VALUE_CHARS) return this.authFailure("callback_session_cookie_too_large");
-    if (this.options.sessionRegistry) await this.options.sessionRegistry.issue(accessPrincipal, sessionId, expiresAt);
+    if (this.options.sessionRegistry) await this.options.sessionRegistry.issue(accessPrincipal, sessionId, sessionValue.sessionExpiresAt ?? expiresAt);
     const headers = new Headers({ Location: new URL(flow.returnPath, callback.origin).href, "Cache-Control": "no-store",
       "Referrer-Policy": "no-referrer" });
-    headers.append("Set-Cookie", cookieHeader(SESSION_COOKIE, session, tokens.expires_in));
+    headers.append("Set-Cookie", cookieHeader(SESSION_COOKIE, session, sessionCookieMaxAge(sessionValue, this.now())));
     headers.append("Set-Cookie", cookieHeader(FLOW_COOKIE, "", 0));
     return new Response(null, { status: 302, headers });
   }
 
   private async session(request: Request): Promise<Response> {
-    const authenticator = new OidcSessionAuthenticator(this.options);
-    const session = await authenticator.readSession(request);
+    const cookie = parseCookies(request.headers.get("Cookie")).get(SESSION_COOKIE);
+    let current = cookie ? await openSessionCookie(this.cookies, cookie, this.now()) : undefined;
+    let refreshedCookie: string | undefined;
+    if (current?.refreshToken && current.expiresAt - this.now() <= REFRESH_WINDOW_MS) {
+      const refreshed = await this.refreshSession(current);
+      if (refreshed.kind === "rejected") return this.clearSessionCookies(json({ authenticated: false }));
+      if (refreshed.kind === "refreshed") {
+        current = refreshed.session;
+        refreshedCookie = refreshed.cookie;
+      } else if (current.expiresAt <= this.now()) {
+        // Keep the refresh token for a later retry instead of signing out after a transient provider failure.
+        return json({ error: "authentication_unavailable" }, 503);
+      }
+    }
+    const session = current ? await new OidcSessionAuthenticator(this.options).verifySession(current) : undefined;
     if (!session) return json({ authenticated: false });
     // Stable only within this deployment secret; it is a local sync-account guard, never authorization.
     const accountKeyBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(
       `${this.options.cookieSecret}\u0000${session.principal.issuer}\u0000${session.principal.subject}`));
-    return json({ authenticated: true, expiresAt: new Date(session.expiresAt).toISOString(),
+    const response = json({ authenticated: true, expiresAt: new Date(session.expiresAt).toISOString(),
       accountKey: encode(new Uint8Array(accountKeyBytes)) });
+    if (refreshedCookie && current) {
+      response.headers.append("Set-Cookie", cookieHeader(SESSION_COOKIE, refreshedCookie, sessionCookieMaxAge(current, this.now())));
+    }
+    return response;
+  }
+
+  /** Redeems the session's refresh token once; rotation-aware providers return a replacement refresh token. */
+  private async refreshSession(session: OidcSession): Promise<RefreshResult> {
+    if (!session.refreshToken || !session.subject || !session.sessionExpiresAt) return { kind: "rejected" };
+    const principal: SyncPrincipal = { issuer: this.options.issuer, subject: session.subject };
+    const registry = this.options.sessionRegistry;
+    if (registry && (!session.sessionId || !await registry.isActive(principal, session.sessionId))) return { kind: "rejected" };
+    let tokenResponse: Response;
+    try {
+      const metadata = await this.getMetadata();
+      const form = new URLSearchParams({ grant_type: "refresh_token", refresh_token: session.refreshToken, client_id: this.options.clientId });
+      if (this.options.clientSecret) form.set("client_secret", this.options.clientSecret);
+      tokenResponse = await this.fetcher(metadata.token_endpoint, { method: "POST", redirect: "manual",
+        signal: AbortSignal.timeout(5_000), headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" }, body: form });
+    } catch {
+      this.logDiagnostic({ event: "oidc_authentication_failure", route: "session", code: "session_refresh_failed" });
+      return { kind: "unavailable" };
+    }
+    if (!tokenResponse.ok) {
+      let responseError: unknown;
+      try {
+        const errorResponse = await readJsonBounded(tokenResponse);
+        if (isObject(errorResponse)) responseError = errorResponse.error;
+      } catch {
+        // Keep the generic rejection diagnostic if the provider body is malformed or unavailable.
+      }
+      this.logDiagnostic({ event: "oidc_authentication_failure", route: "session", code: "session_refresh_rejected",
+        providerError: normalizeProviderError(responseError), providerStatus: tokenResponse.status });
+      // Only a definitive client error ends the session; rate limits and provider outages are retried later.
+      return tokenResponse.status >= 400 && tokenResponse.status < 500 && tokenResponse.status !== 408 && tokenResponse.status !== 429
+        ? { kind: "rejected" } : { kind: "unavailable" };
+    }
+    const tokens = await readJsonBounded(tokenResponse);
+    if (!isObject(tokens) || typeof tokens.access_token !== "string" ||
+        typeof tokens.expires_in !== "number" || !Number.isInteger(tokens.expires_in) ||
+        tokens.expires_in < 1 || tokens.expires_in > MAX_SESSION_SECONDS ||
+        (tokens.token_type !== undefined && tokens.token_type !== "Bearer") ||
+        (tokens.refresh_token !== undefined && !validRefreshToken(tokens.refresh_token))) {
+      this.logDiagnostic({ event: "oidc_authentication_failure", route: "session", code: "session_refresh_response_invalid" });
+      return { kind: "unavailable" };
+    }
+    let refreshedPrincipal: SyncPrincipal | undefined;
+    try {
+      refreshedPrincipal = await this.accessTokenVerifier.verifyToken(tokens.access_token);
+    } catch {
+      this.logDiagnostic({ event: "oidc_authentication_failure", route: "session", code: "session_refresh_failed" });
+      return { kind: "unavailable" };
+    }
+    if (!refreshedPrincipal || refreshedPrincipal.issuer !== principal.issuer || refreshedPrincipal.subject !== principal.subject) {
+      this.logDiagnostic({ event: "oidc_authentication_failure", route: "session", code: "session_refresh_token_invalid" });
+      return { kind: "rejected" };
+    }
+    const sessionExpiresAt = this.now() + REFRESHABLE_SESSION_SECONDS * 1000;
+    const refreshed: OidcSession = { ...session, accessToken: tokens.access_token, expiresAt: this.now() + tokens.expires_in * 1000,
+      refreshToken: typeof tokens.refresh_token === "string" ? tokens.refresh_token : session.refreshToken, sessionExpiresAt };
+    const cookie = await this.cookies.seal(refreshed, "session");
+    if (cookie.length > MAX_COOKIE_VALUE_CHARS) {
+      this.logDiagnostic({ event: "oidc_authentication_failure", route: "session", code: "session_refresh_response_invalid" });
+      return { kind: "rejected" };
+    }
+    if (registry && session.sessionId && !await registry.extend(principal, session.sessionId, sessionExpiresAt)) return { kind: "rejected" };
+    return { kind: "refreshed", session: refreshed, cookie };
   }
 
   private async sessions(request: Request): Promise<Response> {
@@ -370,16 +478,34 @@ export class OidcSessionService {
 
   private async logout(request: Request): Promise<Response> {
     if (!isSameOrigin(request)) return json({ error: "origin_rejected" }, 403);
-    const current = await new OidcSessionAuthenticator(this.options).readSession(request);
-    if (current?.sessionId && this.options.sessionRegistry) await this.options.sessionRegistry.revoke(current.principal, current.sessionId);
+    const cookie = parseCookies(request.headers.get("Cookie")).get(SESSION_COOKIE);
+    const session = cookie ? await openSessionCookie(this.cookies, cookie, this.now()) : undefined;
+    const current = session ? await new OidcSessionAuthenticator(this.options).verifySession(session) : undefined;
+    // The sealed subject identifies a refreshable session whose access token has already expired.
+    const principal = current?.principal ?? (session?.subject ? { issuer: this.options.issuer, subject: session.subject } : undefined);
+    if (principal && session?.sessionId && this.options.sessionRegistry) await this.options.sessionRegistry.revoke(principal, session.sessionId);
+    if (session?.refreshToken) await this.revokeRefreshToken(session.refreshToken);
     return this.clearSessionCookies();
   }
 
-  private clearSessionCookies(): Response {
-    const headers = new Headers({ "Cache-Control": "no-store" });
-    headers.append("Set-Cookie", cookieHeader(SESSION_COOKIE, "", 0));
-    headers.append("Set-Cookie", cookieHeader(FLOW_COOKIE, "", 0));
-    return new Response(null, { status: 204, headers });
+  /** Best effort: the cleared cookie and revoked registry entry already end the app session. */
+  private async revokeRefreshToken(refreshToken: string): Promise<void> {
+    try {
+      const endpoint = (await this.getMetadata()).revocation_endpoint;
+      if (!endpoint) return;
+      const form = new URLSearchParams({ token: refreshToken, token_type_hint: "refresh_token", client_id: this.options.clientId });
+      if (this.options.clientSecret) form.set("client_secret", this.options.clientSecret);
+      await this.fetcher(endpoint, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(5_000),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form });
+    } catch {
+      // Provider revocation failures must not keep the browser signed in.
+    }
+  }
+
+  private clearSessionCookies(response = new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } })): Response {
+    response.headers.append("Set-Cookie", cookieHeader(SESSION_COOKIE, "", 0));
+    response.headers.append("Set-Cookie", cookieHeader(FLOW_COOKIE, "", 0));
+    return response;
   }
 
   private authFailure(
@@ -436,7 +562,15 @@ export class OidcSessionService {
       }
       if (parsedEndpoint.protocol !== "https:") throw new OidcDiscoveryFailure("provider_endpoint_invalid");
     }
-    const value = { authorization_endpoint: metadata.authorization_endpoint, token_endpoint: metadata.token_endpoint };
+    const value: ProviderEndpoints = { authorization_endpoint: metadata.authorization_endpoint, token_endpoint: metadata.token_endpoint };
+    if (typeof metadata.revocation_endpoint === "string") {
+      try {
+        // Revocation is optional, so an unusable endpoint is ignored rather than failing sign-in.
+        if (new URL(metadata.revocation_endpoint).protocol === "https:") value.revocation_endpoint = metadata.revocation_endpoint;
+      } catch {
+        // Ignore an invalid optional endpoint.
+      }
+    }
     this.metadata = { value, expiresAt: this.now() + 10 * 60_000 };
     return value;
   }
@@ -455,6 +589,30 @@ function diagnosticRoute(pathname: string): OidcAuthenticationDiagnosticRoute {
 }
 
 function randomValue(): string { return encode(crypto.getRandomValues(new Uint8Array(32))); }
+
+function validRefreshToken(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_REFRESH_TOKEN_CHARS && !/[\s\u0000-\u001f]/.test(value);
+}
+
+/** Opens a structurally valid session cookie. A refreshable session may hold an expired access token. */
+async function openSessionCookie(cookies: AuthCookieCodec, sealed: string, now: number): Promise<OidcSession | undefined> {
+  const session = await cookies.open<OidcSession>(sealed, "session");
+  if (!isObject(session) || typeof session.accessToken !== "string" || typeof session.expiresAt !== "number" ||
+      !Number.isFinite(session.expiresAt) || session.expiresAt > now + MAX_SESSION_SECONDS * 1000) return;
+  if (session.sessionId !== undefined && typeof session.sessionId !== "string") return;
+  if (session.refreshToken === undefined) {
+    return session.expiresAt > now ? { accessToken: session.accessToken, expiresAt: session.expiresAt,
+      ...(session.sessionId ? { sessionId: session.sessionId } : {}) } : undefined;
+  }
+  if (!validRefreshToken(session.refreshToken) || typeof session.subject !== "string" || !session.subject ||
+      typeof session.sessionExpiresAt !== "number" || session.sessionExpiresAt <= now ||
+      session.sessionExpiresAt > now + REFRESHABLE_SESSION_SECONDS * 1000) return;
+  return session;
+}
+
+function sessionCookieMaxAge(session: OidcSession, now: number): number {
+  return Math.max(1, Math.floor(((session.sessionExpiresAt ?? session.expiresAt) - now) / 1000));
+}
 
 function safeReturnPath(value: string | null): string {
   if (!value || value.length > 1024 || !value.startsWith("/") || value.startsWith("//") || value.includes("\\") || /[\u0000-\u001f]/.test(value)) return "/";
