@@ -1,3 +1,4 @@
+import { withAuthSessionLock } from "./auth-session-lock.ts";
 import { MAX_SYNC_BATCH, SYNC_CLIENT_SCHEMA_VERSION, SYNC_PROTOCOL_VERSION, type SyncMutation } from "./sync-protocol.ts";
 import type { PullResponse, PushResponse, SyncChange } from "./sync-api.ts";
 import { safeSyncFailureCode, type SyncFailure, type SyncFailureCode, type SyncStep } from "./sync-diagnostics.ts";
@@ -242,7 +243,8 @@ export class SyncClient {
         path.includes("/push") ? "upload" : "download";
     const controller = new AbortController();
     const timer = this.setTimer(() => controller.abort(), 10_000);
-    try { return await this.fetcher(input, { ...init, signal: controller.signal }); }
+    const request = () => this.fetcher(input, { ...init, signal: controller.signal });
+    try { return await (path === "/api/v1/auth/session" ? withAuthSessionLock(request, controller.signal) : request()); }
     finally { this.clearTimer(timer); }
   }
 

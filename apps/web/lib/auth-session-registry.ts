@@ -5,6 +5,8 @@ export type ActiveAuthSession = { sessionKey: string; createdAt: string; expires
 export interface AuthSessionRegistry {
   issue(principal: SyncPrincipal, sessionId: string, expiresAt: number): Promise<void>;
   isActive(principal: SyncPrincipal, sessionId: string): Promise<boolean>;
+  /** Moves an active session's expiry after a successful token refresh; false if it was revoked or expired. */
+  extend(principal: SyncPrincipal, sessionId: string, expiresAt: number): Promise<boolean>;
   list(principal: SyncPrincipal, currentSessionId: string): Promise<ActiveAuthSession[]>;
   revoke(principal: SyncPrincipal, sessionId: string): Promise<boolean>;
   revokeAll(principal: SyncPrincipal, exceptSessionId?: string): Promise<number>;
@@ -41,6 +43,19 @@ export class D1AuthSessionRegistry implements AuthSessionRegistry {
     await this.db.prepare(`UPDATE auth_sessions SET last_seen_at=? WHERE account_id=? AND session_id_hash=?
       AND last_seen_at<?`).bind(now, account.account_id, hash, new Date(this.now() - 60_000).toISOString()).run();
     return true;
+  }
+
+  async extend(principal: SyncPrincipal, sessionId: string, expiresAt: number): Promise<boolean> {
+    if (!validSessionId(sessionId)) return false;
+    const account = await this.findAccount(principal);
+    if (!account) return false;
+    const now = new Date(this.now()).toISOString();
+    const result = await this.db.prepare(`UPDATE auth_sessions SET expires_at=?, last_seen_at=? WHERE account_id=? AND session_id_hash=?
+      AND revoked_at IS NULL AND expires_at>?`)
+      .bind(new Date(expiresAt).toISOString(), now, account.account_id, await hashSessionId(sessionId), now).run() as {
+        meta?: { changes?: number }; changes?: number;
+      };
+    return (result.meta?.changes ?? result.changes ?? 0) > 0;
   }
 
   async list(principal: SyncPrincipal, currentSessionId: string): Promise<ActiveAuthSession[]> {
