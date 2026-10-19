@@ -9,6 +9,20 @@ const builtConfigPath = path.join(appRoot, "dist/server/wrangler.json");
 const idPlaceholder = "00000000-0000-4000-8000-000000000001";
 const syncIdPlaceholder = "00000000-0000-4000-8000-000000000002";
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const versionBranchPattern = /^v[0-9]+\.[0-9]{2}$/;
+
+/** Returns the merge commit to deploy, or throws unless this is a merged same-repository vX.XX -> main pull request. */
+export function productionDeployCommit(environment, event) {
+  const pullRequest = event?.pull_request;
+  if (environment.GITHUB_ACTIONS !== "true" || environment.GITHUB_EVENT_NAME !== "pull_request" ||
+      event?.action !== "closed" || pullRequest?.merged !== true || pullRequest.base?.ref !== "main" ||
+      !versionBranchPattern.test(pullRequest.head?.ref ?? "") || !environment.GITHUB_REPOSITORY ||
+      pullRequest.head?.repo?.full_name !== environment.GITHUB_REPOSITORY ||
+      typeof pullRequest.merge_commit_sha !== "string" || !/^[0-9a-f]{40}$/.test(pullRequest.merge_commit_sha)) {
+    throw new Error("Production deployment runs only from GitHub Actions after a vX.XX pull request merges into main.");
+  }
+  return pullRequest.merge_commit_sha;
+}
 
 export function injectD1DatabaseId(configText, databaseId) {
   if (!idPattern.test(databaseId)) throw new Error("D1_DATABASE_ID must be a UUID.");
@@ -61,45 +75,49 @@ function runWrangler(args) {
   if (result.status !== 0) throw new Error(`Wrangler exited with status ${result.status ?? "unknown"}.`);
 }
 
+/**
+ * Validates the runtime secrets supplied for this deploy. Omitted (unset or empty) secrets are not uploaded, and
+ * Wrangler keeps the Worker's existing value; supply one only to set or rotate it.
+ */
 export function buildWorkerSecrets(environment) {
-  const required = ["VAPID_PRIVATE_KEY", "OIDC_ISSUER", "OIDC_AUDIENCE", "OIDC_JWKS_URI", "OIDC_CLIENT_ID",
-    "OIDC_REDIRECT_URI", "AUTH_SESSION_SECRET", "SYNC_CURSOR_SECRET", "ICS_FEED_ENCRYPTION_KEY"];
-  const missing = required.filter(name => typeof environment[name] !== "string" || !environment[name].trim());
-  if (missing.length) throw new Error(`Set the required Cloudflare Workers Builds secrets: ${missing.join(", ")}.`);
-  const vapid = environment.VAPID_PRIVATE_KEY.trim();
-  if (!/^[A-Za-z0-9_-]+$/.test(vapid) || Buffer.from(vapid, "base64url").byteLength !== 32) {
-    throw new Error("VAPID_PRIVATE_KEY must be a 32-byte base64url P-256 private key.");
-  }
-  for (const name of ["AUTH_SESSION_SECRET", "SYNC_CURSOR_SECRET", "ICS_FEED_ENCRYPTION_KEY"]) {
-    const value = environment[name];
-    if (!/^[A-Za-z0-9_-]+$/.test(value) || Buffer.from(value, "base64url").byteLength !== 32) {
-      throw new Error(`${name} must be an independently generated 32-byte base64url value.`);
+  const names = ["VAPID_PRIVATE_KEY", "OIDC_ISSUER", "OIDC_AUDIENCE", "OIDC_JWKS_URI", "OIDC_CLIENT_ID",
+    "OIDC_REDIRECT_URI", "AUTH_SESSION_SECRET", "SYNC_CURSOR_SECRET", "ICS_FEED_ENCRYPTION_KEY", "OIDC_CLIENT_SECRET"];
+  const secrets = Object.fromEntries(names.filter(name => typeof environment[name] === "string" && environment[name].trim())
+    .map(name => [name, environment[name].trim()]));
+  for (const name of ["VAPID_PRIVATE_KEY", "AUTH_SESSION_SECRET", "SYNC_CURSOR_SECRET", "ICS_FEED_ENCRYPTION_KEY"]) {
+    const value = secrets[name];
+    if (value !== undefined && (!/^[A-Za-z0-9_-]+$/.test(value) || Buffer.from(value, "base64url").byteLength !== 32)) {
+      throw new Error(name === "VAPID_PRIVATE_KEY" ? "VAPID_PRIVATE_KEY must be a 32-byte base64url P-256 private key."
+        : `${name} must be an independently generated 32-byte base64url value.`);
     }
   }
   for (const name of ["OIDC_ISSUER", "OIDC_JWKS_URI", "OIDC_REDIRECT_URI"]) {
+    if (secrets[name] === undefined) continue;
     let url;
-    try { url = new URL(environment[name]); }
+    try { url = new URL(secrets[name]); }
     catch { throw new Error(`${name} must be a valid HTTPS URL.`); }
-    if (url.protocol !== "https:" || url.username || url.password || url.hash ||
-        name !== "OIDC_REDIRECT_URI" && url.search) throw new Error(`${name} must be a valid HTTPS URL.`);
+    if (url.protocol !== "https:" || url.username || url.password || url.hash || url.search) throw new Error(`${name} must be a valid HTTPS URL.`);
   }
-  const callback = new URL(environment.OIDC_REDIRECT_URI);
-  if (callback.pathname !== "/api/v1/auth/callback" || callback.search || callback.hash || callback.username || callback.password) {
+  if (secrets.OIDC_REDIRECT_URI !== undefined && new URL(secrets.OIDC_REDIRECT_URI).pathname !== "/api/v1/auth/callback") {
     throw new Error("OIDC_REDIRECT_URI must end at /api/v1/auth/callback without query or fragment parameters.");
   }
-  const secrets = Object.fromEntries(required.map(name => [name, environment[name].trim()]));
-  if (environment.OIDC_CLIENT_SECRET?.trim()) secrets.OIDC_CLIENT_SECRET = environment.OIDC_CLIENT_SECRET.trim();
   return secrets;
 }
 
 async function deploy() {
-  if (process.env.WORKERS_CI !== "1" || process.env.WORKERS_CI_BRANCH !== "main") {
-    throw new Error("Production deployment is restricted to the main-branch Cloudflare Workers Build.");
+  let event;
+  try { event = JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH ?? "", "utf8")); }
+  catch { event = undefined; }
+  const commit = productionDeployCommit(process.env, event);
+  const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: appRoot, encoding: "utf8" });
+  if (head.status !== 0 || head.stdout.trim() !== commit) throw new Error("The checked-out commit is not the merged main commit.");
+  if (!process.env.CLOUDFLARE_API_TOKEN?.trim() || !process.env.CLOUDFLARE_ACCOUNT_ID?.trim()) {
+    throw new Error("Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the GitHub production environment.");
   }
   const databaseId = process.env.D1_DATABASE_ID ?? "";
   const syncDatabaseId = process.env.SYNC_D1_DATABASE_ID ?? "";
   if (!databaseId || !syncDatabaseId) {
-    throw new Error("Set D1_DATABASE_ID and SYNC_D1_DATABASE_ID in Cloudflare Workers Builds.");
+    throw new Error("Set D1_DATABASE_ID and SYNC_D1_DATABASE_ID in the GitHub production environment.");
   }
   const workerSecrets = buildWorkerSecrets(process.env);
 
@@ -120,7 +138,7 @@ async function deploy() {
 
     runWrangler(["d1", "migrations", "apply", "ltm-todo-notifications", "--remote", "--config", migrationConfigPath]);
     runWrangler(["d1", "migrations", "apply", "ltm-todo-sync", "--remote", "--config", migrationConfigPath]);
-    runWrangler(["deploy", "--config", builtConfigPath, "--secrets-file", secretsPath]);
+    runWrangler(["deploy", "--config", builtConfigPath, ...(Object.keys(workerSecrets).length ? ["--secrets-file", secretsPath] : [])]);
   } finally {
     await Promise.all([
       unlink(migrationConfigPath).catch(() => undefined),

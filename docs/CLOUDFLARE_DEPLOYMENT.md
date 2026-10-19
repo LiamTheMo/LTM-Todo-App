@@ -1,34 +1,38 @@
 # Cloudflare Worker deployment
 
-The web client is deployed to Cloudflare Workers as `ltm-todo-app` using Cloudflare Workers Builds.
+The web client is deployed to Cloudflare Workers as `ltm-todo-app` by the GitHub Actions workflow `.github/workflows/deploy-production.yml` (**Production Deploy**).
 
 ## Production policy
 
-Connect the GitHub repository to the existing Worker and set `main` as the production branch. Disable preview builds so pushes to version and temporary branches do not deploy. Cloudflare builds and deploys when a commit reaches `main`; GitHub Actions does not deploy. Protect `main` with a pull request requirement and require the version-branch CI checks before merging.
+The workflow runs only when a pull request from a permanent version branch (`vX.XX`) in this repository is **merged** into `main`. Direct pushes, other branches, unmerged or forked pull requests and manual dispatch never deploy; `apps/web/scripts/deploy-worker.mjs` re-checks the event and the checked-out merge commit before touching Cloudflare. If `main` has already moved past a merge, that run skips and the newer merge's run deploys. Runs are serialized. Protect `main` with a pull request requirement and require the version-branch CI checks before merging.
 
-## Workers Builds settings
+Each run installs dependencies, runs the dependency audit and tests, builds with `npm run build:vinext`, applies remote D1 migrations and deploys with Wrangler.
 
-- Repository: `OrangeCheasy/LTM-Todo-App`
-- Production branch: `main`
-- Root directory: `apps/web`
-- Build command: `npm run build:vinext`
-- Deploy command: `npm run deploy:worker`
-- Preview builds: disabled
+## One-time setup
 
-Workers Builds installs dependencies automatically. Its API token must be allowed to edit Workers Scripts and D1 databases. Keep the token in Cloudflare's build settings; never put it in the repository.
+1. **Disconnect Cloudflare Workers Builds.** In the Cloudflare dashboard open **Workers & Pages → `ltm-todo-app` → Settings → Build** and disconnect the Git repository so Cloudflare no longer builds on push. (If it stays connected its deploy step fails, because the deploy script only runs inside the GitHub workflow.)
+2. **Create a Cloudflare API token.** **My Profile → API Tokens → Create Token →** the **Edit Cloudflare Workers** template, then add **Account → D1 → Edit**. Limit it to your account (and the zone serving the app, if the template asks). Note your **Account ID** from the Workers & Pages overview.
+3. **Create the GitHub environment.** In GitHub open **Settings → Environments → New environment** named `production`. Leave **Deployment branches and tags** at **No restriction**: the workflow runs on the pull-request event (ref `refs/pull/N/merge`), so a `main`-only rule would block it, and the workflow already enforces the branch policy. Optionally add yourself as a required reviewer to approve each deploy.
+4. **Add the environment secrets** listed below under **Environment secrets** of `production`. Only the first four are required: the Worker already holds its runtime secrets from earlier deploys, and Wrangler keeps any secret the workflow does not supply.
 
-Add these production-only entries under **Settings → Builds → Build variables and secrets**. Database IDs may be build variables; all runtime values must be build secrets so the deployment command can install them as Worker secrets:
+## Secrets
 
-- `D1_DATABASE_ID` — the UUID of the production D1 database. It is a database identifier, not an access credential, but this public repository keeps it out of Git by injecting it into temporary Wrangler config files during deployment.
-- `SYNC_D1_DATABASE_ID` — the UUID of the separate account-sync D1 database.
+Required:
+
+- `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` — the token and account from step 2.
+- `D1_DATABASE_ID` — the UUID of the production `ltm-todo-notifications` D1 database (**Storage & Databases → D1**). It is a database identifier, not an access credential, but this public repository keeps it out of Git by injecting it into temporary Wrangler config files during deployment.
+- `SYNC_D1_DATABASE_ID` — the UUID of the separate `ltm-todo-sync` account-sync D1 database.
+
+Optional runtime secrets. Set one only to create or change that Worker secret; an unset or empty value keeps the Worker's current value. Supplied values are validated before deploying:
+
 - `VAPID_PRIVATE_KEY` — the private half of the dedicated Web Push VAPID key pair.
 - `OIDC_ISSUER` and `OIDC_JWKS_URI` — copy the exact `issuer` and `jwks_uri` values from the provider's `/.well-known/openid-configuration` document. `OIDC_AUDIENCE` — the API/resource identifier expected in access-token `aud`; the app sends it as the authorization `audience` parameter for providers that support that convention, including Auth0. `OIDC_CLIENT_ID` — the registered app's client ID. `OIDC_REDIRECT_URI` — the exact callback `<app-origin>/api/v1/auth/callback` registered with the provider.
 - `OIDC_CLIENT_SECRET` — optional; only needed for a confidential OIDC client.
 - `AUTH_SESSION_SECRET`, `SYNC_CURSOR_SECRET`, and `ICS_FEED_ENCRYPTION_KEY` — three distinct, stable, independently generated 32-byte base64url secrets. Do not rotate them casually: rotation invalidates browser sessions/cursors or makes stored feed URLs undecryptable.
 
-The deploy script requires Cloudflare's `WORKERS_CI=1` and `WORKERS_CI_BRANCH=main` values, validates the runtime configuration and 32-byte keys, applies remote D1 migrations, passes the Worker secrets to Wrangler, then deploys. Temporary config/secret files are removed afterwards. Do not replace this with `wrangler secret put` from a developer machine: that command deploys immediately and bypasses the main-only deployment flow.
+The deploy script requires the merged `vX.XX -> main` pull-request event and its checked-out merge commit, validates the runtime configuration and 32-byte keys, applies remote D1 migrations, passes the Worker secrets to Wrangler, then deploys. Temporary config/secret files are removed afterwards. Do not replace this with `wrangler secret put` from a developer machine: that command deploys immediately and bypasses the version-branch-to-main deployment flow.
 
-Production deployment still occurs only from `main`, after a temporary implementation branch passes validation, merges into its originating `vX.XX` checkpoint, and that version branch is promoted through a pull request. The deploy script applies all pending migrations for the two D1 databases before publishing. Create the `ltm-todo-sync` database and `ltm-todo-attachments` R2 bucket, and configure valid unique Cloudflare rate-limit namespace IDs in `wrangler.jsonc` before the first deployment of these bindings.
+Production deployment still occurs only through the GitHub workflow, after a temporary implementation branch passes validation, merges into its originating `vX.XX` checkpoint, and that version branch is promoted through a pull request. The deploy script applies all pending migrations for the two D1 databases before publishing. Create the `ltm-todo-sync` database and `ltm-todo-attachments` R2 bucket, and configure valid unique Cloudflare rate-limit namespace IDs in `wrangler.jsonc` before the first deployment of these bindings.
 
 ## Related commands
 
@@ -83,8 +87,8 @@ Discovery and unexpected runtime failures return `503 authentication_unavailable
 
 Web reminders use the same `ltm-todo-app` Worker. Before enabling them in production:
 
-1. Create the D1 database `ltm-todo-notifications` with `npx wrangler d1 create ltm-todo-notifications`. Add its returned ID to Cloudflare Workers Builds as the build variable `D1_DATABASE_ID`; do not commit the real ID.
-2. Generate a dedicated, stable VAPID key pair with `node scripts/generate-vapid-keys.mjs`. Add its private value to Workers Builds as the secret `VAPID_PRIVATE_KEY`; never put it in Git and do not rotate this pair after devices subscribe.
+1. Create the D1 database `ltm-todo-notifications` with `npx wrangler d1 create ltm-todo-notifications`. Add its returned ID to the GitHub `production` environment as the secret `D1_DATABASE_ID`; do not commit the real ID.
+2. Generate a dedicated, stable VAPID key pair with `node scripts/generate-vapid-keys.mjs`. Add its private value to the GitHub `production` environment as the secret `VAPID_PRIVATE_KEY`; never put it in Git and do not rotate this pair after devices subscribe.
 3. Set the VAPID public key and a valid subject (prefer the public HTTPS app origin) in `wrangler.jsonc`. These are public Web Push configuration values, not credentials.
 4. Deploy only from `main`. The build command applies D1 migrations before publishing the Worker; Cron Triggers are configured for once per minute.
 

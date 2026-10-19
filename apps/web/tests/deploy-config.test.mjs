@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildWorkerSecrets, injectBuiltD1DatabaseId, injectD1DatabaseId, injectBuiltD1DatabaseIds, injectD1DatabaseIds } from "../scripts/deploy-worker.mjs";
+import { buildWorkerSecrets, productionDeployCommit, injectBuiltD1DatabaseId, injectD1DatabaseId, injectBuiltD1DatabaseIds, injectD1DatabaseIds } from "../scripts/deploy-worker.mjs";
 
 const placeholder = "00000000-0000-4000-8000-000000000001";
 const productionId = "c1234567-89ab-4def-8123-456789abcdef";
@@ -72,5 +72,32 @@ test("production deploy refuses missing, weak, non-HTTPS, or misrouted runtime c
   assert.throws(() => buildWorkerSecrets({ ...base, AUTH_SESSION_SECRET: "weak" }), /32-byte/);
   assert.throws(() => buildWorkerSecrets({ ...base, OIDC_JWKS_URI: "http://identity.example.test/keys" }), /HTTPS/);
   assert.throws(() => buildWorkerSecrets({ ...base, OIDC_REDIRECT_URI: "https://todo.example.test/wrong" }), /callback/);
-  assert.throws(() => buildWorkerSecrets({ ...base, ICS_FEED_ENCRYPTION_KEY: undefined }), /ICS_FEED_ENCRYPTION_KEY/);
+  assert.throws(() => buildWorkerSecrets({ ...base, OIDC_REDIRECT_URI: "https://todo.example.test/api/v1/auth/callback?x=1" }), /HTTPS/);
+});
+
+test("omitted runtime secrets are not uploaded so the Worker keeps its existing values", () => {
+  assert.deepEqual(buildWorkerSecrets({}), {});
+  assert.deepEqual(buildWorkerSecrets({ AUTH_SESSION_SECRET: "", OIDC_CLIENT_SECRET: "  ", OIDC_CLIENT_ID: "ltm-client" }), { OIDC_CLIENT_ID: "ltm-client" });
+  assert.throws(() => buildWorkerSecrets({ SYNC_CURSOR_SECRET: "weak" }), /SYNC_CURSOR_SECRET/);
+});
+
+test("production deploys only for a merged same-repository version-branch pull request into main", () => {
+  const sha = "a".repeat(40);
+  const environment = { GITHUB_ACTIONS: "true", GITHUB_EVENT_NAME: "pull_request", GITHUB_REPOSITORY: "owner/app" };
+  const event = { action: "closed", pull_request: { merged: true, merge_commit_sha: sha,
+    base: { ref: "main" }, head: { ref: "v3.04", repo: { full_name: "owner/app" } } } };
+  assert.equal(productionDeployCommit(environment, event), sha);
+  const rejected = [
+    [{ ...environment, GITHUB_ACTIONS: undefined }, event],
+    [{ ...environment, GITHUB_EVENT_NAME: "push" }, event],
+    [{ ...environment, GITHUB_EVENT_NAME: "workflow_dispatch" }, event],
+    [environment, { ...event, action: "opened" }],
+    [environment, { ...event, pull_request: { ...event.pull_request, merged: false } }],
+    [environment, { ...event, pull_request: { ...event.pull_request, base: { ref: "v3.04" } } }],
+    [environment, { ...event, pull_request: { ...event.pull_request, head: { ref: "fix/auth", repo: { full_name: "owner/app" } } } }],
+    [environment, { ...event, pull_request: { ...event.pull_request, head: { ref: "v3.04", repo: { full_name: "fork/app" } } } }],
+    [environment, { ...event, pull_request: { ...event.pull_request, merge_commit_sha: null } }],
+    [environment, undefined]
+  ];
+  for (const [env, payload] of rejected) assert.throws(() => productionDeployCommit(env, payload), /vX\.XX pull request merges into main/);
 });
