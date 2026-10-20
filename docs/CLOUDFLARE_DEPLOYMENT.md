@@ -6,7 +6,7 @@ The web client is deployed to Cloudflare Workers as `ltm-todo-app` by the GitHub
 
 The workflow runs only when a pull request from a permanent version branch (`vX.XX`) in this repository is **merged** into `main`. Direct pushes, other branches, unmerged or forked pull requests and manual dispatch never deploy; `apps/web/scripts/deploy-worker.mjs` re-checks the event and the checked-out merge commit before touching Cloudflare. If `main` has already moved past a merge, that run skips and the newer merge's run deploys. Runs are serialized. Protect `main` with a pull request requirement and require the version-branch CI checks before merging.
 
-Each run installs dependencies, runs the dependency audit and tests, builds with `npm run build:vinext`, applies remote D1 migrations and deploys with Wrangler.
+Each run installs dependencies, runs the dependency audit and tests, builds with `npm run build:vinext`, checks that every relative import in the Worker bundle exists, applies remote D1 migrations and deploys with Wrangler.
 
 ## One-time setup
 
