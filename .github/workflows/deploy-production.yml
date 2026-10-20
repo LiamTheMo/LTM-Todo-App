@@ -63,6 +63,8 @@ jobs:
         run: npm test
       - if: steps.current.outputs.deploy == 'true'
         run: npm run build:vinext
+      - if: steps.current.outputs.deploy == 'true'
+        run: node scripts/check-worker-bundle.mjs
       - name: Deploy Worker
         if: steps.current.outputs.deploy == 'true'
         run: npm run deploy:worker

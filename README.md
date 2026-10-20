@@ -184,11 +184,12 @@ npm run typecheck
 npm run lint
 node scripts/audit-dependencies.mjs
 npm run build:vinext
+node scripts/check-worker-bundle.mjs
 ```
 
 The test suite covers date-only/time-zone semantics, recurrence/DST, retention, sync ownership and conflict behavior, IndexedDB queues, migrations, attachment/feed boundaries, CSV batch-field conversion, import limits, validation, and duplicate handling. Source extraction also needs browser acceptance checks for representative PDF/DOCX layouts.
 
-`npm run build` is the Next.js fallback build. `npm run build:vinext` is the production Worker build. High/critical production dependency findings fail validation. The full-tree audit permits only the existing narrowly checked development-only advisory documented in [engineering workflows](docs/WORKFLOWS.md).
+`npm run build` is the Next.js fallback build. `npm run build:vinext` is the production Worker build; `scripts/check-worker-bundle.mjs` then confirms every relative import in `dist/server` exists, because Cloudflare rejects a Worker whose bundle imports a missing module even when the build succeeds. High/critical production dependency findings fail validation. The full-tree audit permits only the existing narrowly checked development-only advisory documented in [engineering workflows](docs/WORKFLOWS.md).
 
 ## Cloudflare setup and deployment
 
