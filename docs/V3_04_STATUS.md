@@ -45,6 +45,6 @@ Sync no longer needs manual action in Settings. When two devices change the same
 - Local edits made while a sync is applying remote changes are replayed on top of them instead of failing with "changed in another tab" or briefly disappearing (`apps/web/lib/local-edit-queue.ts`).
 - While the app is visible it syncs every 15 seconds, as well as after each change, when it becomes visible and when the device reconnects. The **Sync now** button is removed.
 
-`tests/sync-conflict-policy.test.mjs`, `tests/local-edit-queue.test.mjs`, `tests/sync-storage.test.mjs` and `tests/sync-client.test.mjs` cover the policy, edit replay, automatic resolution, rebased re-push and non-blocking conflicts.
+`tests/multi-device-sync.test.mjs` runs two devices with separate local databases against the real sync server code: a task created on one appears on the other, completions replicate back, offline creations on both merge without duplicates, concurrent edits converge on the newest edit without blocking a new task, and an offline edit survives a remote deletion. `tests/sync-conflict-policy.test.mjs`, `tests/local-edit-queue.test.mjs`, `tests/sync-storage.test.mjs` and `tests/sync-client.test.mjs` cover the policy, edit replay, automatic resolution, rebased re-push and non-blocking conflicts.
 
 Manual validation: on two signed-in devices, edit the same task offline on both and reconnect; edit on one while deleting on the other; confirm both converge within about 15 seconds without a Settings prompt and that editing during an incoming sync keeps the edit.
