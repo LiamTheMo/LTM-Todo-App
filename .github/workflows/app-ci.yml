@@ -25,6 +25,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build:vinext
+      - run: node scripts/check-worker-bundle.mjs
 
   docs:
     runs-on: ubuntu-24.04

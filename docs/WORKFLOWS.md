@@ -20,6 +20,8 @@ GitHub App CI and documentation checks run only after pushes to `vX.XX` version 
 
 The web dependency gate fails on all high/critical production findings. It also audits the full dependency tree and temporarily permits only GHSA-vfj7-8cjw-p6xm when every affected package path is confirmed `dev: true` in the lockfile. That advisory affects the `braces` build/lint toolchain and currently has no patched release. The exception is enforced and tested in `apps/web/scripts/audit-policy.mjs`; remove it when upstream publishes a fix. Any other high/critical full-tree advisory fails CI.
 
+`apps/web/package.json` overrides rolldown to 1.2.13. Rolldown 1.2.14 (pulled in by vite 8.3.4) moves the vinext worker entry into `_next/static/` but keeps its root-relative imports, so Cloudflare rejects the upload with `No such module` although the build succeeds. `scripts/check-worker-bundle.mjs` runs after every `build:vinext` in CI and in Production Deploy to catch this class of failure; remove the override once a rolldown or vinext release passes that check.
+
 ## Pull requests
 Temporary -> originating version branch. PR body states scope, acceptance criteria, local validation, manual validation and known limitations. After merge, wait for the version-branch CI result. When a version is ready for deployed/manual testing, merge version -> main through a PR. The `main` ruleset blocks merges until required checks pass. The **Production Deploy** workflow re-runs tests, builds, applies D1 migrations and deploys the resulting `main` merge commit. Check that run before manual validation.
 
