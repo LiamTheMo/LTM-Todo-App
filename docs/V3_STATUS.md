@@ -54,7 +54,7 @@ Final local validation passed: 162 tests, TypeScript typecheck, ESLint, Vinext p
 
 **Requires Manual Validation:**
 
-- Offline edits followed by reconnect, and two devices editing the same record with both conflict-resolution choices.
+- Offline edits followed by reconnect, and two devices editing (or one editing and one deleting) the same record; confirm both converge automatically without a Settings prompt.
 - ICS add/refresh/cancellation/unsubscribe with a real HTTPS feed; prove DNS/address pinning and certificate verification in the deployed Worker, including safe failures.
 - Attachment upload/download/delete across devices, interrupted/offline uploads, and R2 orphan cleanup.
 - Export/restore on disposable data; verify excluded attachments and feed URLs remain excluded.
