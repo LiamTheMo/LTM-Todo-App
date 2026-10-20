@@ -168,6 +168,32 @@ export function nextOccurrence(rule: Recurrence, after: string): string | undefi
   }
   return rule.until && candidate > rule.until ? undefined : candidate;
 }
+/**
+ * The same ID on every device for one completion of a task occurrence, so completing it on two devices before they
+ * sync merges into one record instead of two. A version-8 UUID built from a 128-bit cyrb128 hash.
+ */
+export function completionIdFor(taskId: string, occurrenceKey: string): string {
+  const input = `ltm-completion:${taskId}:${occurrenceKey}`;
+  let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+  for (let index = 0; index < input.length; index++) {
+    const code = input.charCodeAt(index);
+    h1 = h2 ^ Math.imul(h1 ^ code, 597399067);
+    h2 = h3 ^ Math.imul(h2 ^ code, 2869860233);
+    h3 = h4 ^ Math.imul(h3 ^ code, 951274213);
+    h4 = h1 ^ Math.imul(h4 ^ code, 2716044179);
+  }
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+  h1 ^= h2 ^ h3 ^ h4; h2 ^= h1; h3 ^= h1; h4 ^= h1;
+  const hex = [h1, h2, h3, h4].map(word => (word >>> 0).toString(16).padStart(8, "0")).join("");
+  const variant = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+/** Completions of the same task occurrence are copies of one event (for example, made on two devices). */
+const sameOccurrence = (left: Completion, right: Completion) => left.taskId === right.taskId && left.occurrenceDate === right.occurrenceDate;
+
 export function completeTask(data: Data, id: string, now = new Date()): Data {
   const task = data.tasks.find(item => item.id === id && !item.deletedAt);
   if (!task || task.completedAt) return data;
@@ -180,7 +206,10 @@ export function completeTask(data: Data, id: string, now = new Date()): Data {
     ...data.calendarEvents.filter(event => event.taskId === id && !event.deletedAt &&
       !event.allDay && (next || Date.parse(event.endInstant) > now.getTime())).map(event => event.id)
   ];
-  const completions = [...data.completions, { id: crypto.randomUUID(), taskId: id, occurrenceDate, completedAt, clearedBlockIds }];
+  // Undated recurring tasks have no occurrence date, so their completions are keyed by local completion day.
+  const completionId = completionIdFor(id, occurrenceDate ?? (task.recurrence ? localDate(now) : ""));
+  const completions = [...data.completions.filter(item => item.id !== completionId),
+    { id: completionId, taskId: id, occurrenceDate, completedAt, clearedBlockIds }];
   return {
     ...data, completions,
     blocks: data.blocks.map(block => clearedBlockIds.includes(block.id) ? { ...block, deletedAt: completedAt, updatedAt: completedAt, revision: block.revision + 1 } : block),
@@ -194,13 +223,16 @@ export function completeTask(data: Data, id: string, now = new Date()): Data {
 export function undoCompletion(data: Data, completionId: string): Data {
   const completion = data.completions.find(item => item.id === completionId);
   if (!completion || data.completions.filter(item => item.taskId === completion.taskId).at(-1)?.id !== completionId) return data;
+  // Copies of this occurrence's completion (from devices that completed it before syncing) are undone together.
+  const copies = data.completions.filter(item => sameOccurrence(item, completion));
+  const restoredIds = new Set(copies.flatMap(item => item.clearedBlockIds ?? []));
   return {
     ...data,
-    completions: data.completions.filter(item => item.id !== completionId),
-    blocks: data.blocks.map(block => completion.clearedBlockIds?.includes(block.id) ? {
+    completions: data.completions.filter(item => !sameOccurrence(item, completion)),
+    blocks: data.blocks.map(block => restoredIds.has(block.id) ? {
       ...block, deletedAt: undefined, updatedAt: new Date().toISOString(), revision: block.revision + 1
     } : block),
-    calendarEvents: data.calendarEvents.map(event => completion.clearedBlockIds?.includes(event.id) ? {
+    calendarEvents: data.calendarEvents.map(event => restoredIds.has(event.id) ? {
       ...event, deletedAt: undefined, updatedAt: new Date().toISOString(), revision: event.revision + 1
     } : event),
     tasks: data.tasks.map(task => task.id === completion.taskId ? {
@@ -418,7 +450,8 @@ export function dashboardDays(data: Data, start: string, length: number, today =
     completionTaskIds.add(task.id);
     const date = completion.occurrenceDate ?? localDate(timestamp);
     if (!isInRetainedHistory(date, today)) continue;
-    const group = completed.get(date) ?? [];
+    // One row per task per day: the latest copy wins, which is also the one Undo acts on.
+    const group = (completed.get(date) ?? []).filter(item => item.task.id !== task.id);
     group.push({ task, completionId: completion.id, completedAt: completion.completedAt });
     completed.set(date, group);
   }
