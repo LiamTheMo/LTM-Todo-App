@@ -10,7 +10,7 @@ import { DeviceRegistry } from "../lib/device-registry.ts";
 import { handleDeviceRequest } from "../lib/device-api.ts";
 import { handleSyncRequest, handleSyncSnapshotRequest } from "../lib/sync-api.ts";
 import { SyncClient } from "../lib/sync-client.ts";
-import { completeTask, newEntity, saveTask } from "../lib/domain.ts";
+import { completeTask, dashboardDays, newEntity, saveTask } from "../lib/domain.ts";
 import { acknowledgeSyncMutation, applyRemoteSyncChanges, autoResolveSyncConflicts, bindSyncAccount, getSyncCursor,
   getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, prepareInitialSyncUpload,
   readData, readPendingSyncMutations, recordSyncConflict, writeData } from "../lib/storage.ts";
@@ -164,5 +164,26 @@ test("a deletion replicates when nobody else edited the task", async () => {
       ? { ...task, deletedAt: at(5).toISOString(), revision: task.revision + 1 } : task) }));
     await laptop.sync(); await phone.sync();
     assert.deepEqual(titles(await phone.read()), []);
+  } finally { phone.dispose(); laptop.dispose(); server.close(); }
+});
+
+test("completing the same task on both devices before they sync leaves one completion, shown once", async () => {
+  const server = await account();
+  const phone = server.device();
+  const laptop = server.device();
+  try {
+    const rent = { ...newTask("Pay rent"), dueDate: today };
+    await phone.edit(data => saveTask(data, rent, "", today));
+    await phone.sync(); await laptop.sync();
+    // Each device completes the task while the other's change has not synced yet (for example, signed out).
+    await phone.edit(data => completeTask(data, rent.id, at(5)));
+    await laptop.edit(data => completeTask(data, rent.id, at(7)));
+    await phone.sync(); await laptop.sync(); await phone.sync();
+    for (const data of [await phone.read(), await laptop.read()]) {
+      assert.equal(data.completions.filter(item => item.taskId === rent.id).length, 1);
+      const [day] = dashboardDays(data, today, 1, today);
+      assert.deepEqual(day.completed.map(item => item.task.title), ["Pay rent"]);
+      assert.deepEqual(day.due, []);
+    }
   } finally { phone.dispose(); laptop.dispose(); server.close(); }
 });
