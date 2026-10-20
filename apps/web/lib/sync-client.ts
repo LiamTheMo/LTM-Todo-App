@@ -16,6 +16,8 @@ export type SyncOutbox = {
   setSnapshotCursor(cursor: string | undefined): Promise<void>;
   applyRemote(changes: SyncChange[]): Promise<void>;
   hasConflicts(): Promise<boolean>;
+  /** Settles recorded conflicts automatically; true when any were settled and another pass should push. */
+  resolveConflicts?(): Promise<boolean>;
 };
 export type SyncStatus = { state: ClientSyncStatus; authenticated?: boolean; lastSuccessAt?: string; retryAt?: string; failure?: SyncFailure };
 export type SyncClientOptions = {
@@ -33,6 +35,7 @@ export type SyncClientOptions = {
 
 const jsonHeaders = { "Content-Type": "application/json", "X-LTM-Sync-Protocol": String(SYNC_PROTOCOL_VERSION) };
 const retryableStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
+const MAX_SYNC_PASSES = 4;
 
 /** Local writes stay authoritative; this worker only reads the durable journal after the IndexedDB commit. */
 export class SyncClient {
@@ -82,10 +85,14 @@ export class SyncClient {
     this.running = true;
     this.clearScheduled();
     try {
+      let passes = 0;
       do {
         this.requested = false;
         await this.synchronizeOnce();
-      } while (this.requested && this.online());
+        // Re-pushing an edit kept by conflict resolution can conflict again with a concurrent device; the next
+        // scheduled sync continues after a few passes instead of looping here.
+      } while (this.requested && this.online() && ++passes < MAX_SYNC_PASSES);
+      this.requested = false;
       this.failures = 0;
       const conflict = await this.localStorage(() => this.outbox.hasConflicts());
       this.publish({ state: conflict ? "conflict" : "idle", lastSuccessAt: new Date(this.now()).toISOString() });
@@ -149,7 +156,8 @@ export class SyncClient {
           await this.localStorage(() => this.outbox.recordConflict(mutation, outcome.current));
         } else throw new SyncResponseError("Invalid sync push result");
       }
-      if (result.results.some(item => item.status === "conflict")) break;
+      // Conflicted mutations wait for resolution below; stop when a whole batch made no progress.
+      if (!result.results.some(item => item.status === "accepted")) break;
     }
 
     let cursor = await this.localStorage(() => this.outbox.cursor());
@@ -179,6 +187,12 @@ export class SyncClient {
         credentials: "same-origin", headers: jsonHeaders, body: JSON.stringify({ cursor: page.cursor }) });
       if (!acknowledged.ok) throw await SyncHttpError.fromResponse(acknowledged);
       if (!page.hasMore) break;
+    }
+
+    // Conflicts come from push results and from remote edits that crossed a pending local edit; settle them after
+    // pulling so the comparison sees the newest server copy.
+    if (this.outbox.resolveConflicts && await this.localStorage(() => this.outbox.hasConflicts())) {
+      if (await this.localStorage(() => this.outbox.resolveConflicts!())) this.requested = true;
     }
   }
 

@@ -3,6 +3,7 @@ import { emptyData, localDate, type Data } from "./domain.ts";
 import { SYNC_CLIENT_SCHEMA_VERSION, type SyncEntityType, type SyncMutation } from "./sync-protocol.ts";
 import type { SyncChange } from "./sync-api.ts";
 import { syncEntityPriority } from "./sync-entity-order.ts";
+import { conflictWinner } from "./sync-conflict-policy.ts";
 
 const DB_NAME = "ltm-todo";
 const STORE = "state";
@@ -340,14 +341,21 @@ export async function readPendingSyncMutations(limit: number): Promise<SyncMutat
   const db = await openDatabase();
   try {
     return await new Promise((resolve, reject) => {
-      const transaction = db.transaction(JOURNAL, "readonly");
+      const transaction = db.transaction([JOURNAL, CONFLICTS], "readonly");
       const request = transaction.objectStore(JOURNAL).getAll();
-      request.onsuccess = () => {
-        const entries = (request.result as JournalEntry[]).sort((left, right) =>
+      const conflicted = transaction.objectStore(CONFLICTS).getAllKeys();
+      const finish = () => {
+        if (request.readyState !== "done" || conflicted.readyState !== "done") return;
+        // A conflicted entry would only conflict again; it waits for resolution without blocking later changes.
+        const blocked = new Set(conflicted.result as IDBValidKey[]);
+        const entries = (request.result as JournalEntry[]).filter(entry => !blocked.has(entry.key)).sort((left, right) =>
           (syncEntityPriority[left.mutation.entityType] ?? 99) - (syncEntityPriority[right.mutation.entityType] ?? 99) || left.queuedAt - right.queuedAt);
         resolve(entries.slice(0, limit).map(entry => entry.mutation));
       };
+      request.onsuccess = finish;
+      conflicted.onsuccess = finish;
       request.onerror = () => reject(request.error);
+      conflicted.onerror = () => reject(conflicted.error);
     });
   } finally { db.close(); }
 }
@@ -601,6 +609,38 @@ export async function readSyncConflicts(): Promise<SyncConflict[]> {
       request.onerror = () => reject(request.error);
     });
   } finally { db.close(); }
+}
+
+/**
+ * Settles every recorded conflict without user input (latest edit wins, see conflictWinner). A conflict whose remote
+ * copy cannot be applied yet, for example because a referenced record has not arrived, stays recorded for a later pass.
+ */
+export async function autoResolveSyncConflicts(): Promise<{ resolved: number; pushLocal: boolean; dataChanged: boolean }> {
+  const db = await openDatabase();
+  let conflicts: SyncConflict[];
+  let pending: Map<string, JournalEntry>;
+  try {
+    [conflicts, pending] = await new Promise<[SyncConflict[], Map<string, JournalEntry>]>((resolve, reject) => {
+      const transaction = db.transaction([CONFLICTS, JOURNAL], "readonly");
+      const conflictRequest = transaction.objectStore(CONFLICTS).getAll();
+      const journalRequest = transaction.objectStore(JOURNAL).getAll();
+      transaction.oncomplete = () => resolve([conflictRequest.result as SyncConflict[],
+        new Map((journalRequest.result as JournalEntry[]).map(entry => [entry.key, entry]))]);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally { db.close(); }
+  const outcome = { resolved: 0, pushLocal: false, dataChanged: false };
+  for (const conflict of conflicts) {
+    const local = pending.get(conflict.key) ?? { mutation: conflict.mutation, queuedAt: Date.parse(conflict.foundAt) };
+    const choice = conflictWinner(local, conflict.current);
+    try { await resolveSyncConflict(conflict.key, choice); }
+    catch { continue; }
+    outcome.resolved++;
+    if (choice === "local") outcome.pushLocal = true;
+    else if (conflict.current) outcome.dataChanged = true;
+  }
+  return outcome;
 }
 
 export async function resolveSyncConflict(key: string, choice: "local" | "remote"): Promise<void> {

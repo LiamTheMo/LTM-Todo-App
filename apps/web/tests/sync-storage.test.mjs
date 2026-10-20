@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { emptyData } from "../lib/domain.ts";
-import { acknowledgeAttachmentUpload, acknowledgeSyncMutation, applyRemoteSyncChanges, bindSyncAccount, hasSyncConflicts, queueAttachmentUpload, readData, readPendingAttachmentUploads, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData } from "../lib/storage.ts";
+import { acknowledgeAttachmentUpload, acknowledgeSyncMutation, applyRemoteSyncChanges, autoResolveSyncConflicts, bindSyncAccount, hasSyncConflicts, queueAttachmentUpload, readData, readPendingAttachmentUploads, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData } from "../lib/storage.ts";
 
 const stamp = "2026-10-03T12:00:00.000Z";
 const taskId = "4fef5e72-f114-4ea5-8d40-9d8069654f40";
@@ -90,8 +90,10 @@ test("remote changes apply without being re-enqueued; local pending edits are pr
   data = await readData();
   assert.equal(data.tasks[0].title, "My offline edit");
   assert.equal(await hasSyncConflicts(), true);
-  assert.equal((await readPendingSyncMutations(12)).find(item => item.entityType === "tasks").payload.title, "My offline edit");
+  // The conflicted edit is held back from pushes until resolved, without blocking other changes.
+  assert.equal((await readPendingSyncMutations(12)).find(item => item.entityType === "tasks"), undefined);
   const [conflict] = await readSyncConflicts();
+  assert.equal(conflict.mutation.payload.title, "My offline edit");
   await resolveSyncConflict(conflict.key, "local");
   const rebased = (await readPendingSyncMutations(12)).find(item => item.entityType === "tasks");
   assert.equal(rebased.baseRevision, 6);
@@ -159,4 +161,55 @@ test("offline attachment placeholders survive reload until explicitly acknowledg
 test("attachment queue rejects empty or oversized files before persistence", async () => {
   await assert.rejects(() => queueAttachmentUpload({ taskId, fileName: "empty.txt", mediaType: "text/plain", blob: new Blob([]) }), /invalid|exceeds/i);
   await assert.rejects(() => queueAttachmentUpload({ taskId, fileName: "large.txt", mediaType: "text/plain", blob: new Blob([new Uint8Array(10 * 1024 * 1024 + 1)]) }), /10 MiB/i);
+});
+
+async function conflictedTask(localTitle, localUpdatedAt, remotePayload) {
+  const data = emptyData();
+  data.tasks.push(task("Shared"));
+  await writeData({ ...data, generation: 1 }, 0);
+  await acknowledgeSyncMutation((await readPendingSyncMutations(12)).find(item => item.entityType === "tasks"), 3);
+  const saved = await readData();
+  await writeData({ ...saved, generation: saved.generation + 1, tasks: saved.tasks.map(item => item.id === taskId
+    ? { ...item, title: localTitle, updatedAt: localUpdatedAt, revision: item.revision + 1 } : item) }, saved.generation);
+  const pending = (await readPendingSyncMutations(12)).find(item => item.entityType === "tasks");
+  await recordSyncConflict(pending, { entityType: "tasks", entityId: taskId, revision: 4, updatedAt: "2026-10-03T12:30:00.000Z",
+    ...(remotePayload ? { payload: { ...task("Shared", 4), ...remotePayload } } : { deletedAt: "2026-10-03T12:30:00.000Z" }) });
+}
+
+test("a conflict keeps the newer local edit automatically and rebases it for the next push", async () => {
+  await conflictedTask("Edited here later", "2026-10-03T13:00:00.000Z", { title: "Edited elsewhere", updatedAt: "2026-10-03T12:30:00.000Z" });
+  assert.equal((await readPendingSyncMutations(12)).some(item => item.entityType === "tasks"), false);
+  assert.deepEqual(await autoResolveSyncConflicts(), { resolved: 1, pushLocal: true, dataChanged: false });
+  assert.equal(await hasSyncConflicts(), false);
+  const rebased = (await readPendingSyncMutations(12)).find(item => item.entityType === "tasks");
+  assert.equal(rebased.baseRevision, 4);
+  assert.equal(rebased.payload.title, "Edited here later");
+  assert.equal((await readData()).tasks[0].title, "Edited here later");
+});
+
+test("a conflict adopts the newer remote edit or deletion automatically and drops the stale local edit", async () => {
+  await conflictedTask("Edited here earlier", "2026-10-03T12:10:00.000Z", { title: "Edited elsewhere", updatedAt: "2026-10-03T12:30:00.000Z" });
+  assert.deepEqual(await autoResolveSyncConflicts(), { resolved: 1, pushLocal: false, dataChanged: true });
+  assert.equal((await readData()).tasks[0].title, "Edited elsewhere");
+  assert.equal((await readPendingSyncMutations(12)).some(item => item.entityType === "tasks"), false);
+  assert.equal(await hasSyncConflicts(), false);
+});
+
+test("a local edit survives a remote deletion and is pushed again so no work is lost", async () => {
+  await conflictedTask("Edited before deletion", "2026-10-03T12:10:00.000Z");
+  assert.deepEqual(await autoResolveSyncConflicts(), { resolved: 1, pushLocal: true, dataChanged: false });
+  const kept = (await readData()).tasks[0];
+  assert.equal(kept.title, "Edited before deletion");
+  assert.equal(kept.deletedAt, undefined);
+  assert.equal((await readPendingSyncMutations(12)).find(item => item.entityType === "tasks").operation, "upsert");
+  assert.equal(await hasSyncConflicts(), false);
+});
+
+test("a held conflict does not stop other local changes from syncing", async () => {
+  await conflictedTask("Edited here later", "2026-10-03T13:00:00.000Z", { title: "Edited elsewhere", updatedAt: "2026-10-03T12:30:00.000Z" });
+  const saved = await readData();
+  const other = { ...task("Another task"), id: "0a2f5d6e-9c1b-4d7e-8f30-2b4c6d8e0f12" };
+  await writeData({ ...saved, generation: saved.generation + 1, tasks: [...saved.tasks, other] }, saved.generation);
+  const pending = await readPendingSyncMutations(12);
+  assert.deepEqual(pending.filter(item => item.entityType === "tasks").map(item => item.entityId), [other.id]);
 });

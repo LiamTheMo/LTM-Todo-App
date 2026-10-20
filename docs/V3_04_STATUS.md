@@ -33,3 +33,18 @@ On desktop and installed iPhone/iPad PWAs: schedule a task and select several ti
 Browser sign-in now requests `offline_access` and keeps the provider refresh token in the encrypted session cookie, so sessions renew automatically instead of signing out when the access token expires. See [Staying signed in](CLOUDFLARE_DEPLOYMENT.md#staying-signed-in-refresh-tokens) for behavior and the required Auth0 settings. `apps/web/tests/oidc-session.test.mjs`, `account-lifecycle.test.mjs`, and `auth-sign-in-status.test.mjs` cover refresh, rotation, transient failure, rejection, revocation, logout, and cross-tab serialization.
 
 Manual validation: after enabling Auth0 offline access and the refresh-token grant, sign in on desktop and an installed iPhone/iPad PWA; confirm the session survives past the Auth0 access-token lifetime (or a temporarily shortened API token expiration), that Settings → Sessions shows a rolling expiry, and that revoking a session or signing out prevents further refreshes.
+
+## Automatic sync conflicts
+
+Sync no longer needs manual action in Settings. When two devices change the same record, the next sync settles it automatically (`apps/web/lib/sync-conflict-policy.ts`):
+
+- Two edits: the most recent edit (by its `updatedAt`) wins. Ties keep the server copy so every device converges.
+- An edit always beats a deletion, whichever came first, so no device's work is discarded; the record stays. Deletions on both sides need nothing pushed.
+- A conflict whose server copy cannot be applied yet (for example, a referenced record has not arrived) stays recorded and is retried on the next sync; only then does Settings list it.
+- A held conflict no longer blocks other queued changes from uploading.
+- Local edits made while a sync is applying remote changes are replayed on top of them instead of failing with "changed in another tab" or briefly disappearing (`apps/web/lib/local-edit-queue.ts`).
+- While the app is visible it syncs every 15 seconds, as well as after each change, when it becomes visible and when the device reconnects. The **Sync now** button is removed.
+
+`tests/multi-device-sync.test.mjs` runs two devices with separate local databases against the real sync server code: a task created on one appears on the other, completions replicate back, offline creations on both merge without duplicates, concurrent edits converge on the newest edit without blocking a new task, and an offline edit survives a remote deletion. `tests/sync-conflict-policy.test.mjs`, `tests/local-edit-queue.test.mjs`, `tests/sync-storage.test.mjs` and `tests/sync-client.test.mjs` cover the policy, edit replay, automatic resolution, rebased re-push and non-blocking conflicts.
+
+Manual validation: on two signed-in devices, edit the same task offline on both and reconnect; edit on one while deleting on the other; confirm both converge within about 15 seconds without a Settings prompt and that editing during an incoming sync keeps the edit.
