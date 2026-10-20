@@ -61,11 +61,11 @@ async function account() {
     const storage = new IDBFactory();
     const client = new SyncClient({ fetcher, outbox, deviceId: crypto.randomUUID(), online: () => true });
     // Devices take turns: storage helpers use the global IndexedDB, so each step switches to this device's copy.
-    const use = async work => { globalThis.indexedDB = storage; return work(); };
+    const onDevice = async work => { globalThis.indexedDB = storage; return work(); };
     return {
-      sync: () => use(async () => { await client.syncNow(); assert.equal(client.getStatus().state, "idle", JSON.stringify(client.getStatus())); }),
-      edit: change => use(async () => { const data = await readData(today); await writeData({ ...change(data), generation: data.generation + 1 }, data.generation); }),
-      read: () => use(() => readData(today)),
+      sync: () => onDevice(async () => { await client.syncNow(); assert.equal(client.getStatus().state, "idle", JSON.stringify(client.getStatus())); }),
+      edit: change => onDevice(async () => { const data = await readData(today); await writeData({ ...change(data), generation: data.generation + 1 }, data.generation); }),
+      read: () => onDevice(() => readData(today)),
       dispose: () => client.dispose()
     };
   };
