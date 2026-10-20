@@ -164,3 +164,52 @@ test("paused sync identifies the failed operation and fixed error code without l
     } finally { client.dispose(); }
   }
 });
+
+test("conflicts are settled automatically and a kept local edit is pushed again in the same sync", async () => {
+  const pushes = [];
+  let conflicted = false;
+  let pendingMutation = mutation;
+  const resolutions = [];
+  const client = new SyncClient({ online: () => true, deviceId: "4e731b4e-c82c-4df6-a26a-847a2c115414",
+    now: () => Date.parse("2026-10-03T12:00:00Z"), random: () => 0.5,
+    fetcher: async (input, init = {}) => {
+      const url = String(input);
+      if (url.includes("auth/session")) return Response.json({ authenticated: true, accountKey: "a".repeat(43) });
+      if (url.includes("sync/snapshot")) return Response.json({ protocolVersion: 1, entitySchemaVersion: 4, changes: [], complete: true, cursor: "c" });
+      if (url.includes("sync/push")) {
+        const [pushed] = JSON.parse(init.body).mutations;
+        pushes.push(pushed);
+        return Response.json({ protocolVersion: 1, entitySchemaVersion: 4, results: [pushed.baseRevision === 4
+          ? { clientMutationId: pushed.clientMutationId, status: "accepted", revision: 5, cursor: "c2" }
+          : { clientMutationId: pushed.clientMutationId, status: "conflict", current: { entityType: "tasks", entityId: pushed.entityId,
+            revision: 4, updatedAt: "2026-10-03T11:00:00Z", payload: { ...pushed.payload, title: "Older edit elsewhere" } } }] });
+      }
+      if (url.includes("/devices/")) return Response.json({ acknowledgedSequence: 0 });
+      return Response.json({ protocolVersion: 1, entitySchemaVersion: 4, changes: [], cursor: "c", hasMore: false });
+    },
+    outbox: {
+      bindAccount: async () => true,
+      prepareUpload: async () => undefined,
+      pending: async () => pendingMutation && !conflicted ? [pendingMutation] : [],
+      acknowledge: async () => { pendingMutation = undefined; },
+      recordConflict: async () => { conflicted = true; },
+      cursor: async () => "c",
+      setCursor: async () => undefined,
+      snapshotCursor: async () => undefined,
+      setSnapshotCursor: async () => undefined,
+      applyRemote: async () => undefined,
+      hasConflicts: async () => conflicted,
+      resolveConflicts: async () => {
+        resolutions.push("local");
+        pendingMutation = { ...mutation, baseRevision: 4, clientMutationId: "8a1f3c2e-5b6d-4e7f-9a0b-1c2d3e4f5a6b" };
+        conflicted = false;
+        return true;
+      }
+    } });
+  await client.syncNow();
+  client.dispose();
+  assert.deepEqual(resolutions, ["local"]);
+  assert.deepEqual(pushes.map(item => item.baseRevision), [0, 4]);
+  assert.equal(pendingMutation, undefined);
+  assert.equal(client.getStatus().state, "idle");
+});

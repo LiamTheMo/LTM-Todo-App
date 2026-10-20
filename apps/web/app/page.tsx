@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type UIEvent } from "react";
 import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteProject, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, moveTaskToSection, newEntity, otherDashboardTasks as getOtherDashboardTasks, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, renameSection, reorderProject, reorderSection, reorderTask, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion, updateProject, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
 import { defaultCalendarColor, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, updateCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
-import { acknowledgeSyncMutation, applyRemoteSyncChanges, bindSyncAccount, getSyncCursor, getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, persistIcsCalendarCache, prepareInitialSyncUpload, readData, readIcsCalendarCache, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData, type CachedIcsCalendar, type SyncConflict } from "../lib/storage";
+import { acknowledgeSyncMutation, applyRemoteSyncChanges, autoResolveSyncConflicts, bindSyncAccount, getSyncCursor, getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, persistIcsCalendarCache, prepareInitialSyncUpload, readData, readIcsCalendarCache, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData, type CachedIcsCalendar, type SyncConflict } from "../lib/storage";
 import { getLocalSyncDeviceId, SyncClient, type SyncStatus } from "../lib/sync-client";
 import { describeSyncFailure } from "../lib/sync-diagnostics";
 import { readAccountSignInStatus, type AccountSignInStatus } from "../lib/auth-sign-in-status";
@@ -11,6 +11,7 @@ import type { SyncDevice } from "../lib/device-registry";
 import { createBackup, parseBackup, MAX_BACKUP_BYTES } from "../lib/backup";
 import type { AttachmentRecord } from "../lib/attachment-api";
 import { syncPendingAttachmentUploads } from "../lib/attachment-client";
+import { LocalEditQueue } from "../lib/local-edit-queue";
 import { queueAttachmentUpload, readPendingAttachmentUploads, type PendingAttachmentUpload } from "../lib/storage";
 import { dueTimeCaption, overdueDueCaption } from "../lib/date-labels";
 import { completedTaskRetentionDays, setCompletedTaskRetentionDays } from "../lib/task-retention";
@@ -106,9 +107,9 @@ async function removePushDevice(token: string) {
 
 export default function Home() {
   const [data, setData] = useState<Data>(emptyData);
-  const current = useRef<Data>(emptyData());
-  const writes = useRef(Promise.resolve());
   const writeFailed = useRef(false);
+  // Created once local data loads; edits before then are ignored.
+  const editQueue = useRef<LocalEditQueue<Data> | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState<View>("Dashboard");
@@ -194,8 +195,15 @@ export default function Home() {
     const anchor = [...scroller.querySelectorAll<HTMLElement>("[data-day]")].find(element => element.getBoundingClientRect().bottom > bounds.top);
     if (anchor?.dataset.day) pendingAnchor.current = { day: anchor.dataset.day, top: anchor.getBoundingClientRect().top - bounds.top };
   }, []);
-  useEffect(() => { readData().then(value => { setCurrentSyncDeviceId(getLocalSyncDeviceId()); current.current = value; setData(value); setReady(true); })
-    .catch(() => { setError("Local storage could not be opened. Changes are disabled."); setReady(true); }); }, []);
+  useEffect(() => { readData().then(value => {
+    setCurrentSyncDeviceId(getLocalSyncDeviceId());
+    editQueue.current = new LocalEditQueue<Data>(value, {
+      // After a failed write, later edits stay on screen only; the error banner asks for a backup before reloading.
+      write: (next, expectedGeneration) => writeFailed.current ? Promise.reject(new Error("Local writes are paused")) : writeData(next, expectedGeneration),
+      show: (next, source) => { if (source === "sync") rememberDashboardAnchor(); setData(next); }
+    });
+    setData(value); setReady(true);
+  }).catch(() => { setError("Local storage could not be opened. Changes are disabled."); setReady(true); }); }, [rememberDashboardAnchor]);
   useEffect(() => { void readIcsCalendarCache().then(setIcsCalendarCache).catch(() => undefined); }, []);
   useEffect(() => { void readPendingAttachmentUploads().then(setPendingAttachments).catch(() => setAttachmentStatus("Local attachment queue could not be opened.")); }, []);
   useEffect(() => {
@@ -239,7 +247,8 @@ export default function Home() {
     };
   }, [ready]);
   useEffect(() => {
-    if (!ready || error) return;
+    const queue = editQueue.current;
+    if (!ready || error || !queue) return;
     const client = new SyncClient({ deviceName: `Web · ${navigator.platform || "browser"}`, outbox: {
       bindAccount: bindSyncAccount,
       prepareUpload: prepareInitialSyncUpload,
@@ -250,19 +259,19 @@ export default function Home() {
       setCursor: persistSyncCursor,
       snapshotCursor: getSyncSnapshotCursor,
       setSnapshotCursor: persistSyncSnapshotCursor,
-      applyRemote: async changes => {
-        const apply = writes.current.catch(() => undefined).then(async () => {
-          if (writeFailed.current) throw new Error("Local writes are paused");
-          await applyRemoteSyncChanges(changes);
-          const latest = await readData();
-          rememberDashboardAnchor();
-          current.current = latest;
-          setData(latest);
-        });
-        writes.current = apply.catch(() => undefined);
-        await apply;
-      },
-      hasConflicts: hasSyncConflicts
+      applyRemote: changes => queue.run(async adopt => {
+        if (writeFailed.current) throw new Error("Local writes are paused");
+        await applyRemoteSyncChanges(changes);
+        adopt(await readData());
+      }),
+      hasConflicts: hasSyncConflicts,
+      resolveConflicts: () => queue.run(async adopt => {
+        if (writeFailed.current) throw new Error("Local writes are paused");
+        const outcome = await autoResolveSyncConflicts();
+        if (outcome.dataChanged) adopt(await readData());
+        if (outcome.resolved) setSyncConflicts(await readSyncConflicts());
+        return outcome.resolved > 0;
+      })
     }, onStatus: status => {
       setSyncStatus(status);
       if (status.state === "conflict") void readSyncConflicts().then(setSyncConflicts);
@@ -282,7 +291,8 @@ export default function Home() {
     const visible = () => { if (document.visibilityState === "visible") retry(); };
     window.addEventListener("online", retry);
     document.addEventListener("visibilitychange", visible);
-    const timer = window.setInterval(retry, 60_000);
+    // Changes from other devices arrive within seconds while the app is on screen; hidden tabs catch up when shown.
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") retry(); }, 15_000);
     void client.syncNow();
     return () => {
       window.removeEventListener("online", retry);
@@ -291,7 +301,7 @@ export default function Home() {
       client.dispose();
       if (syncClient.current === client) syncClient.current = null;
     };
-  }, [ready, error, rememberDashboardAnchor]);
+  }, [ready, error]);
   useEffect(() => {
     const refreshToday = () => {
       const day = localDate(new Date());
@@ -398,14 +408,11 @@ export default function Home() {
   }, [ready, view, visibleDayStart]);
   const mutate = useCallback((change: (value: Data) => Data) => {
     if (error || writeFailed.current) return;
-    const previous = current.current;
-    const changed = pruneExpiredHistory(change(previous), today, authSignInStatus === "signed_out" || syncStatus.state === "idle");
-    if (changed === previous) return;
-    const next = { ...changed, generation: previous.generation + 1 };
-    current.current = next; setData(next);
-    writes.current = writes.current.then(() => {
-      if (!writeFailed.current) return writeData(next, previous.generation).then(() => { void syncClient.current?.syncNow(); });
-    }).catch((cause) => {
+    const completedCleanup = authSignInStatus === "signed_out" || syncStatus.state === "idle";
+    editQueue.current?.edit(base => {
+      const changed = pruneExpiredHistory(change(base), today, completedCleanup);
+      return changed === base ? base : { ...changed, generation: base.generation + 1 };
+    })?.then(committed => { if (committed) void syncClient.current?.syncNow(); }).catch((cause) => {
       writeFailed.current = true;
       setError(cause instanceof Error && cause.message.includes("another tab") ? cause.message :
       "Changes could not be saved. Download an unsaved backup from Settings before reloading this tab.");
@@ -577,18 +584,12 @@ export default function Home() {
     finally { setIcsFeedBusy(false); }
   };
   const resolveConflict = (conflict: SyncConflict, choice: "local" | "remote") => {
-    const resolve = writes.current.catch(() => undefined).then(async () => {
+    void editQueue.current?.run(async adopt => {
       await resolveSyncConflict(conflict.key, choice);
-      if (choice === "remote") {
-        const latest = await readData();
-        rememberDashboardAnchor();
-        current.current = latest;
-        setData(latest);
-      }
+      if (choice === "remote") adopt(await readData());
       setSyncConflicts(items => items.filter(item => item.key !== conflict.key));
       void syncClient.current?.syncNow();
-    });
-    writes.current = resolve.catch(() => undefined);
+    }).catch(() => undefined);
   };
   const retireSyncDevice = async (device: SyncDevice) => {
     if (device.deviceId === getLocalSyncDeviceId()) { setDeviceStatus("This browser is the current sync device and cannot remove itself."); return; }
@@ -903,7 +904,7 @@ export default function Home() {
             {newSectionOpen ? <form className="quickAdd sectionCreate" onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem("section") as HTMLInputElement; const name = input.value.trim(); if (!name) return; mutate(value => ({ ...value, sections: [...value.sections, { ...newEntity(), projectId, name, sortKey: Date.now() }] })); setNewSectionOpen(false); }}><input name="section" aria-label="Section name" placeholder="Section name…" autoFocus /><button>Create section</button><button type="button" onClick={() => setNewSectionOpen(false)}>Cancel</button></form> : <button type="button" className="projectAddSection" onClick={() => setNewSectionOpen(true)}>+ Add section</button>}
           </>}
         </>}
-        {view === "Settings" && <div className="settingsPanel"><SettingsSection title="Account sync" description="Sign-in status and changes across your devices." initiallyOpen><p>Local changes save on this device first. When signed in, encrypted-in-transit sync runs in the background across your web and Home Screen installs. Your data remains available offline.</p><div className={`accountStatus ${authSignInStatus === "signed_in" ? "accountStatusConnected" : authSignInStatus === "signed_out" ? "accountStatusSignedOut" : "accountStatusChecking"}`} role="status" aria-live="polite"><span className="accountStatusIcon" aria-hidden="true">{authSignInStatus === "signed_in" ? "✓" : authSignInStatus === "signed_out" ? "○" : "…"}</span><span><strong>{authSignInStatus === "signed_in" ? "Signed in" : authSignInStatus === "signed_out" ? "Not signed in" : authSignInStatus === "unavailable" ? "Sign-in status unavailable" : "Checking sign-in…"}</strong><small>{authSignInStatus === "signed_in" ? "Your account is connected on this device." : authSignInStatus === "signed_out" ? "Sign in to sync across devices." : authSignInStatus === "unavailable" ? "Unable to verify your account right now. Your local data remains available." : "Checking your account session."}</small></span></div><p role="status" aria-live="polite">{syncStatus.state === "idle" ? "Sync is up to date." : syncStatus.state === "checking" ? "Checking account…" : syncStatus.state === "syncing" ? "Syncing changes…" : syncStatus.state === "signed_out" ? "Local changes are saved on this device; sign in to sync across devices." : syncStatus.state === "account_mismatch" ? "This local profile is already linked to a different account. To protect your data, sync is paused; use a separate browser profile for another account." : syncStatus.state === "conflict" ? "Some changes need attention before they can sync." : syncStatus.state === "offline" ? "Offline. Local changes are saved and will retry when connected." : syncStatus.state === "device_retired" ? "This device needs to be re-registered before it can sync." : `Sync paused. ${syncStatus.failure ? describeSyncFailure(syncStatus.failure) + " " : ""}Local data remains on this device; retrying${syncStatus.retryAt ? ` at ${new Date(syncStatus.retryAt).toLocaleTimeString()}` : ""}.`}</p>{syncStatus.failure && <small role="status">Sync detail: {syncStatus.failure.step}{syncStatus.failure.status ? ` · HTTP ${syncStatus.failure.status}` : ""}{syncStatus.failure.code ? ` · ${syncStatus.failure.code}` : ""}</small>}<div className="settingsActions">{authSignInStatus === "signed_in" ? <button type="button" onClick={() => { void fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" }).then(response => { if (response.ok) { setAuthSignInStatus("signed_out"); setSyncStatus({ state: "signed_out" }); } else setSyncStatus({ state: "error", authenticated: true }); }).catch(() => setSyncStatus({ state: "error", authenticated: true })); }}>Sign out</button> : <form action="/api/v1/auth/login" method="get"><input type="hidden" name="returnTo" value="/" /><button type="submit">Sign in</button></form>}<button type="button" onClick={() => { void syncClient.current?.syncNow(); }}>Sync now</button>{authSignInStatus === "signed_in" && <button type="button" onClick={() => { if (!confirm("Sign out every active LTM Todo session? You will need to sign in again on this device too.")) return; void fetch("/api/v1/auth/logout-all", { method: "POST", credentials: "same-origin" }).then(response => { if (response.ok) { setAuthSignInStatus("signed_out"); setSyncStatus({ state: "signed_out" }); setAuthSessions([]); setAuthSessionStatus("All LTM Todo sessions were revoked."); } else setAuthSessionStatus("Sessions could not be revoked. Please retry."); }).catch(() => setAuthSessionStatus("Sessions could not be revoked. Please retry.")); }}>Sign out all sessions</button>}</div>{syncConflicts.map(conflict => <div className="tagLine" key={conflict.key}><span><strong>{String(conflict.mutation.payload?.title ?? conflict.current?.payload?.title ?? conflict.mutation.entityType)}</strong><small> · changed on another device</small></span><div><button type="button" onClick={() => resolveConflict(conflict, "local")}>Keep this device</button><button type="button" onClick={() => resolveConflict(conflict, "remote")}>Use other device</button></div></div>)}
+        {view === "Settings" && <div className="settingsPanel"><SettingsSection title="Account sync" description="Sign-in status and changes across your devices." initiallyOpen><p>Local changes save on this device first. When signed in, encrypted-in-transit sync runs in the background across your web and Home Screen installs. Your data remains available offline.</p><div className={`accountStatus ${authSignInStatus === "signed_in" ? "accountStatusConnected" : authSignInStatus === "signed_out" ? "accountStatusSignedOut" : "accountStatusChecking"}`} role="status" aria-live="polite"><span className="accountStatusIcon" aria-hidden="true">{authSignInStatus === "signed_in" ? "✓" : authSignInStatus === "signed_out" ? "○" : "…"}</span><span><strong>{authSignInStatus === "signed_in" ? "Signed in" : authSignInStatus === "signed_out" ? "Not signed in" : authSignInStatus === "unavailable" ? "Sign-in status unavailable" : "Checking sign-in…"}</strong><small>{authSignInStatus === "signed_in" ? "Your account is connected on this device." : authSignInStatus === "signed_out" ? "Sign in to sync across devices." : authSignInStatus === "unavailable" ? "Unable to verify your account right now. Your local data remains available." : "Checking your account session."}</small></span></div><p role="status" aria-live="polite">{syncStatus.state === "idle" ? "Sync is up to date." : syncStatus.state === "checking" ? "Checking account…" : syncStatus.state === "syncing" ? "Syncing changes…" : syncStatus.state === "signed_out" ? "Local changes are saved on this device; sign in to sync across devices." : syncStatus.state === "account_mismatch" ? "This local profile is already linked to a different account. To protect your data, sync is paused; use a separate browser profile for another account." : syncStatus.state === "conflict" ? "Some changes need attention before they can sync." : syncStatus.state === "offline" ? "Offline. Local changes are saved and will retry when connected." : syncStatus.state === "device_retired" ? "This device needs to be re-registered before it can sync." : `Sync paused. ${syncStatus.failure ? describeSyncFailure(syncStatus.failure) + " " : ""}Local data remains on this device; retrying${syncStatus.retryAt ? ` at ${new Date(syncStatus.retryAt).toLocaleTimeString()}` : ""}.`}</p>{syncStatus.failure && <small role="status">Sync detail: {syncStatus.failure.step}{syncStatus.failure.status ? ` · HTTP ${syncStatus.failure.status}` : ""}{syncStatus.failure.code ? ` · ${syncStatus.failure.code}` : ""}</small>}<div className="settingsActions">{authSignInStatus === "signed_in" ? <button type="button" onClick={() => { void fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" }).then(response => { if (response.ok) { setAuthSignInStatus("signed_out"); setSyncStatus({ state: "signed_out" }); } else setSyncStatus({ state: "error", authenticated: true }); }).catch(() => setSyncStatus({ state: "error", authenticated: true })); }}>Sign out</button> : <form action="/api/v1/auth/login" method="get"><input type="hidden" name="returnTo" value="/" /><button type="submit">Sign in</button></form>}{authSignInStatus === "signed_in" && <button type="button" onClick={() => { if (!confirm("Sign out every active LTM Todo session? You will need to sign in again on this device too.")) return; void fetch("/api/v1/auth/logout-all", { method: "POST", credentials: "same-origin" }).then(response => { if (response.ok) { setAuthSignInStatus("signed_out"); setSyncStatus({ state: "signed_out" }); setAuthSessions([]); setAuthSessionStatus("All LTM Todo sessions were revoked."); } else setAuthSessionStatus("Sessions could not be revoked. Please retry."); }).catch(() => setAuthSessionStatus("Sessions could not be revoked. Please retry.")); }}>Sign out all sessions</button>}</div>{syncConflicts.map(conflict => <div className="tagLine" key={conflict.key}><span><strong>{String(conflict.mutation.payload?.title ?? conflict.current?.payload?.title ?? conflict.mutation.entityType)}</strong><small> · changed on another device</small></span><div><button type="button" onClick={() => resolveConflict(conflict, "local")}>Keep this device</button><button type="button" onClick={() => resolveConflict(conflict, "remote")}>Use other device</button></div></div>)}
           </SettingsSection>
           <SettingsSection title="Data storage" description="Download a backup or restore your local data."><p>Task and calendar changes save on this device first. When signed in, supported records also sync to your account through Cloudflare. To deliver reminders while the app is closed, reminder titles and scheduled times are sent to the separate Cloudflare reminder service. Each device has its own notification subscription.</p>
           <p>Backups include local tasks and calendars. They exclude attachment bytes, ICS feed URLs, and cached read-only feed events; download attachments separately. Feed URLs can grant access to a private calendar and are never exported unencrypted.</p>
@@ -1020,9 +1021,12 @@ export default function Home() {
     }; }); setEditing(null); }} />}
     {outlineImportOpen && <OutlineImporter data={data} readOnlyCalendarIds={icsCalendarCache.map(calendar => calendar.calendarId)} onClose={() => setOutlineImportOpen(false)} onImport={async (items, destination) => {
       if (error || writeFailed.current) throw new Error("Resolve the storage error before importing.");
-      const result = importOutlineItems(current.current, items, destination, today);
-      mutate(() => result.data);
-      await writes.current;
+      const queue = editQueue.current;
+      if (!queue) throw new Error("Local data is still loading.");
+      const base = queue.current;
+      const result = importOutlineItems(base, items, destination, today);
+      mutate(value => value === base ? result.data : importOutlineItems(value, items, destination, today).data);
+      await queue.settled();
       if (writeFailed.current) throw new Error("Items could not be persisted. Download an unsaved backup from Settings before reloading.");
       return { added: result.added, skipped: result.skipped };
     }} />}
