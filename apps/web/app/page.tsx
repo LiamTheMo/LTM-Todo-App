@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type UIEvent } from "react";
 import { addDays, calendarGridDates, completeTask, createRoutine, dashboardDays, deleteProject, deleteSection, deleteScheduledBlock, emptyData, filterTasks, historyStart, instantiateTaskTemplate, localDate, moveTaskToSection, newEntity, otherDashboardTasks as getOtherDashboardTasks, overdueTasks, parseLocalDate, scheduledReminderTriggers, pruneExpiredHistory, renameSection, reorderProject, reorderSection, reorderTask, saveTask, saveTaskTemplate, setRoutineEnabled, taskDueDateOrder, undoCompletion, updateProject, type CalendarColor, type CalendarEvent, type Data, type Priority, type ScheduledBlock, type Task, type TaskTemplate } from "../lib/domain";
 import { defaultCalendarColor, normalizeCalendarColor, calendarEventsForDay, calendarEventOccurrences, createCalendar, updateCalendar, instantiateEventTemplate, saveCalendarEvent, saveEventTemplate, zonedDateTimeToInstant } from "../lib/calendar-domain";
-import { acknowledgeSyncMutation, applyRemoteSyncChanges, autoResolveSyncConflicts, bindSyncAccount, getSyncCursor, getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, persistIcsCalendarCache, prepareInitialSyncUpload, readData, readIcsCalendarCache, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData, type CachedIcsCalendar, type SyncConflict } from "../lib/storage";
+import { acknowledgeSyncMutation, applyRemoteSyncChanges, autoResolveSyncConflicts, bindSyncAccount, mergeStoredDuplicateTasks, getSyncCursor, getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, persistIcsCalendarCache, prepareInitialSyncUpload, readData, readIcsCalendarCache, readPendingSyncMutations, readSyncConflicts, recordSyncConflict, resolveSyncConflict, writeData, type CachedIcsCalendar, type SyncConflict } from "../lib/storage";
 import { getLocalSyncDeviceId, SyncClient, type SyncStatus } from "../lib/sync-client";
 import { describeSyncFailure } from "../lib/sync-diagnostics";
 import { readAccountSignInStatus, type AccountSignInStatus } from "../lib/auth-sign-in-status";
@@ -262,7 +262,10 @@ export default function Home() {
       applyRemote: changes => queue.run(async adopt => {
         if (writeFailed.current) throw new Error("Local writes are paused");
         await applyRemoteSyncChanges(changes);
+        // The same task typed on two devices before they synced arrives as an exact duplicate; merge it everywhere.
+        const merged = await mergeStoredDuplicateTasks();
         adopt(await readData());
+        if (merged) void syncClient.current?.syncNow();
       }),
       hasConflicts: hasSyncConflicts,
       resolveConflicts: () => queue.run(async adopt => {

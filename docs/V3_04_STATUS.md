@@ -52,3 +52,11 @@ Manual validation: on two signed-in devices, edit the same task offline on both 
 ## Completions made on two devices
 
 Completing a task on two devices before they sync (for example, while one was signed out) used to create two completion records, so the task appeared twice under COMPLETED; deleting it removed both rows because both belonged to the same task. Completion IDs are now derived from the task and its occurrence date (`completionIdFor` in `apps/web/lib/domain.ts`, a version-8 UUID), so both devices create the same record and sync merges it. Existing duplicates show once (the latest copy, which Undo acts on), and Undo removes every copy of that occurrence. Recurring occurrences keep separate history. Covered by `tests/completion-identity.test.mjs` and the double-completion case in `tests/multi-device-sync.test.mjs`.
+
+## Duplicate tasks typed on two devices
+
+The same task typed separately on two devices before they synced (for example, while one was signed out) becomes two tasks with different IDs, each completed separately, so it showed twice. After each sync pull, exact duplicates are now merged automatically (`apps/web/lib/task-dedupe.ts`): same title (ignoring case and spacing), due date and time, project, section, notes and repeat rule. Every device keeps the copy with the smallest ID, so all devices converge; the survivor is completed if any copy was, gains the copies' tags and highest priority, and inherits their work sessions, linked events, reminders, routines and completion history (one completion per occurrence). The other copies are soft-deleted through a normal journaled write, so the merge syncs. Tasks that differ in any of those fields are never merged.
+
+Fixed alongside: synced completions were stored with an extra `revision` field and remote completion deletions only stamped `deletedAt`, which the Dashboard ignores. Completions now keep their sync schema and are removed when deleted remotely, so undoing a completion on one device reopens the task on the others.
+
+Covered by `tests/task-dedupe.test.mjs` and the typed-on-both-devices and undo scenarios in `tests/multi-device-sync.test.mjs`.
