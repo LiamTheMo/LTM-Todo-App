@@ -10,10 +10,10 @@ import { DeviceRegistry } from "../lib/device-registry.ts";
 import { handleDeviceRequest } from "../lib/device-api.ts";
 import { handleSyncRequest, handleSyncSnapshotRequest } from "../lib/sync-api.ts";
 import { SyncClient } from "../lib/sync-client.ts";
-import { completeTask, dashboardDays, newEntity, saveTask } from "../lib/domain.ts";
+import { completeTask, dashboardDays, newEntity, saveTask, undoCompletion } from "../lib/domain.ts";
 import { acknowledgeSyncMutation, applyRemoteSyncChanges, autoResolveSyncConflicts, bindSyncAccount, getSyncCursor,
   getSyncSnapshotCursor, hasSyncConflicts, persistSyncCursor, persistSyncSnapshotCursor, prepareInitialSyncUpload,
-  readData, readPendingSyncMutations, recordSyncConflict, writeData } from "../lib/storage.ts";
+  mergeStoredDuplicateTasks, readData, readPendingSyncMutations, recordSyncConflict, writeData } from "../lib/storage.ts";
 
 const today = "2026-10-20";
 const at = minutes => new Date(Date.parse("2026-10-20T12:00:00.000Z") + minutes * 60_000);
@@ -54,7 +54,7 @@ async function account() {
   };
   const outbox = { bindAccount: bindSyncAccount, prepareUpload: prepareInitialSyncUpload, pending: readPendingSyncMutations,
     acknowledge: acknowledgeSyncMutation, recordConflict: recordSyncConflict, cursor: getSyncCursor, setCursor: persistSyncCursor,
-    snapshotCursor: getSyncSnapshotCursor, setSnapshotCursor: persistSyncSnapshotCursor, applyRemote: applyRemoteSyncChanges,
+    snapshotCursor: getSyncSnapshotCursor, setSnapshotCursor: persistSyncSnapshotCursor, applyRemote: async changes => { await applyRemoteSyncChanges(changes); await mergeStoredDuplicateTasks(); },
     hasConflicts: hasSyncConflicts, resolveConflicts: async () => (await autoResolveSyncConflicts()).resolved > 0 };
   const original = globalThis.indexedDB;
   const device = () => {
@@ -185,5 +185,44 @@ test("completing the same task on both devices before they sync leaves one compl
       assert.deepEqual(day.completed.map(item => item.task.title), ["Pay rent"]);
       assert.deepEqual(day.due, []);
     }
+  } finally { phone.dispose(); laptop.dispose(); server.close(); }
+});
+
+test("the same task typed on both devices while signed out merges into one task on both", async () => {
+  const server = await account();
+  const phone = server.device();
+  const laptop = server.device();
+  try {
+    // Each device creates "MKTG Midterm" independently (different IDs) and completes it before they ever sync.
+    const onPhone = { ...newTask("MKTG Midterm", at(-60)), dueDate: today };
+    const onLaptop = { ...newTask("MKTG Midterm", at(-50)), dueDate: today };
+    await phone.edit(data => completeTask(saveTask(data, onPhone, "", today), onPhone.id, at(-1)));
+    await laptop.edit(data => completeTask(saveTask(data, onLaptop, "", today), onLaptop.id, at(17)));
+    await phone.sync(); await laptop.sync(); await phone.sync(); await laptop.sync();
+    const survivor = [onPhone.id, onLaptop.id].sort()[0];
+    for (const data of [await phone.read(), await laptop.read()]) {
+      assert.deepEqual(live(data).map(task => task.id), [survivor]);
+      const [day] = dashboardDays(data, today, 1, today);
+      assert.deepEqual(day.completed.map(item => item.task.title), ["MKTG Midterm"]);
+      assert.equal(data.completions.length, 1);
+    }
+  } finally { phone.dispose(); laptop.dispose(); server.close(); }
+});
+
+test("undoing a completion on one device reopens the task on the other", async () => {
+  const server = await account();
+  const phone = server.device();
+  const laptop = server.device();
+  try {
+    const essay = { ...newTask("Essay draft"), dueDate: today };
+    await phone.edit(data => completeTask(saveTask(data, essay, "", today), essay.id, at(5)));
+    await phone.sync(); await laptop.sync();
+    await laptop.edit(data => undoCompletion(data, data.completions.find(item => item.taskId === essay.id).id));
+    await laptop.sync(); await phone.sync();
+    const data = await phone.read();
+    assert.equal(data.tasks.find(task => task.id === essay.id).completedAt, undefined);
+    assert.equal(data.completions.length, 0);
+    const [day] = dashboardDays(data, today, 1, today);
+    assert.deepEqual([day.completed.length, day.due.map(task => task.title)], [0, ["Essay draft"]]);
   } finally { phone.dispose(); laptop.dispose(); server.close(); }
 });

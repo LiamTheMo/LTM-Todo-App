@@ -4,6 +4,7 @@ import { SYNC_CLIENT_SCHEMA_VERSION, type SyncEntityType, type SyncMutation } fr
 import type { SyncChange } from "./sync-api.ts";
 import { syncEntityPriority } from "./sync-entity-order.ts";
 import { conflictWinner } from "./sync-conflict-policy.ts";
+import { mergeDuplicateTasks } from "./task-dedupe.ts";
 
 const DB_NAME = "ltm-todo";
 const STORE = "state";
@@ -337,6 +338,15 @@ export async function writeData(data: Data, expectedGeneration: number): Promise
   } finally { db.close(); }
 }
 
+/** Merges exact duplicate tasks through a journaled write, so the merge syncs too; true when anything changed. */
+export async function mergeStoredDuplicateTasks(): Promise<boolean> {
+  const data = await readData();
+  const merged = mergeDuplicateTasks(data);
+  if (merged === data) return false;
+  await writeData({ ...merged, generation: data.generation + 1 }, data.generation);
+  return true;
+}
+
 export async function readPendingSyncMutations(limit: number): Promise<SyncMutation[]> {
   const db = await openDatabase();
   try {
@@ -513,6 +523,25 @@ export async function persistSyncSnapshotCursor(cursor: string | undefined): Pro
   } finally { db.close(); }
 }
 
+/**
+ * Applies one server record to a local collection. Completions keep their fixed sync schema (no revision or edit
+ * stamps) and are removed outright when deleted remotely, since nothing reads a completion's `deletedAt`.
+ */
+function withRemoteRecord(type: typeof collectionTypes[number], records: Array<Record<string, unknown>>, change: SyncChange): Array<Record<string, unknown>> {
+  const index = records.findIndex(item => item.id === change.entityId);
+  if (type === "completions") {
+    if (change.deletedAt) return index < 0 ? records : records.filter(item => item.id !== change.entityId);
+    if (!change.payload) return records;
+    return index < 0 ? [...records, change.payload] : records.map(item => item.id === change.entityId ? change.payload! : item);
+  }
+  let replacement: Record<string, unknown> | undefined;
+  if (change.deletedAt) {
+    if (index >= 0) replacement = { ...records[index], deletedAt: change.deletedAt, revision: Math.max(Number(records[index].revision ?? 0) + 1, change.revision), updatedAt: change.updatedAt };
+  } else if (change.payload) replacement = { ...change.payload, revision: Math.max(Number(change.payload.revision ?? 0), change.revision) };
+  if (!replacement) return records;
+  return index < 0 ? [...records, replacement] : records.map((item, position) => position === index ? replacement! : item);
+}
+
 export async function applyRemoteSyncChanges(changes: SyncChange[]): Promise<void> {
   if (!changes.length) return;
   const db = await openDatabase();
@@ -560,18 +589,7 @@ export async function applyRemoteSyncChanges(changes: SyncChange[]): Promise<voi
             }
             const type = change.entityType as typeof collectionTypes[number];
             if (!collectionTypes.includes(type)) throw new Error("Unknown synced entity type");
-            const records = data[type] as Array<Record<string, unknown>>;
-            const index = records.findIndex(item => item.id === change.entityId);
-            let replacement: Record<string, unknown> | undefined;
-            if (change.deletedAt) {
-              if (index >= 0) replacement = { ...records[index], deletedAt: change.deletedAt, revision: Math.max(Number(records[index].revision ?? 0) + 1, change.revision), updatedAt: change.updatedAt };
-            } else if (change.payload) replacement = { ...change.payload, revision: Math.max(Number(change.payload.revision ?? 0), change.revision) };
-            if (replacement) {
-              const updated = records.slice();
-              if (index >= 0) updated[index] = replacement;
-              else updated.push(replacement);
-              data = { ...data, [type]: updated } as Data;
-            }
+            data = { ...data, [type]: withRemoteRecord(type, data[type] as Array<Record<string, unknown>>, change) } as Data;
           }
           data = normalizeData({ ...data, generation: data.generation + 1 });
           stateStore.put(data, KEY);
@@ -676,16 +694,7 @@ export async function resolveSyncConflict(key: string, choice: "local" | "remote
             const data = normalizeData(dataRequest.result);
             const type = current.entityType as typeof collectionTypes[number];
             if (!collectionTypes.includes(type)) { transaction.abort(); return; }
-            const records = data[type] as Array<Record<string, unknown>>;
-            const index = records.findIndex(item => item.id === current.entityId);
-            let updated = records;
-            if (current.deletedAt) {
-              updated = index < 0 ? records : records.map(item => item.id === current.entityId ? { ...item, deletedAt: current.deletedAt,
-                updatedAt: current.updatedAt, revision: Math.max(Number(item.revision ?? 0) + 1, current.revision) } : item);
-            } else if (current.payload) {
-              const entity = { ...current.payload, revision: Math.max(Number(current.payload.revision ?? 0), current.revision) };
-              updated = index < 0 ? [...records, entity] : records.map(item => item.id === current.entityId ? entity : item);
-            }
+            const updated = withRemoteRecord(type, data[type] as Array<Record<string, unknown>>, current);
             stateStore.put(normalizeData({ ...data, [type]: updated, generation: data.generation + 1 }), KEY);
           }
         }
