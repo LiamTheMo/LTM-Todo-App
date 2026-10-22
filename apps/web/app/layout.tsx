@@ -28,7 +28,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f7f4ef"
+  themeColor: "#fffaf4",
+  // Draw under the status bar and notch; globals.css pads the shell by the safe-area insets.
+  viewportFit: "cover"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
