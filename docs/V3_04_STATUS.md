@@ -67,3 +67,9 @@ Covered by `tests/task-dedupe.test.mjs` and the typed-on-both-devices and undo s
 - On iPhone, iOS drew a blurred strip of scrolled content behind the status bar. The page now uses `viewport-fit=cover`, pads the shell by the safe-area insets, and places a solid fixed strip in the navigation colour behind the status bar; the theme colour matches it.
 
 Manual validation: on iPhone (Safari and the Home Screen app), confirm the area behind the clock and battery is solid with no blur while scrolling the Dashboard, that the tabs are not hidden under the status bar or notch in portrait and landscape, and that OTHER TASKS matches the number of listed tasks.
+
+## Home Screen app status-bar blur
+
+After the fix above, Safari was clean but the iPhone Home Screen app still showed a blurred top. In Home Screen apps, iOS 26 and later blurs the band just below the status bar itself; no page setting turns it off, and the phone tab strip started 7px into that band. On phone widths in the Home Screen app (`display-mode: standalone` with a touch pointer), the tab strip now has 24px of extra flat top padding in its own colour, so the blur falls on plain colour instead of the tabs. Safari tabs and wider layouts are unchanged; the wide sidebar already starts 28px down.
+
+Manual validation: on iPhone, open the Home Screen app (fully close and reopen it after the deploy) and confirm the tabs are sharp, with only plain colour under the clock and battery, in portrait and landscape.
