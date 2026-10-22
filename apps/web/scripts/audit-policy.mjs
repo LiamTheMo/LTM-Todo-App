@@ -45,3 +45,10 @@ export function isAllowedDevAuditReport(report, lockfile) {
     .filter(([, issue]) => issue && isHigh(issue.severity))
     .every(([name]) => isAllowedPackage(name));
 }
+
+/** True for a completed npm audit report; registry failures return an error object without one. */
+export function isAuditReport(report) {
+  return !!report && typeof report === "object" && !("error" in report) &&
+    !!report.vulnerabilities && typeof report.vulnerabilities === "object" &&
+    !!report.metadata && typeof report.metadata === "object";
+}

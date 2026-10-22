@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ALLOWED_DEV_ADVISORY, isAllowedDevAuditReport } from "../scripts/audit-policy.mjs";
+import { ALLOWED_DEV_ADVISORY, isAllowedDevAuditReport, isAuditReport } from "../scripts/audit-policy.mjs";
 
 const braces = {
   severity: "high",
@@ -63,4 +63,11 @@ test("rejects broken and cyclic dependency chains", () => {
 
 test("accepts a clean high/critical audit result", () => {
   assert.equal(isAllowedDevAuditReport({ vulnerabilities: {} }, devLock), true);
+});
+
+test("recognizes completed audit reports and rejects registry error responses", () => {
+  assert.equal(isAuditReport({ auditReportVersion: 2, vulnerabilities: {}, metadata: { vulnerabilities: {} } }), true);
+  assert.equal(isAuditReport({ message: "audit endpoint returned an error", error: { code: "ENOAUDIT" } }), false);
+  assert.equal(isAuditReport({}), false);
+  assert.equal(isAuditReport(null), false);
 });
