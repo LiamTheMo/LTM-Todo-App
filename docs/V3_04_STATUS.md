@@ -60,3 +60,10 @@ The same task typed separately on two devices before they synced (for example, w
 Fixed alongside: synced completions were stored with an extra `revision` field and remote completion deletions only stamped `deletedAt`, which the Dashboard ignores. Completions now keep their sync schema and are removed when deleted remotely, so undoing a completion on one device reopens the task on the others.
 
 Covered by `tests/task-dedupe.test.mjs` and the typed-on-both-devices and undo scenarios in `tests/multi-device-sync.test.mjs`.
+
+## Other Tasks count and iPhone status bar
+
+- The Dashboard's OTHER TASKS header counted every task in the account instead of the tasks listed in the panel; it now shows the panel's own count (open and dimmed completed undated tasks).
+- On iPhone, iOS drew a blurred strip of scrolled content behind the status bar. The page now uses `viewport-fit=cover`, pads the shell by the safe-area insets, and places a solid fixed strip in the navigation colour behind the status bar; the theme colour matches it.
+
+Manual validation: on iPhone (Safari and the Home Screen app), confirm the area behind the clock and battery is solid with no blur while scrolling the Dashboard, that the tabs are not hidden under the status bar or notch in portrait and landscape, and that OTHER TASKS matches the number of listed tasks.

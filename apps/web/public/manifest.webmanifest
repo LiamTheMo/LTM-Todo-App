@@ -7,7 +7,7 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#f7f4ef",
-  "theme_color": "#f7f4ef",
+  "theme_color": "#fffaf4",
   "icons": [
     {
       "src": "/icons/ltm-todo-192-apple.png",
